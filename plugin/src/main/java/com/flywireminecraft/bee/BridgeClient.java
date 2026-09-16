@@ -1,6 +1,7 @@
 package com.flywireminecraft.bee;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
 import java.io.BufferedReader;
@@ -9,6 +10,7 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.Collection;
 
 /**
  * Cliente TCP da ponte com o simulador (L5). Protocolo JSON-lines — ver
@@ -19,11 +21,12 @@ import java.nio.charset.StandardCharsets;
  * {@link #sendSensorAndReceiveMotor} é uma troca síncrona rápida — o
  * simulador responde com o ÚLTIMO vetor motor já computado pela thread de
  * simulação, não um calculado na hora.
- *
- * <p>Scaffold da F3. Uso real (ler sensores, aplicar vetor motor à abelha)
- * é da F4.
  */
 public final class BridgeClient implements AutoCloseable {
+
+    /** F5 — estimulação dirigida: grupo nomeado + amplitude. group=null limpa o estímulo. */
+    public record StimulateSpec(String group, double amplitude) {
+    }
 
     private final Gson gson = new Gson();
     private final Socket socket;
@@ -37,19 +40,42 @@ public final class BridgeClient implements AutoCloseable {
         this.out = new PrintWriter(socket.getOutputStream(), false, StandardCharsets.UTF_8);
     }
 
+    /** Sem alterar mute/stimulate atuais — ver sobrecarga completa. */
+    public JsonObject sendSensorAndReceiveMotor(double light, double dorsalLight, boolean damage, long tMs)
+            throws IOException {
+        return sendSensorAndReceiveMotor(light, dorsalLight, damage, tMs, null, null);
+    }
+
     /**
-     * Envia uma leitura de sensores e retorna o vetor motor mais recente.
+     * Envia sensores e, opcionalmente, muda o estado de silenciamento
+     * ({@code mute}, F5 — ferramenta de lesão por comando) e/ou de
+     * estimulação dirigida ({@code stimulate}, F5). {@code null} em
+     * qualquer um dos dois significa "não mudar o que já está configurado
+     * no simulador" — não é o mesmo que "limpar" (ver `server.py`).
      *
      * @throws IOException se a conexão cair — quem chama decide se reconecta
      *     ou segue sem atuar neste tick; nunca esperar aqui.
      */
-    public JsonObject sendSensorAndReceiveMotor(double light, double dorsalLight, boolean damage, long tMs)
-            throws IOException {
+    public JsonObject sendSensorAndReceiveMotor(
+            double light, double dorsalLight, boolean damage, long tMs,
+            Collection<String> mute, StimulateSpec stimulate
+    ) throws IOException {
         JsonObject sensor = new JsonObject();
         sensor.addProperty("t_ms", tMs);
         sensor.addProperty("light", light);
         sensor.addProperty("dorsal_light", dorsalLight);
         sensor.addProperty("damage", damage);
+        if (mute != null) {
+            JsonArray muteArray = new JsonArray();
+            mute.forEach(muteArray::add);
+            sensor.add("mute", muteArray);
+        }
+        if (stimulate != null) {
+            JsonObject stimulateObj = new JsonObject();
+            stimulateObj.addProperty("group", stimulate.group());
+            stimulateObj.addProperty("amplitude", stimulate.amplitude());
+            sensor.add("stimulate", stimulateObj);
+        }
 
         out.print(gson.toJson(sensor));
         out.print('\n');

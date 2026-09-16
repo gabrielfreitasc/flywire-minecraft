@@ -151,6 +151,27 @@ que tem cor própria — amarelo — por ser o único com direção validada). Q
 de partículas por canal é proporcional a |valor| do canal, renderizado a ~4Hz (20Hz
 seria spam visual). **✅ Confirmado visualmente em servidor real, 16/09/2026.**
 
+## Lesão e estimulação por comando (F5)
+
+Dois comandos que estendem o protocolo da ponte (`mute`/`stimulate`, ver
+`docs/02-arquitetura.md`):
+
+- `/flywirebee mute <grupo>` / `unmute <grupo|all>` — silencia de verdade a
+  saída sináptica do grupo no simulador (`engine.py::Engine.set_silenced`).
+  Grupos válidos: `sensory` (os 273 fotorreceptores) + os 8 por prefixo de
+  `cell_type` (`DNp`, `DNpe`, `DNg`, `DNge`, `DNb`, `DNbe`, `DNa`, `DNae`).
+  **Mecanismo diferente do `/flywirebee lesion`** (que só zera o sensor de
+  luz) — aqui o neurônio é removido da rede de verdade, não só perde
+  estímulo. Leva até ~50ms pra aparecer no vetor motor (janela deslizante).
+- `/flywirebee stimulate <grupo> <amplitude>` / `stimulate stop` — injeta
+  corrente extra num grupo (`engine.py::Engine.set_directed_stimulus`),
+  **somada** ao estímulo de luz dos fotorreceptores, não substituindo.
+
+**✅ Testados de ponta a ponta via TCP manual em 16/09/2026** (mutar DNp → canal
+exatamente 0,0; estimular DNg com amplitude 5,0 → canal satura perto de 1,0; os
+dois voltam ao baseline ao limpar). **Ainda não testados dentro de um servidor
+com jogador de verdade** — próximo passo antes de fechar a F5.
+
 ## Regra
 
 O plugin **nunca** altera a simulação. Se o comportamento não emerge, o problema
