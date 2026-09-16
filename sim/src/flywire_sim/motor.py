@@ -34,12 +34,13 @@ uma vez em RN-09 (agregar excitatório+inibitório cancela o sinal). Ver
 `docs/04-regras-de-negocio.md`.
 
 **Canais de comportamento publicado (RN-08, F5→F6, 16/09/2026)** — início da
-curadoria real de RN-08. `PUBLISHED_DN_BEHAVIOR` mapeia 12 dos nossos 46 tipos
+curadoria real de RN-08. `PUBLISHED_DN_BEHAVIOR` mapeia 13 dos nossos 46 tipos
 de descendente para a categoria comportamental que Namiki et al. 2018 (eLife,
 Figura 6) mediu por ativação optogenética — leitura direta dos rótulos da
-figura (classificação dos autores), não inferência nossa a partir de gráfico
-bruto (ver AD-14). Cobertura: 27 de 92 neurônios (~29%); o resto segue sem
-dado publicado.
+figura (classificação dos autores) para 12 tipos, mais 1 (`DNge070`) via
+correspondência de identidade entre conectomas (`hemibrain_type`, Schlegel et
+al. 2024) — não inferência nossa a partir de gráfico bruto (ver AD-14).
+Cobertura: 29 de 92 neurônios (~32%); o resto segue sem dado publicado.
 
 **Só "fast_locomotion" e "broad_locomotion" entram em `locomotion_drive`,
 usado pelo `MotorMapping.java`.** "anterior_movements" e
@@ -69,10 +70,20 @@ _PREFIX_RE = re.compile(r"^[A-Za-z]+")
 # 10.7554/eLife.34275). Leitura direta dos rótulos da figura de categorização
 # dos autores (não gráfico bruto). Só os tipos que existem no nosso
 # subcircuito e aparecem nomeados na figura.
+#
+# "DNge070" não está na Figura 6 diretamente — entra via correspondência
+# hemibrain_type=="DNb06" (coluna já presente em
+# Supplemental_file1_neuron_annotations.tsv, gerada por Schlegel et al. 2024
+# comparando FlyWire x Hemibrain). Match limpo: os 2 neurônios de DNge070
+# batem 100% com DNb06 no hemibrain_type, conferido manualmente. É um passo
+# de inferência a mais que os outros 12 (identidade de tipo entre
+# conectomas, não behavior medido direto nesse root_id) — ver
+# docs/04-regras-de-negocio.md (RN-08).
 PUBLISHED_DN_BEHAVIOR: dict[str, str] = {
     "DNa10": "fast_locomotion",
     "DNb05": "fast_locomotion",
     "DNb06": "fast_locomotion",
+    "DNge070": "fast_locomotion",  # via hemibrain_type==DNb06, ver nota acima
     "DNp05": "fast_locomotion",
     "DNp16": "fast_locomotion",
     "DNp18": "fast_locomotion",

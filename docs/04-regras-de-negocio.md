@@ -108,7 +108,7 @@ Onde: `neuron.py`.
 
 ---
 
-## RN-08 · Mapeamento descendente → comportamento (curadoria parcial: 12/46 tipos)
+## RN-08 · Mapeamento descendente → comportamento (curadoria parcial: 13/46 tipos)
 
 Os 92 descendentes precisam virar canais motores com significado (forward/yaw/lift...).
 **A semântica ainda não está definida** — exige curadoria por tipo celular (DNp, DNa,
@@ -155,14 +155,23 @@ descendente via ativação optogenética. A Figura 6 desse paper categoriza 53 d
 tipos testados em 7 categorias (Fast/Slow/Broad Locomotion, Slow/Still, Anterior
 Movements, Anterior Groom, Wing & Abdomen Movements) — **leitura direta dos rótulos da
 figura (classificação dos próprios autores), não inferência nossa a partir de gráfico
-bruto.** Cruzando com nossos 46 tipos: **12 batem** (27 de 92 neurônios, ~29%):
+bruto.** Cruzando com nossos 46 tipos: **12 batem direto** (27 de 92 neurônios,
+~29%), **+1 via `hemibrain_type`** (Schlegel et al. 2024 — coluna já presente em
+`Supplemental_file1_neuron_annotations.tsv`, identidade de tipo cruzada entre
+conectomas FlyWire/Hemibrain, não behavior medido nesse root_id específico):
 
-| Nosso tipo | Categoria publicada |
-|---|---|
-| DNa10, DNb05, DNb06, DNp05, DNp16, DNp18 | Fast Locomotion |
-| DNp28 | Broad Locomotion |
-| DNp06, DNp20 | Anterior Movements |
-| DNg11, DNp10, DNp27 | Wing & Abdomen Movements |
+| Nosso tipo | Categoria publicada | Fonte |
+|---|---|---|
+| DNa10, DNb05, DNb06, DNp05, DNp16, DNp18 | Fast Locomotion | Namiki 2018, Fig. 6 (direto) |
+| DNge070 | Fast Locomotion | `hemibrain_type`==DNb06 (Schlegel 2024) |
+| DNp28 | Broad Locomotion | Namiki 2018, Fig. 6 (direto) |
+| DNp06, DNp20 | Anterior Movements | Namiki 2018, Fig. 6 (direto) |
+| DNg11, DNp10, DNp27 | Wing & Abdomen Movements | Namiki 2018, Fig. 6 (direto) |
+
+**13/46 tipos, 29/92 neurônios (~32%).** Um segundo candidato (`DNpe011`) foi
+descartado por ambiguidade: só 1 dos 3 neurônios desse tipo bate com `DNp16` no
+`hemibrain_type`, os outros batem com `PS227` (sem categoria conhecida) — não dá
+pra afirmar o tipo inteiro sem inventar.
 
 **Fast+Broad Locomotion viram o canal `locomotion_drive`** — mas **não** entra em
 `MotorMapping.java` (ver abaixo, testado e revertido). Anterior Movements e Wing &
@@ -186,7 +195,7 @@ cancela o efeito" que já apareceu em RN-09 (F1) e no primeiro experimento de le
 (F4)** — terceira vez. Não ajustamos peso até achar p&lt;0,05 de novo (seria
 manipular o resultado); revertido pra `phototaxis` sozinho, que continua validado.
 
-**O que isso NÃO resolve ainda:** os outros 34 tipos (65 neurônios) seguem sem dado
+**O que isso NÃO resolve ainda:** os outros 33 tipos (63 neurônios) seguem sem dado
 publicado localizável — tentamos extrair o restante do PDF suplementar do Namiki 2018
 (50MB, quase todo imagem/gráfico bruto de rastreamento) e não foi possível de forma
 confiável (interpretar gráfico de densidade visualmente seria fabricar classificação,
@@ -266,5 +275,5 @@ estatística em `sim/tools/calibration_check.py` — reproduz os números acima.
 | RN-05 | `ingest.py` | `test_nid_stability` | Alto |
 | RN-06 | `engine.py`, `server.py`, `ControlLoop.java` | `test_bridge_request_response_no_frame_loss`, `test_bridge_history_stays_bounded_by_window` (`test_server.py`); validado em produção — 1500 trocas/0 falhas em servidor real (F4) | Médio |
 | RN-07 | `neuron.py` | `test_refractory` | Alto |
-| RN-08 | `motor.py`, `MotorMapping.java` | `test_motor_groups_cover_all_descendants`, `test_motor_decode_range`, `test_published_behavior_groups_are_real_types` | **Crítico — 12/46 tipos com dado real (AD-14), 34 sem curadoria** |
+| RN-08 | `motor.py`, `MotorMapping.java` | `test_motor_groups_cover_all_descendants`, `test_motor_decode_range`, `test_published_behavior_groups_are_real_types` | **Crítico — 13/46 tipos com dado real (AD-14), 33 sem curadoria** |
 | RN-09 | `engine.py` | `tools/calibration_check.py` (estatístico, manual — não roda no CI) | Alto — validado por teste estatístico, ver acima |

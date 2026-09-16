@@ -51,7 +51,7 @@ def test_motor_decode_range(connectome):
 
 
 def test_published_behavior_groups_are_real_types(connectome):
-    """RN-08 — os 12 tipos com categoria publicada existem de fato no subcircuito."""
+    """RN-08 — os 13 tipos com categoria publicada existem de fato no subcircuito."""
     groups = group_by_published_behavior(connectome)
     assert set(groups) == {
         "fast_locomotion",
@@ -60,7 +60,7 @@ def test_published_behavior_groups_are_real_types(connectome):
         "wing_abdomen_movements",
     }
     total = sum(len(nids) for nids in groups.values())
-    assert total == 27  # 12 tipos, 27 neurônios — conferido manualmente contra o dado
+    assert total == 29  # 13 tipos, 29 neurônios — conferido manualmente contra o dado
     assert total < len(connectome.output)  # cobertura parcial, não fabricar o resto
 
 
