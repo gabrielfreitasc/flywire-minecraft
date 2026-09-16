@@ -19,8 +19,10 @@ import java.util.Map;
  * <p>Critério de saída da F5 (`docs/03-roadmap-fases.md`): um observador
  * olhando o mundo consegue dizer qual parte do circuito está ativa, sem ler
  * log nenhum. Não é decoração — é o vetor motor de verdade, traduzido pra
- * cor. `phototaxis` (único canal com direção validada, RN-09) tem cor
- * própria (amarelo) pra se destacar dos outros 8, que são só magnitude.
+ * cor. `phototaxis` (RN-09/F4) e `locomotion_drive` (RN-08/AD-14, F6) são os
+ * dois canais que de fato movem a abelha (`MotorMapping.java`) — cores
+ * próprias (amarelo, branco) pra se destacarem dos outros, que são só
+ * telemetria/exploração (F5: `/flywirebee mute|stimulate`).
  */
 public final class ActivityVisualizer {
 
@@ -28,6 +30,7 @@ public final class ActivityVisualizer {
 
     static {
         CHANNEL_COLORS.put("phototaxis", Color.fromRGB(255, 230, 0));
+        CHANNEL_COLORS.put("locomotion_drive", Color.fromRGB(255, 255, 255));
         CHANNEL_COLORS.put("DNp", Color.fromRGB(220, 20, 60));
         CHANNEL_COLORS.put("DNpe", Color.fromRGB(255, 105, 180));
         CHANNEL_COLORS.put("DNg", Color.fromRGB(30, 144, 255));

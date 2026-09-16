@@ -102,6 +102,12 @@ entrada sensorial inteira fica com o sinal errado.
 
 Dorkenwald et al. 2024, *Nature* 634:124 · Schlegel et al. 2024 · Shiu et al. 2024
 
+**Citação por coluna de dado:** `FlyWire Citation Guidelines - Data.csv` (raiz do
+projeto) é a tabela oficial do FlyWire — qual paper citar pra cada coluna específica
+usada (`cell_type` → Dorkenwald/Schlegel/Zheng/Matsliah 2024; sinal sináptico/NT →
+Eckstein/Bates 2024; etc.). Consultar antes de publicar qualquer resultado citando só
+"Dorkenwald et al." genericamente.
+
 
 ---
 

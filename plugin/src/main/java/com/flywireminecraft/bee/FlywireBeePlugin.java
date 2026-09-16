@@ -41,8 +41,11 @@ import java.util.logging.Level;
 public final class FlywireBeePlugin extends JavaPlugin {
 
     /** Nomes válidos tanto para {@code mute}/{@code unmute} quanto para {@code stimulate}. */
-    private static final List<String> VALID_GROUPS =
-            List.of("sensory", "DNp", "DNpe", "DNg", "DNge", "DNb", "DNbe", "DNa", "DNae");
+    private static final List<String> VALID_GROUPS = List.of(
+            "sensory", "DNp", "DNpe", "DNg", "DNge", "DNb", "DNbe", "DNa", "DNae",
+            // RN-08/AD-14 — categorias de comportamento publicado (Namiki et al. 2018).
+            "fast_locomotion", "broad_locomotion", "anterior_movements", "wing_abdomen_movements"
+    );
 
     private BridgeClient startupCheckBridge;
     private SpawnItem spawnItem;

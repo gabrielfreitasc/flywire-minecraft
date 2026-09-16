@@ -32,6 +32,24 @@ usava a MÉDIA dos 8 grupos por prefixo como magnitude de avanço, e o
 experimento de lesão deu nulo (p=0,37) — repetindo o mesmo erro já corrigido
 uma vez em RN-09 (agregar excitatório+inibitório cancela o sinal). Ver
 `docs/04-regras-de-negocio.md`.
+
+**Canais de comportamento publicado (RN-08, F5→F6, 16/09/2026)** — início da
+curadoria real de RN-08. `PUBLISHED_DN_BEHAVIOR` mapeia 12 dos nossos 46 tipos
+de descendente para a categoria comportamental que Namiki et al. 2018 (eLife,
+Figura 6) mediu por ativação optogenética — leitura direta dos rótulos da
+figura (classificação dos autores), não inferência nossa a partir de gráfico
+bruto (ver AD-14). Cobertura: 27 de 92 neurônios (~29%); o resto segue sem
+dado publicado.
+
+**Só "fast_locomotion" e "broad_locomotion" entram em `locomotion_drive`,
+usado pelo `MotorMapping.java`.** "anterior_movements" e
+"wing_abdomen_movements" também têm dado real (2 e 3 tipos), mas o ensaio de
+Namiki testa MOSCA ANDANDO (perna dianteira, extensão de asa em contexto de
+canto de corte) — sem tradução validada pra voo de abelha. Expostos em
+`decode()` para visualização/exploração (F5: `/flywirebee mute|stimulate`),
+mas deliberadamente FORA do cálculo de velocidade — usar seria fabricar a
+mesma semântica que RN-08 proíbe, só que com uma camada a mais de disfarce
+("tem citação" ≠ "a tradução é válida").
 """
 from __future__ import annotations
 
@@ -46,6 +64,43 @@ from . import topology
 from .graph import Connectome
 
 _PREFIX_RE = re.compile(r"^[A-Za-z]+")
+
+# RN-08 / AD-14 — Namiki, Cande et al. 2018, eLife, Figura 6 (DOI:
+# 10.7554/eLife.34275). Leitura direta dos rótulos da figura de categorização
+# dos autores (não gráfico bruto). Só os tipos que existem no nosso
+# subcircuito e aparecem nomeados na figura.
+PUBLISHED_DN_BEHAVIOR: dict[str, str] = {
+    "DNa10": "fast_locomotion",
+    "DNb05": "fast_locomotion",
+    "DNb06": "fast_locomotion",
+    "DNp05": "fast_locomotion",
+    "DNp16": "fast_locomotion",
+    "DNp18": "fast_locomotion",
+    "DNp28": "broad_locomotion",
+    "DNp06": "anterior_movements",
+    "DNp20": "anterior_movements",
+    "DNg11": "wing_abdomen_movements",
+    "DNp10": "wing_abdomen_movements",
+    "DNp27": "wing_abdomen_movements",
+}
+
+# Categorias com tradução defensável pra magnitude de voo (locomoção em
+# geral). "anterior_movements" e "wing_abdomen_movements" ficam de fora — ver
+# docstring do módulo.
+_LOCOMOTION_CATEGORIES = {"fast_locomotion", "broad_locomotion"}
+
+
+def group_by_published_behavior(connectome: Connectome) -> dict[str, NDArray[np.int64]]:
+    """RN-08 — agrupa os nids de saída pela categoria comportamental publicada
+    (Namiki et al. 2018), só para os 12 tipos com dado real. Ver docstring
+    do módulo."""
+    groups: dict[str, list[int]] = {}
+    out_nodes = connectome.nodes.loc[connectome.output]
+    for nid, cell_type in zip(out_nodes.index, out_nodes.cell_type):
+        category = PUBLISHED_DN_BEHAVIOR.get(cell_type)
+        if category is not None:
+            groups.setdefault(category, []).append(nid)
+    return {name: np.array(sorted(nids), dtype=np.int64) for name, nids in groups.items()}
 
 
 def group_by_cell_type_prefix(connectome: Connectome) -> dict[str, NDArray[np.int64]]:
@@ -67,6 +122,15 @@ class MotorDecoder:
         self.window_ms = window_ms
         self.groups = group_by_cell_type_prefix(connectome)
         self._excitatory, self._inhibitory = topology.group_outputs_by_predicted_sign(connectome)
+        self._published_groups = group_by_published_behavior(connectome)
+        self._locomotion_nids = np.array(
+            sorted(
+                nid
+                for name in _LOCOMOTION_CATEGORIES
+                for nid in self._published_groups.get(name, np.array([], dtype=np.int64))
+            ),
+            dtype=np.int64,
+        )
         self._history: deque[tuple[int, NDArray[np.bool_]]] = deque()
 
     def push(self, t_ms: int, spikes: NDArray[np.bool_]) -> None:
@@ -86,8 +150,13 @@ class MotorDecoder:
     def decode(self) -> dict[str, float]:
         """Taxa de disparo por grupo na janela atual, normalizada via tanh.
 
-        Inclui o canal `phototaxis` (ver docstring do módulo) além dos 8
-        grupos provisórios por prefixo de cell_type (RN-08).
+        Inclui, além dos 8 grupos provisórios por prefixo de cell_type
+        (RN-08): `phototaxis` (validado por RN-09/lesão F4), os canais de
+        comportamento publicado (`fast_locomotion`, `broad_locomotion`,
+        `anterior_movements`, `wing_abdomen_movements` — Namiki et al. 2018,
+        só os presentes em `PUBLISHED_DN_BEHAVIOR`) e `locomotion_drive`
+        (agregado de fast+broad, o único desses usado por `MotorMapping.java`
+        — ver docstring do módulo pra por que os outros dois ficam de fora).
         """
         vec = {name: float(np.tanh(self._rate_hz(nids) / C.MOTOR_RATE_SCALE))
                for name, nids in self.groups.items()}
@@ -95,6 +164,11 @@ class MotorDecoder:
         exc_rate = self._rate_hz(self._excitatory)
         inh_rate = self._rate_hz(self._inhibitory)
         vec["phototaxis"] = float(np.tanh((exc_rate - inh_rate) / C.MOTOR_RATE_SCALE))
+
+        for name, nids in self._published_groups.items():
+            vec[name] = float(np.tanh(self._rate_hz(nids) / C.MOTOR_RATE_SCALE))
+        vec["locomotion_drive"] = float(np.tanh(self._rate_hz(self._locomotion_nids) / C.MOTOR_RATE_SCALE))
+
         return vec
 
     def active_output_count(self) -> int:

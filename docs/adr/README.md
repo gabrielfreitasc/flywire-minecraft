@@ -18,10 +18,12 @@ Decisões com consequência arquitetural. Uma ADR nunca é editada depois de ace
 | AD-11 | Fonte primária da Zenodo reincorporada; egresso segue bloqueado para o código | 2026-09-16 | Aceita |
 | AD-12 | Leitura de arquivos grandes só por memory-map com colunas selecionadas (RAM 3,8 GB) | 2026-09-16 | Aceita |
 | AD-13 | Corrente tônica de base + ruído no LIF (RN-09) | 2026-09-16 | Aceita |
+| AD-14 | Curadoria parcial de RN-08 via Namiki et al. 2018 (12/46 tipos) | 2026-09-16 | Aceita |
 
 AD-01 a AD-05 estão detalhadas em [`../01-camada-de-dados.md`](../01-camada-de-dados.md).
 AD-07 a AD-10 estão detalhadas em [`../02-arquitetura.md`](../02-arquitetura.md).
-AD-13 está detalhada em [`../04-regras-de-negocio.md`](../04-regras-de-negocio.md) como RN-09.
+AD-13, AD-14 estão detalhadas em [`../04-regras-de-negocio.md`](../04-regras-de-negocio.md)
+como RN-09, RN-08.
 
 ## Formato para novas ADRs
 

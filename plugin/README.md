@@ -94,11 +94,14 @@ Bukkit não é thread-safe fora dela); a troca com a ponte (`BridgeClient`, I/O 
 rede bloqueante) roda numa thread dedicada, nunca mais de uma por vez; a cada tick a
 abelha recebe o ÚLTIMO vetor motor já calculado, nunca espera uma troca terminar.
 
-`MotorMapping` traduz o vetor motor (8 grupos provisórios de RN-08) em velocidade —
-**provisório**: como os canais não têm direção própria ainda (só magnitude ≥0), usa
-a atividade média do circuito como velocidade de AVANÇO na direção que a abelha já
-está olhando. Yaw/lift genuinamente controlados pelo circuito exigem a curadoria de
-RN-08, ainda pendente.
+`MotorMapping` traduz o vetor motor em velocidade de AVANÇO na direção que a abelha já
+está olhando (ainda sem yaw/lift próprio — RN-08 completa continua pendente). Combina
+dois canais validados de formas diferentes: `phototaxis` (RN-09/F4, direção real) e
+`locomotion_drive` (RN-08/AD-14, F6 — 6 dos 46 tipos de descendente com categoria
+"Fast"/"Broad Locomotion" publicada por Namiki et al. 2018, leitura de rótulo dos
+autores, não inferência nossa). Os 8 grupos por prefixo continuam só telemetria/
+exploração — não usados na velocidade. Ver `docs/04-regras-de-negocio.md` (RN-08) para
+a tabela completa dos 12/46 tipos com dado real.
 
 Comandos: `/flywirebee control start` | `/flywirebee control stop`.
 
