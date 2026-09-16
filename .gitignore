@@ -1,0 +1,39 @@
+# Dados de origem: grandes, públicos, cada um baixa o seu.
+# A proveniência vive nos checksums do manifest.json.
+data/raw/*
+!data/raw/README.md
+data/interim/*
+data/processed/*
+!data/**/README.md
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Java
+plugin/build/
+plugin/.gradle/
+*.jar
+# ...exceto o wrapper do Gradle — precisa ir versionado, é o que evita
+# qualquer máquina ter que bootstrapar um Gradle à parte para buildar.
+!plugin/gradle/wrapper/gradle-wrapper.jar
+
+# Servidor Minecraft (Paper) — binário baixado, mundo gerado, logs, cache
+mc-server/*
+!mc-server/README.md
+!mc-server/server.properties
+!mc-server/eula.txt
+
+# DuckDB
+*.duckdb
+*.duckdb.wal
+
+.DS_Store
+
+# IDE e ferramentas locais — configuração de máquina, não do projeto
+.idea/
+.claude/scheduled_tasks.lock

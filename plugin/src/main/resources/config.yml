@@ -1,0 +1,5 @@
+# Endereço do simulador (sim/src/flywire_sim/server.py). Em desenvolvimento,
+# o simulador roda em Docker com a porta publicada em localhost (AD-09).
+bridge:
+  host: localhost
+  port: 8765
