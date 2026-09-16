@@ -216,7 +216,7 @@ especula; isso exigiria a curadoria pendente de RN-08 e mais experimentos direci
 
 ---
 
-## F5 — Observabilidade e experimentos 🚧 em andamento
+## F5 — Observabilidade e experimentos 🚧 critério de saída atingido, falta documentar
 
 - [x] Visualizar disparos no mundo — `ActivityVisualizer` + `/flywirebee visualize <on|off>`
 - [x] Ferramenta de lesão: silenciar neurônio/tipo por comando — `/flywirebee mute|unmute`
@@ -246,8 +246,18 @@ amplitude 5,0 saturou o canal perto de 1,0; os dois voltam ao baseline ao limpar
 Comandos: `/flywirebee mute <grupo>`, `unmute <grupo|all>`,
 `stimulate <grupo> <amplitude>`, `stimulate stop`.
 
-**Pendente:** confirmar em servidor real com jogador (só testado via cliente TCP
-direto) e o item "documentar resultados" (relato coerente de F1-F5, não é código).
+**✅ Confirmado em servidor real com jogador, 16/09/2026.** `mute DNp` fez as
+partículas vermelhas sumirem, como esperado. `stimulate DNg 5.0` deixou a abelha
+mais **lenta**, não mais rápida — achado real, não bug: DNg (agrupamento por
+prefixo) é 15 de 16 neurônios (94%) do grupo **inibitório** da topologia de sinal
+(RN-09), então estimulá-lo reduz `phototaxis` em vez de aumentar. Ver
+`plugin/README.md` para o detalhe completo. Também confirmado: a IA nativa
+"vazou" uma vez (abelha parou pra polinizar flor) — esperado, ruído de fundo
+simétrico entre condições, não invalida nada (ver discussão sobre IA nativa
+mais acima).
+
+**Pendente:** só o item "documentar resultados" (relato coerente de F1-F5,
+não é código).
 
 ---
 

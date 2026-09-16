@@ -169,8 +169,29 @@ Dois comandos que estendem o protocolo da ponte (`mute`/`stimulate`, ver
 
 **✅ Testados de ponta a ponta via TCP manual em 16/09/2026** (mutar DNp → canal
 exatamente 0,0; estimular DNg com amplitude 5,0 → canal satura perto de 1,0; os
-dois voltam ao baseline ao limpar). **Ainda não testados dentro de um servidor
-com jogador de verdade** — próximo passo antes de fechar a F5.
+dois voltam ao baseline ao limpar).
+
+**✅ Testados em servidor real com jogador, 16/09/2026:**
+- `mute DNp` → partículas vermelhas (cor do DNp) somem, como esperado.
+- `stimulate DNg 5.0` → a abelha ficou **mais lenta**, não mais rápida.
+  Contraintuitivo, mas explicado: `DNg` (agrupamento por prefixo de
+  `cell_type`) é 15 de 16 neurônios (94%) do grupo **inibitório** da
+  topologia de sinal (RN-09) — só 1 é excitatório. Estimular DNg forte
+  aumenta a taxa do grupo inibitório, o que **reduz** `phototaxis`
+  (`excitatório − inibitório`), e é esse canal que `MotorMapping` usa pra
+  velocidade. **O efeito de estimular um grupo por nome depende de sua
+  composição excitatório/inibitório na topologia real, não é
+  "mais corrente = mais rápido" de forma direta.** Verificável com:
+  ```python
+  from flywire_sim import graph
+  from flywire_sim.motor import group_by_cell_type_prefix
+  from flywire_sim.topology import group_outputs_by_predicted_sign
+  # cruzar os dois agrupamentos por nid
+  ```
+- Confirmado: a IA nativa "vazou" uma vez (abelha parou pra polinizar uma
+  flor) durante o teste — esperado, ver "Risco investigado" acima. Não
+  invalida os testes, é ruído de fundo com a mesma expectativa nos dois
+  grupos de qualquer comparação.
 
 ## Regra
 
