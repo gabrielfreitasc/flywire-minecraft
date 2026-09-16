@@ -54,7 +54,7 @@ from . import config as C
 from . import graph
 from .engine import Engine
 from .graph import Connectome
-from .motor import MotorDecoder
+from .motor import MotorDecoder, group_by_published_behavior
 
 
 class _Handler(socketserver.StreamRequestHandler):
@@ -106,10 +106,12 @@ class SimulationServer:
         self._latest: dict[str, Any] = {"t_ms": 0, "motor": {}, "active_dn": 0}
         self._stop = threading.Event()
 
-        # F5 — nomes válidos para o campo "mute": os 8 grupos por prefixo +
-        # "sensory" (fotorreceptores, não incluídos em motor.groups porque
-        # esse dict só cobre descendentes).
+        # F5 — nomes válidos para os campos "mute"/"stimulate": os 8 grupos
+        # por prefixo + os grupos de comportamento publicado (RN-08, ver
+        # motor.py) + "sensory" (fotorreceptores, fora de motor.groups
+        # porque esse dict só cobre descendentes).
         self._group_lookup: dict[str, np.ndarray] = dict(self.motor.groups)
+        self._group_lookup.update(group_by_published_behavior(connectome))
         self._group_lookup["sensory"] = connectome.sensory
 
         self._tcp = _TCPServer((host, port), _Handler)

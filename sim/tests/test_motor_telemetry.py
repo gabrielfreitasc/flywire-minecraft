@@ -11,7 +11,11 @@ import numpy as np
 import pytest
 
 from flywire_sim import graph
-from flywire_sim.motor import MotorDecoder, group_by_cell_type_prefix
+from flywire_sim.motor import (
+    MotorDecoder,
+    group_by_cell_type_prefix,
+    group_by_published_behavior,
+)
 from flywire_sim.telemetry import Recorder, top_cell_types
 
 
@@ -37,8 +41,27 @@ def test_motor_decode_range(connectome):
         spikes = rng.random(connectome.n) < 0.2  # taxa alta o bastante pra saturar
         motor.push(t_ms, spikes)
     vec = motor.decode()
-    assert set(vec) == set(motor.groups) | {"phototaxis"}
+    expected_keys = (
+        set(motor.groups)
+        | {"phototaxis", "locomotion_drive"}
+        | set(group_by_published_behavior(connectome))
+    )
+    assert set(vec) == expected_keys
     assert all(-1.0 < v < 1.0 for v in vec.values())
+
+
+def test_published_behavior_groups_are_real_types(connectome):
+    """RN-08 — os 12 tipos com categoria publicada existem de fato no subcircuito."""
+    groups = group_by_published_behavior(connectome)
+    assert set(groups) == {
+        "fast_locomotion",
+        "broad_locomotion",
+        "anterior_movements",
+        "wing_abdomen_movements",
+    }
+    total = sum(len(nids) for nids in groups.values())
+    assert total == 27  # 12 tipos, 27 neurônios — conferido manualmente contra o dado
+    assert total < len(connectome.output)  # cobertura parcial, não fabricar o resto
 
 
 def test_motor_decode_empty_history_is_zero(connectome):

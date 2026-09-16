@@ -108,7 +108,7 @@ Onde: `neuron.py`.
 
 ---
 
-## RN-08 · Mapeamento descendente → comportamento (mecanismo pronto, semântica em aberto)
+## RN-08 · Mapeamento descendente → comportamento (curadoria parcial: 12/46 tipos)
 
 Os 92 descendentes precisam virar canais motores com significado (forward/yaw/lift...).
 **A semântica ainda não está definida** — exige curadoria por tipo celular (DNp, DNa,
@@ -145,7 +145,41 @@ RUNTIME dentro do container) — `motor.py` agora expõe um canal extra:
 `phototaxis = tanh((taxa_excitatória − taxa_inibitória) / MOTOR_RATE_SCALE)`. É o
 único canal do vetor motor com direção real (sinal), porque vem de algo já validado
 estatisticamente, não de curadoria — `MotorMapping.java` passou a usar ele em vez da
-média. **Experimento de lesão sendo re-rodado com a correção — resultado em aberto.**
+média. **✅ Confirmado: experimento de lesão re-rodado deu Mann-Whitney p=0,0014**
+(F4 concluída).
+
+**Atualização — curadoria real iniciada (AD-14, 16/09/2026).** Primeira vez que RN-08
+usa dado de literatura de verdade, não só mecanismo. Namiki, Cande et al. 2018 (eLife,
+DOI 10.7554/eLife.34275) caracterizou comportamento de disparo por tipo de neurônio
+descendente via ativação optogenética. A Figura 6 desse paper categoriza 53 dos 58
+tipos testados em 7 categorias (Fast/Slow/Broad Locomotion, Slow/Still, Anterior
+Movements, Anterior Groom, Wing & Abdomen Movements) — **leitura direta dos rótulos da
+figura (classificação dos próprios autores), não inferência nossa a partir de gráfico
+bruto.** Cruzando com nossos 46 tipos: **12 batem** (27 de 92 neurônios, ~29%):
+
+| Nosso tipo | Categoria publicada |
+|---|---|
+| DNa10, DNb05, DNb06, DNp05, DNp16, DNp18 | Fast Locomotion |
+| DNp28 | Broad Locomotion |
+| DNp06, DNp20 | Anterior Movements |
+| DNg11, DNp10, DNp27 | Wing & Abdomen Movements |
+
+**Só Fast+Broad Locomotion viram `locomotion_drive`, usado por `MotorMapping.java`
+junto com `phototaxis`.** Anterior Movements e Wing & Abdomen Movements têm dado real
+também, mas o ensaio de Namiki testa **mosca andando** (perna dianteira, extensão de
+asa em contexto de canto de corte) — sem tradução validada pra voo de abelha. Expostos
+em `motor.py::decode()` para visualização/exploração (F5: `/flywirebee
+mute|stimulate`), deliberadamente fora do cálculo de velocidade. Usar seria fabricar a
+mesma coisa que esta regra sempre proibiu, só com uma citação em cima.
+
+**O que isso NÃO resolve ainda:** os outros 34 tipos (65 neurônios) seguem sem dado
+publicado localizável — tentamos extrair o restante do PDF suplementar do Namiki 2018
+(50MB, quase todo imagem/gráfico bruto de rastreamento) e não foi possível de forma
+confiável (interpretar gráfico de densidade visualmente seria fabricar classificação,
+não ler uma real). Também sem direção (yaw/lift) — só magnitude. Curadoria segue aberta
+para esse restante; próxima fonte candidata: Schlegel et al. 2024 (whole-brain), não
+tentada ainda. Ver `docs/adr/README.md` AD-14 e `FlyWire Citation Guidelines - Data.csv`
+(citação oficial por coluna de dado, fornecida pelo usuário).
 
 ---
 
@@ -218,5 +252,5 @@ estatística em `sim/tools/calibration_check.py` — reproduz os números acima.
 | RN-05 | `ingest.py` | `test_nid_stability` | Alto |
 | RN-06 | `engine.py`, `server.py`, `ControlLoop.java` | `test_bridge_request_response_no_frame_loss`, `test_bridge_history_stays_bounded_by_window` (`test_server.py`); validado em produção — 1500 trocas/0 falhas em servidor real (F4) | Médio |
 | RN-07 | `neuron.py` | `test_refractory` | Alto |
-| RN-08 | `motor.py` | `test_motor_groups_cover_all_descendants`, `test_motor_decode_range` | **Crítico — semântica ainda em aberto**, testes cobrem só mecanismo |
+| RN-08 | `motor.py`, `MotorMapping.java` | `test_motor_groups_cover_all_descendants`, `test_motor_decode_range`, `test_published_behavior_groups_are_real_types` | **Crítico — 12/46 tipos com dado real (AD-14), 34 sem curadoria** |
 | RN-09 | `engine.py` | `tools/calibration_check.py` (estatístico, manual — não roda no CI) | Alto — validado por teste estatístico, ver acima |

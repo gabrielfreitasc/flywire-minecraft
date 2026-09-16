@@ -1,0 +1,14 @@
+"When using the FlyWire resource, please co-cite the Dorkenwald et al. and Schlegel et al. manuscripts. To give credit for specific aspects of data creation (=columns) please select the appropriate citations based on this table.",,,,,,,,,,,,
+citation,doi,Data,,,,,,,,,,
+,,reconstruction,annotations,,,,,,hemibrain matching,connectivity tags,synapses & connectivity,neurotransmitter information
+,,,community,hierarchical,nerves,hemilineages,gene,cell_type,,,,
+"Dorkenwald et al., 2024",https://doi.org/10.1038/s41586-024-07558-y,x,x,x,x,x,,x,x,,x,x
+"Schlegel et al., 2024",https://doi.org/10.1038/s41586-024-07686-5,x,,x,x,x,,x,x,,,
+"Zheng et al., 2018",https://doi.org/10.1016/j.cell.2018.06.019,x,x,x,x,x,,x,x,,x,x
+"Yu et al., 2025",https://www.biorxiv.org/content/10.1101/2025.07.11.664377v1,,,,,,,,,,x (from Jul. 2025),
+"Buhmann et al., 2021",https://doi.org/10.1038/s41592-021-01183-7,,,,,,,,,,x (before Jul 2025),
+"Heinrich et al., 2018",https://doi.org/10.1007/978-3-030-00934-2_36,,,,,,,,,,x (before Jul 2025),
+"Eckstein, Bates et al., 2024",https://doi.org/10.1016/j.cell.2024.03.016,,,,,,,,,,,x
+"Matsliah, Yu et al., 2024",https://doi.org/10.1038/s41586-024-07981-1,,,,,,,x,,,,
+"Lin et al., 2024",https://doi.org/10.1038/s41586-024-07968-y,,,,,,,,,x,,
+"Deutsch et al., 2025",https://www.biorxiv.org/content/10.1101/2025.06.10.658788,,,,,,x,x,,,,
