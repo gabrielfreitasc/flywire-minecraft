@@ -94,14 +94,19 @@ Bukkit não é thread-safe fora dela); a troca com a ponte (`BridgeClient`, I/O 
 rede bloqueante) roda numa thread dedicada, nunca mais de uma por vez; a cada tick a
 abelha recebe o ÚLTIMO vetor motor já calculado, nunca espera uma troca terminar.
 
-`MotorMapping` traduz o vetor motor em velocidade de AVANÇO na direção que a abelha já
-está olhando (ainda sem yaw/lift próprio — RN-08 completa continua pendente). Combina
-dois canais validados de formas diferentes: `phototaxis` (RN-09/F4, direção real) e
-`locomotion_drive` (RN-08/AD-14, F6 — 6 dos 46 tipos de descendente com categoria
-"Fast"/"Broad Locomotion" publicada por Namiki et al. 2018, leitura de rótulo dos
-autores, não inferência nossa). Os 8 grupos por prefixo continuam só telemetria/
-exploração — não usados na velocidade. Ver `docs/04-regras-de-negocio.md` (RN-08) para
-a tabela completa dos 12/46 tipos com dado real.
+`MotorMapping` traduz `phototaxis` em velocidade de AVANÇO na direção que a abelha já
+está olhando (ainda sem yaw/lift próprio — RN-08 completa continua pendente).
+
+**Tentamos somar `locomotion_drive`** (RN-08/AD-14 — 6 tipos com categoria "Fast"/
+"Broad Locomotion" publicada por Namiki et al. 2018) e **revertemos**: experimento de
+lesão re-rodado deu nulo (p=0,43), testamos se era confundidor de local (abelha tinha
+spawnado dentro de casa) refazendo ao ar livre — continuou nulo (p=0,27). Causa real:
+`locomotion_drive` não responde ao caminho de luz, então somar dilui o sinal que
+`phototaxis` carregava sozinho. Terceira vez que "agregar cancela o efeito" aparece
+neste projeto (RN-09 na F1, primeiro experimento de lesão na F4, agora aqui). Ver
+`docs/04-regras-de-negocio.md` (RN-08) para o relato completo e a tabela dos 12/46
+tipos com dado real — `locomotion_drive` continua exposto pra telemetria/exploração,
+só não entra mais na velocidade.
 
 Comandos: `/flywirebee control start` | `/flywirebee control stop`.
 

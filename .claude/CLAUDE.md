@@ -49,10 +49,16 @@ Minecraft. Subcircuito ocelar: 625 neurônios, 2.981 conexões.
   O certo é o oposto do que parece intuitivo: manter a IA **ligada** e sobrescrever a
   velocidade a cada tick — isso domina a decisão nativa sem precisar desligar nada. Ver
   `plugin/README.md`, seção "Risco investigado".
-- **Agregar/tirar média de todos os 92 descendentes cancela o sinal de luz.** 29
-  respondem excitatório (desinibição de 2 saltos), 63 inibitório (direto) — direções
-  opostas. Já causou dois resultados nulos falsos (RN-09 na F1, experimento de lesão na
-  F4) antes de separar por `flywire_sim.topology.group_outputs_by_predicted_sign`.
+- **Somar/tirar média de canais com fontes diferentes dilui ou cancela o efeito que
+  você quer medir — já aconteceu 3 vezes.** (1) RN-09/F1: agregar os 92 descendentes
+  cancela sinal de luz (29 excitatório, 63 inibitório, direções opostas). (2) F4,
+  primeiro experimento de lesão: mesmo erro repetido com a média dos 8 grupos por
+  prefixo. (3) RN-08/F6: somar `locomotion_drive` (não responde à luz) em
+  `phototaxis` (responde) deu nulo de novo (p=0,43), confirmado que não era
+  confundidor de local (testado dentro de casa E ao ar livre, ambos nulos). **Antes
+  de combinar dois canais motores, pergunte: os dois respondem ao MESMO estímulo que
+  você está testando? Se não, a combinação vai diluir, não somar.** Ver RN-08/RN-09
+  em `docs/04-regras-de-negocio.md`.
 - **`String.format`/`printf` com `%f` usa o locale padrão da JVM.** Em servidor pt_BR,
   vírgula é separador decimal — corrompe qualquer CSV silenciosamente (vírgula decimal
   colide com vírgula de coluna). Sempre `Locale.ROOT` em código que escreve arquivo.
