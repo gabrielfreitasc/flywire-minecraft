@@ -6,10 +6,12 @@ encarnada em um mob do Minecraft, para estudar o comportamento das sinapses in s
 **Escopo da v1:** subcircuito ocelar — 625 neurônios, 2.981 conexões, cadeia
 sensório-motora completa (273 fotorreceptores → 260 interneurônios → 92 descendentes).
 
-**Estado atual (16/09/2026):** F0–F4 concluídas. O circuito roda, se conecta a uma
+**Estado atual (16/09/2026):** F0–F5 concluídas. O circuito roda, se conecta a uma
 abelha real via plugin Paper, e o **experimento de lesão confirmou acoplamento real**
 (Mann-Whitney p=0,0014 — abelha se move diferente com fotorreceptores normais vs.
-silenciados). Ver `docs/03-roadmap-fases.md` para o detalhe de cada fase.
+silenciados). Visualização, lesão e estimulação por comando funcionando em servidor
+real. Relato completo do que foi validado (e do que não foi) em
+[`docs/05-resultados.md`](docs/05-resultados.md).
 
 ## Stack
 
@@ -62,6 +64,7 @@ flywire-minecraft/
 | [`docs/02-arquitetura.md`](docs/02-arquitetura.md) | Camadas, contratos, protocolo da ponte |
 | [`docs/03-roadmap-fases.md`](docs/03-roadmap-fases.md) | Fases F0–F5, entregáveis, critérios de saída |
 | [`docs/04-regras-de-negocio.md`](docs/04-regras-de-negocio.md) | RN-01…RN-09, as regras do domínio |
+| [`docs/05-resultados.md`](docs/05-resultados.md) | O que foi validado, o que não foi, dívida técnica |
 | [`docs/adr/`](docs/adr/) | Decisões arquiteturais registradas |
 | [`plugin/README.md`](plugin/README.md) | Estado do plugin, comandos, spikes técnicos |
 | [`mc-server/README.md`](mc-server/README.md) | Como subir o servidor de desenvolvimento |
