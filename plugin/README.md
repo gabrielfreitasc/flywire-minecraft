@@ -104,9 +104,10 @@ spawnado dentro de casa) refazendo ao ar livre — continuou nulo (p=0,27). Caus
 `locomotion_drive` não responde ao caminho de luz, então somar dilui o sinal que
 `phototaxis` carregava sozinho. Terceira vez que "agregar cancela o efeito" aparece
 neste projeto (RN-09 na F1, primeiro experimento de lesão na F4, agora aqui). Ver
-`docs/04-regras-de-negocio.md` (RN-08) para o relato completo e a tabela dos 12/46
-tipos com dado real — `locomotion_drive` continua exposto pra telemetria/exploração,
-só não entra mais na velocidade.
+`docs/04-regras-de-negocio.md` (RN-08) para o relato completo e a tabela dos 13/46
+tipos com dado real (12 de citação direta + 1 via `hemibrain_type`) —
+`locomotion_drive` continua exposto pra telemetria/exploração, só não entra mais na
+velocidade.
 
 Comandos: `/flywirebee control start` | `/flywirebee control stop`.
 
