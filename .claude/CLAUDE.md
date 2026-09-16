@@ -1,8 +1,6 @@
 # Convenções — FlyWire on Minecraft
 
-> Espelhado em `.claude/CLAUDE.md` para carregar automaticamente no Claude Code.
-> Mudou algo aqui? Atualize os dois arquivos juntos (ou torne um deles um
-> link/import do outro, se preferir manter uma fonte só).
+> Espelho de `CONVENCOES.md` (fonte no repositório) — atualize os dois juntos.
 
 Leia antes de escrever qualquer código neste repositório.
 

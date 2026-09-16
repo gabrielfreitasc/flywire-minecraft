@@ -216,7 +216,7 @@ estatística em `sim/tools/calibration_check.py` — reproduz os números acima.
 | RN-03 | `ingest.py` | `test_threshold` | Médio |
 | RN-04 | `ingest.py` | `test_motor_boundary` | Médio |
 | RN-05 | `ingest.py` | `test_nid_stability` | Alto |
-| RN-06 | `engine.py` | `test_clock_decoupling` | Médio |
+| RN-06 | `engine.py`, `server.py`, `ControlLoop.java` | `test_bridge_request_response_no_frame_loss`, `test_bridge_history_stays_bounded_by_window` (`test_server.py`); validado em produção — 1500 trocas/0 falhas em servidor real (F4) | Médio |
 | RN-07 | `neuron.py` | `test_refractory` | Alto |
 | RN-08 | `motor.py` | `test_motor_groups_cover_all_descendants`, `test_motor_decode_range` | **Crítico — semântica ainda em aberto**, testes cobrem só mecanismo |
-| RN-09 | `engine.py` | — | Alto — validado por teste estatístico, ver acima |
+| RN-09 | `engine.py` | `tools/calibration_check.py` (estatístico, manual — não roda no CI) | Alto — validado por teste estatístico, ver acima |

@@ -88,6 +88,9 @@ SENSOR_LIGHT_GAIN = 2.0
 # ------------------------------------------------------------------ RN-08
 # Escala usada para normalizar taxa de disparo (Hz) em (-1, 1) via tanh.
 # Ordem de grandeza da taxa basal observada no subcircuito v1 (RN-09) com
-# bias/ruído calibrados: ~25-30 Hz por neurônio. PROVISÓRIO — sem semântica
-# de direção até a curadoria de RN-08 (ver motor.py).
+# bias/ruído calibrados: ~25-30 Hz por neurônio. Usada tanto pelos 8 canais
+# provisórios por prefixo de cell_type (sem direção, RN-08 ainda sem
+# curadoria) quanto pelo canal `phototaxis` (com direção real, baseado na
+# topologia de sinal validada — ver motor.py e RN-08/RN-09 em
+# docs/04-regras-de-negocio.md).
 MOTOR_RATE_SCALE = 30.0

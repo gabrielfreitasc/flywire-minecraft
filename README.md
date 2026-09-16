@@ -6,6 +6,11 @@ encarnada em um mob do Minecraft, para estudar o comportamento das sinapses in s
 **Escopo da v1:** subcircuito ocelar — 625 neurônios, 2.981 conexões, cadeia
 sensório-motora completa (273 fotorreceptores → 260 interneurônios → 92 descendentes).
 
+**Estado atual (16/09/2026):** F0–F4 concluídas. O circuito roda, se conecta a uma
+abelha real via plugin Paper, e o **experimento de lesão confirmou acoplamento real**
+(Mann-Whitney p=0,0014 — abelha se move diferente com fotorreceptores normais vs.
+silenciados). Ver `docs/03-roadmap-fases.md` para o detalhe de cada fase.
+
 ## Stack
 
 | Camada | Tecnologia | Por quê |
@@ -31,8 +36,10 @@ flywire-minecraft/
 │   └── processed/   Subcircuito pronto para simulação (gerado)
 ├── sim/             Simulador Python
 │   ├── src/flywire_sim/
-│   └── tests/
-├── plugin/          Plugin Java (a partir da Fase 3)
+│   ├── tests/
+│   └── tools/       Scripts de análise/calibração reproduzíveis (não é lixo de sessão)
+├── plugin/          Plugin Paper (Java 21, Gradle) — encarnação, funcional desde a F4
+├── mc-server/       Servidor Paper de desenvolvimento (gerado; não versionado)
 └── .claude/         Convenções do projeto para agentes
 ```
 
@@ -40,8 +47,11 @@ flywire-minecraft/
 
 1. Deposite `Connectivity_783.parquet` e `Supplemental_file1_neuron_annotations.tsv`
    em `data/raw/` (veja `data/raw/README.md`).
-2. `cd sim && docker compose up --build`
+2. `cd sim && docker compose up --build` — sobe o simulador (porta 8765).
 3. `python -m flywire_sim.ingest` gera `data/processed/`.
+4. Para testar a encarnação: `cd plugin && ./gradlew build`, copie o `.jar` de
+   `build/libs/` para `mc-server/plugins/` e suba um servidor Paper (ver
+   `mc-server/README.md` e `plugin/README.md`).
 
 ## Documentação
 
@@ -51,8 +61,10 @@ flywire-minecraft/
 | [`docs/01-camada-de-dados.md`](docs/01-camada-de-dados.md) | Fontes, validação, extração do subcircuito |
 | [`docs/02-arquitetura.md`](docs/02-arquitetura.md) | Camadas, contratos, protocolo da ponte |
 | [`docs/03-roadmap-fases.md`](docs/03-roadmap-fases.md) | Fases F0–F5, entregáveis, critérios de saída |
-| [`docs/04-regras-de-negocio.md`](docs/04-regras-de-negocio.md) | RN-01…RN-08, as regras do domínio |
+| [`docs/04-regras-de-negocio.md`](docs/04-regras-de-negocio.md) | RN-01…RN-09, as regras do domínio |
 | [`docs/adr/`](docs/adr/) | Decisões arquiteturais registradas |
+| [`plugin/README.md`](plugin/README.md) | Estado do plugin, comandos, spikes técnicos |
+| [`mc-server/README.md`](mc-server/README.md) | Como subir o servidor de desenvolvimento |
 
 ## Licença e citação
 

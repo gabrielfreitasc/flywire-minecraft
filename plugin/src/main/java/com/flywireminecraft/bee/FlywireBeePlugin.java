@@ -12,10 +12,18 @@ import java.util.Optional;
 import java.util.logging.Level;
 
 /**
- * L6 — encarnação. Liga/desliga o plugin, spawna/marca a abelha do conectoma
- * ({@code /flywirebee give}), roda spikes técnicos de movimento
- * ({@code /flywirebee spike}), e liga/desliga o loop de controle real
- * ({@code /flywirebee control start|stop}) — ver {@link ControlLoop}.
+ * L6 — encarnação. Comandos ({@code /flywirebee ...}):
+ *
+ * <ul>
+ *   <li>{@code give} / {@code kill} — spawna/marca ou remove a abelha do
+ *       conectoma (ver {@link FlywireBeeMarker}, {@link SpawnItem});</li>
+ *   <li>{@code spike <modo>} — spikes técnicos isolados de movimento
+ *       (ver {@link VelocityProbe});</li>
+ *   <li>{@code control start|stop} — liga/desliga o loop de controle real,
+ *       sensor→ponte→motor→velocidade a 20 Hz (ver {@link ControlLoop});</li>
+ *   <li>{@code lesion [trials] [segundos]} — experimento de lesão, critério
+ *       de saída da F4 (ver {@link LesionExperiment}).</li>
+ * </ul>
  *
  * <p>Regra dura (ver plugin/README.md e CONVENCOES.md): o plugin NUNCA altera
  * a simulação para "fazer o comportamento aparecer". Se nada emerge, o
