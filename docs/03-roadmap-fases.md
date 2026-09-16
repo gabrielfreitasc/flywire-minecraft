@@ -216,15 +216,23 @@ especula; isso exigiria a curadoria pendente de RN-08 e mais experimentos direci
 
 ---
 
-## F5 — Observabilidade e experimentos
+## F5 — Observabilidade e experimentos 🚧 em andamento
 
-- [ ] Visualizar disparos no mundo (partículas/blocos por neurônio ou tipo)
+- [x] Visualizar disparos no mundo — `ActivityVisualizer` + `/flywirebee visualize <on|off>`
 - [ ] Ferramenta de lesão: silenciar neurônio/tipo por comando
 - [ ] Estimulação dirigida de tipos específicos
 - [ ] Documentar resultados
 
 **Critério de saída:** um observador humano consegue, olhando o mundo, dizer qual parte
 do circuito está ativa.
+
+**Visualização — implementada e confirmada visualmente em 16/09/2026.** Cada canal do
+vetor motor (8 grupos por prefixo de `cell_type` + `phototaxis`) tem uma cor de partícula
+fixa (`Particle.DUST` com RGB customizado); quantidade de partículas por canal é
+proporcional a |valor| do canal (até 6 por grupo), renderizado a ~4Hz ao redor da abelha
+(20Hz de partículas seria spam visual). Liga junto com `control start`, comando
+`/flywirebee visualize <on|off>` para alternar. Usuário confirmou ver as partículas
+coloridas em servidor real.
 
 ---
 
@@ -237,6 +245,25 @@ do circuito está ativa.
 | Circuito de 2 saltos (10.578 neurônios) | v2 |
 | Cérebro inteiro (139k) fora do loop | v3 |
 | Plasticidade / aprendizado | v3 — o conectoma é estático por natureza |
+| Multi-sensor: dia/noite, chuva, toque | v2 — ver nota abaixo |
+
+**Nota — multi-sensor (16/09/2026):** ideia do usuário, avaliada antes da F5. Por sensor:
+
+- **Dia/noite** — quase de graça. `ControlLoop` já lê `dorsal_light` (luz do céu) mas só usa
+  `light` (luz do bloco) na estimulação. É só decidir como combinar os dois, não precisa de
+  dado novo nem circuito novo.
+- **Chuva** — parcialmente de graça: chuva escurece o céu no Minecraft, já afeta luz
+  indiretamente. Um sensor de chuva independente exigiria achar (se existir) um circuito
+  higro-sensorial no conectoma e extraí-lo à parte — mesmo processo da F0, semente diferente.
+- **Toque** — exige um circuito mecanossensorial inteiro, sem relação com os 625 neurônios
+  ocelares atuais. A conectividade **já está** em `Connectivity_783.parquet` e nas
+  anotações da F0 (cobrem os 139k neurônios do cérebro inteiro) — nunca fomos atrás deles.
+
+**Importante: nada disso precisa do arquivo de 9,5GB da Zenodo** (`flywire_synapses_783.feather`).
+Esse arquivo traz precisão espacial (coordenada XYZ por sinapse, neurópilo, NT mais fino) —
+útil pra anatomia real (primeiras duas linhas da tabela acima), não pra acessar novos tipos
+de neurônio. Multi-sensor é sobre extrair um SUBCIRCUITO DIFERENTE do que já temos, não sobre
+precisar de mais dado.
 
 ## Dívida técnica aberta
 

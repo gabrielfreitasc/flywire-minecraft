@@ -40,17 +40,27 @@ public final class ControlLoop {
     private final String bridgeHost;
     private final int bridgePort;
 
-    private static final int LOG_EVERY_TICKS = 20; // 1x por segundo
+    private static final int LOG_EVERY_TICKS = 20;   // 1x por segundo
+    private static final int VISUALIZE_EVERY_TICKS = 5; // 4Hz — 20Hz de partículas seria spam visual
+
+    private final ActivityVisualizer visualizer = new ActivityVisualizer();
 
     private BridgeClient bridge;
     private ExecutorService bridgeExecutor;
     private BukkitTask tickTask;
     private final AtomicBoolean exchangeInFlight = new AtomicBoolean(false);
     private volatile Vector latestVelocity = new Vector(0, 0, 0);
+    private volatile JsonObject latestMotor = new JsonObject();
     private volatile long exchangeCount = 0;
     private volatile long exchangeFailures = 0;
     private long tickCount = 0;
     private volatile boolean lesioned = false;
+    private volatile boolean visualize = true;
+
+    /** F5 — liga/desliga as partículas de atividade. Controle nunca depende disso. */
+    public void setVisualize(boolean visualize) {
+        this.visualize = visualize;
+    }
 
     /**
      * RN — experimento de lesão (docs/00-visao-geral.md, critério de
@@ -124,6 +134,10 @@ public final class ControlLoop {
         // RN-06: aplica o último vetor já calculado, nunca espera a ponte.
         bee.setVelocity(latestVelocity);
 
+        if (visualize && tickCount % VISUALIZE_EVERY_TICKS == 0) {
+            visualizer.render(bee, latestMotor);
+        }
+
         double realLight = bee.getLocation().getBlock().getLightLevel() / 15.0;
         double light = lesioned ? 0.0 : realLight;
 
@@ -150,6 +164,10 @@ public final class ControlLoop {
                 }
                 JsonObject response = bridge.sendSensorAndReceiveMotor(light, dorsalLight, damage, tMs);
                 latestVelocity = MotorMapping.toVelocity(response, facing);
+                JsonObject motor = response.getAsJsonObject("motor");
+                if (motor != null) {
+                    latestMotor = motor;
+                }
                 exchangeCount++;
             } catch (IOException e) {
                 exchangeFailures++;
