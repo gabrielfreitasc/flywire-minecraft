@@ -1,0 +1,14 @@
+# Apenas o simulador é containerizado — AD-09.
+# O servidor Minecraft roda nativo no Windows e conecta em localhost:8765.
+services:
+  sim:
+    build: .
+    container_name: flywire-sim
+    ports:
+      - "8765:8765"
+    volumes:
+      # data/ fica FORA do container: raw é imutável e grande demais para imagem
+      - ../data:/data
+    environment:
+      FLYWIRE_DATA_DIR: /data
+    restart: unless-stopped

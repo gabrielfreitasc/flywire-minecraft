@@ -1,0 +1,18 @@
+name: FlywireBee
+version: 0.1.0
+main: com.flywireminecraft.bee.FlywireBeePlugin
+api-version: "1.21"
+description: >
+  Encarna o conectoma ocelar da Drosophila (FlyWire 783) numa abelha do
+  Minecraft. O plugin nunca altera a simulação — se o comportamento não
+  emerge, o problema é da hipótese ou do modelo, não do mob.
+author: flywire-minecraft
+commands:
+  flywirebee:
+    description: Dá o item que spawna a abelha controlada pelo conectoma.
+    usage: /<command> give
+    permission: flywirebee.give
+permissions:
+  flywirebee.give:
+    description: Permite receber o item que spawna a abelha do FlyWire.
+    default: op

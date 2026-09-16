@@ -1,0 +1,44 @@
+# Architecture Decision Records
+
+Decisões com consequência arquitetural. Uma ADR nunca é editada depois de aceita —
+é **substituída** por outra que a supersede. O histórico é o valor.
+
+| # | Decisão | Data | Status |
+|---|---|---|---|
+| AD-01 | Identidade congelada em `nid` int32 (materialização 783) | 2026-09-09 | Aceita |
+| AD-02 | Sinal sináptico derivado do neurotransmissor, versionado como código | 2026-09-09 | Aceita |
+| AD-03 | Override de histamina nos fotorreceptores ocelares | 2026-09-09 | Aceita |
+| AD-04 | Neurônios descendentes são a fronteira motora | 2026-09-09 | Aceita |
+| AD-05 | Zenodo não é bloqueante para a v1; espelho GitHub validado | 2026-09-10 | **Superseded por AD-11** |
+| AD-06 | Escopo v1 = subcircuito ocelar, 1 salto, limiar ≥5 | 2026-09-09 | Aceita |
+| AD-07 | Python (simulação) + Java (encarnação), separados por socket | 2026-09-15 | Aceita |
+| AD-08 | DuckDB + Parquet; sem servidor de banco | 2026-09-15 | Aceita |
+| AD-09 | Docker só no simulador; Minecraft nativo | 2026-09-15 | Aceita |
+| AD-10 | Acoplamento assíncrono entre engine e tick do jogo | 2026-09-15 | Aceita |
+| AD-11 | Fonte primária da Zenodo reincorporada; egresso segue bloqueado para o código | 2026-09-16 | Aceita |
+| AD-12 | Leitura de arquivos grandes só por memory-map com colunas selecionadas (RAM 3,8 GB) | 2026-09-16 | Aceita |
+| AD-13 | Corrente tônica de base + ruído no LIF (RN-09) | 2026-09-16 | Aceita |
+
+AD-01 a AD-05 estão detalhadas em [`../01-camada-de-dados.md`](../01-camada-de-dados.md).
+AD-07 a AD-10 estão detalhadas em [`../02-arquitetura.md`](../02-arquitetura.md).
+AD-13 está detalhada em [`../04-regras-de-negocio.md`](../04-regras-de-negocio.md) como RN-09.
+
+## Formato para novas ADRs
+
+```
+# AD-NN — Título
+
+**Data** · **Status** (Proposta | Aceita | Superseded por AD-MM)
+
+## Contexto
+O que forçou a decisão.
+
+## Decisão
+O que foi decidido.
+
+## Consequências
+O que fica mais fácil, o que fica mais difícil, o que passa a ser proibido.
+
+## Alternativas descartadas
+E por quê.
+```
