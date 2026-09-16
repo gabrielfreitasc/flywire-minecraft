@@ -46,6 +46,34 @@ def test_bridge_history_stays_bounded_by_window():
         assert len(srv.motor._history) <= 60
 
 
+def test_bridge_mute_field_silences_neurons():
+    """F5 — campo 'mute' silencia o grupo nomeado, e omiti-lo não desfaz isso."""
+    cc = graph.load()
+    with SimulationServer(cc, host="127.0.0.1", port=0) as srv:
+        time.sleep(0.1)
+        sock = socket.create_connection(("127.0.0.1", srv.port), timeout=5.0)
+        sock_file = sock.makefile("rwb")
+        try:
+            sensor = {"t_ms": 0, "light": 0.5, "dorsal_light": 0.0, "damage": False, "mute": ["sensory"]}
+            sock_file.write((json.dumps(sensor) + "\n").encode("utf-8"))
+            sock_file.flush()
+            sock_file.readline()
+            time.sleep(0.1)  # dá tempo do loop de simulação aplicar
+
+            assert srv.engine._silenced[cc.sensory].all()
+
+            # sem "mute" no campo, o silenciamento anterior deve persistir
+            sensor2 = {"t_ms": 50, "light": 0.5, "dorsal_light": 0.0, "damage": False}
+            sock_file.write((json.dumps(sensor2) + "\n").encode("utf-8"))
+            sock_file.flush()
+            sock_file.readline()
+            time.sleep(0.1)
+
+            assert srv.engine._silenced[cc.sensory].all()
+        finally:
+            sock.close()
+
+
 def test_bridge_survives_client_disconnect():
     """Se o plugin cair, o simulador continua rodando (não deve travar/crashar)."""
     cc = graph.load()

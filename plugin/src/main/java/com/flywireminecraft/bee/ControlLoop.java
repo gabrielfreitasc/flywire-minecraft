@@ -7,7 +7,10 @@ import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Locale;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -57,9 +60,50 @@ public final class ControlLoop {
     private volatile boolean lesioned = false;
     private volatile boolean visualize = true;
 
+    // F5 — ferramenta de lesão por comando (server.py, campo "mute"). Nomes
+    // válidos: os 8 grupos por prefixo de cell_type + "sensory" (fotorreceptores).
+    // Mecanismo DIFERENTE do `lesioned` acima (que zera light) — este silencia
+    // a saída sináptica do grupo de verdade, no engine.
+    private final Set<String> mutedGroups = ConcurrentHashMap.newKeySet();
+    private volatile boolean muteDirty = false;
+
     /** F5 — liga/desliga as partículas de atividade. Controle nunca depende disso. */
     public void setVisualize(boolean visualize) {
         this.visualize = visualize;
+    }
+
+    public void mute(String groupName) {
+        mutedGroups.add(groupName);
+        muteDirty = true;
+    }
+
+    public void unmute(String groupName) {
+        mutedGroups.remove(groupName);
+        muteDirty = true;
+    }
+
+    public void unmuteAll() {
+        mutedGroups.clear();
+        muteDirty = true;
+    }
+
+    public Set<String> getMutedGroups() {
+        return Set.copyOf(mutedGroups);
+    }
+
+    // F5 — estimulação dirigida (server.py, campo "stimulate"). Soma com o
+    // estímulo de luz nos fotorreceptores, não o substitui.
+    private volatile BridgeClient.StimulateSpec directedStimulus;
+    private volatile boolean stimulateDirty = false;
+
+    public void stimulate(String groupName, double amplitude) {
+        directedStimulus = new BridgeClient.StimulateSpec(groupName, amplitude);
+        stimulateDirty = true;
+    }
+
+    public void stopStimulating() {
+        directedStimulus = new BridgeClient.StimulateSpec(null, 0.0);
+        stimulateDirty = true;
     }
 
     /**
@@ -157,12 +201,27 @@ public final class ControlLoop {
         long tMs = System.currentTimeMillis();
         Vector facing = bee.getLocation().getDirection();
 
+        // Só marca muteDirty=false DEPOIS do envio ter sucesso (dentro do try
+        // abaixo) — se a troca falhar, a mudança de mute não pode se perder
+        // silenciosamente, tem que tentar de novo na próxima troca bem-sucedida.
+        boolean sendMuteThisTime = muteDirty;
+        List<String> muteToSend = sendMuteThisTime ? List.copyOf(mutedGroups) : null;
+        boolean sendStimulateThisTime = stimulateDirty;
+        BridgeClient.StimulateSpec stimulateToSend = sendStimulateThisTime ? directedStimulus : null;
+
         bridgeExecutor.submit(() -> {
             try {
                 if (bridge == null) {
                     bridge = new BridgeClient(bridgeHost, bridgePort);
                 }
-                JsonObject response = bridge.sendSensorAndReceiveMotor(light, dorsalLight, damage, tMs);
+                JsonObject response = bridge.sendSensorAndReceiveMotor(
+                        light, dorsalLight, damage, tMs, muteToSend, stimulateToSend);
+                if (sendMuteThisTime) {
+                    muteDirty = false;
+                }
+                if (sendStimulateThisTime) {
+                    stimulateDirty = false;
+                }
                 latestVelocity = MotorMapping.toVelocity(response, facing);
                 JsonObject motor = response.getAsJsonObject("motor");
                 if (motor != null) {

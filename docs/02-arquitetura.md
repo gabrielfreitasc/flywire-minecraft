@@ -86,6 +86,19 @@ vê intenção motora. Se o mob mudar, só L4 muda.
 ```json
 {"t_ms": 12450, "light": 0.94, "dorsal_light": 0.61, "damage": false}
 ```
+Dois campos opcionais, adicionados na F5 (omitidos no exemplo acima por
+serem raros — a maioria das mensagens não os inclui):
+
+```json
+{"mute": ["DNp", "sensory"]}
+{"stimulate": {"group": "DNg", "amplitude": 3.0}}
+```
+
+`mute` (ferramenta de lesão por comando) e `stimulate` (estimulação dirigida)
+só mudam o estado no simulador quando o campo está PRESENTE na mensagem —
+ausência mantém o que já estava configurado, não reseta a cada mensagem. Ver
+`server.py` e `plugin/README.md` para os comandos que expõem isso
+(`/flywirebee mute|unmute|stimulate`).
 
 ### Protocolo da ponte
 - TCP em `localhost:8765`, JSON-lines (`\n`), UTF-8.

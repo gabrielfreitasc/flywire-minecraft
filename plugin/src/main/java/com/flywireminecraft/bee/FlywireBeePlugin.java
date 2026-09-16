@@ -24,7 +24,14 @@ import java.util.logging.Level;
  *   <li>{@code lesion [trials] [segundos]} — experimento de lesão, critério
  *       de saída da F4 (ver {@link LesionExperiment});</li>
  *   <li>{@code visualize <on|off>} — partículas de atividade por grupo,
- *       critério de saída da F5 (ver {@link ActivityVisualizer}).</li>
+ *       critério de saída da F5 (ver {@link ActivityVisualizer});</li>
+ *   <li>{@code mute <grupo>} / {@code unmute <grupo|all>} — ferramenta de
+ *       lesão por comando da F5: silencia de verdade a saída sináptica do
+ *       grupo no simulador (diferente do mecanismo de {@code lesion}, que só
+ *       zera o sensor de luz — ver {@code server.py});</li>
+ *   <li>{@code stimulate <grupo> <amplitude>} / {@code stimulate stop} —
+ *       estimulação dirigida da F5: injeta corrente extra num grupo, soma
+ *       com o estímulo de luz (não substitui).</li>
  * </ul>
  *
  * <p>Regra dura (ver plugin/README.md e CONVENCOES.md): o plugin NUNCA altera
@@ -32,6 +39,10 @@ import java.util.logging.Level;
  * problema é da hipótese ou do modelo, não do mob.
  */
 public final class FlywireBeePlugin extends JavaPlugin {
+
+    /** Nomes válidos tanto para {@code mute}/{@code unmute} quanto para {@code stimulate}. */
+    private static final List<String> VALID_GROUPS =
+            List.of("sensory", "DNp", "DNpe", "DNg", "DNge", "DNb", "DNbe", "DNa", "DNae");
 
     private BridgeClient startupCheckBridge;
     private SpawnItem spawnItem;
@@ -94,6 +105,9 @@ public final class FlywireBeePlugin extends JavaPlugin {
             case "control" -> handleControl(player, args);
             case "lesion" -> handleLesion(player, args);
             case "visualize" -> handleVisualize(player, args);
+            case "mute" -> handleMute(player, args);
+            case "unmute" -> handleUnmute(player, args);
+            case "stimulate" -> handleStimulate(player, args);
             default -> sender.sendMessage(usage());
         }
         return true;
@@ -175,9 +189,57 @@ public final class FlywireBeePlugin extends JavaPlugin {
         player.sendMessage("Visualização de atividade " + (on ? "ligada" : "desligada") + ".");
     }
 
+    private void handleMute(Player player, String[] args) {
+        if (args.length < 2 || !VALID_GROUPS.contains(args[1])) {
+            player.sendMessage("Uso: /flywirebee mute <" + String.join("|", VALID_GROUPS) + ">");
+            return;
+        }
+        controlLoop.mute(args[1]);
+        player.sendMessage("Grupo '" + args[1] + "' silenciado (leva até ~50ms pra fazer efeito "
+                + "visível — janela deslizante do motor). Mutados agora: " + controlLoop.getMutedGroups());
+    }
+
+    private void handleUnmute(Player player, String[] args) {
+        if (args.length < 2) {
+            player.sendMessage("Uso: /flywirebee unmute <grupo|all>");
+            return;
+        }
+        if (args[1].equalsIgnoreCase("all")) {
+            controlLoop.unmuteAll();
+            player.sendMessage("Todos os grupos desmutados.");
+            return;
+        }
+        controlLoop.unmute(args[1]);
+        player.sendMessage("Grupo '" + args[1] + "' desmutado. Mutados agora: " + controlLoop.getMutedGroups());
+    }
+
+    private void handleStimulate(Player player, String[] args) {
+        if (args.length >= 2 && args[1].equalsIgnoreCase("stop")) {
+            controlLoop.stopStimulating();
+            player.sendMessage("Estimulação dirigida parada.");
+            return;
+        }
+        if (args.length < 3 || !VALID_GROUPS.contains(args[1])) {
+            player.sendMessage("Uso: /flywirebee stimulate <" + String.join("|", VALID_GROUPS)
+                    + "> <amplitude> | stimulate stop");
+            return;
+        }
+        double amplitude;
+        try {
+            amplitude = Double.parseDouble(args[2]);
+        } catch (NumberFormatException e) {
+            player.sendMessage("Amplitude inválida: " + args[2]);
+            return;
+        }
+        controlLoop.stimulate(args[1], amplitude);
+        player.sendMessage("Estimulando '" + args[1] + "' com amplitude " + amplitude
+                + " (soma com o estímulo de luz — não substitui).");
+    }
+
     private String usage() {
         return "Uso: /flywirebee give | kill | spike <modo> | control <start|stop> | "
-                + "lesion [trials] [segundos] | visualize <on|off>";
+                + "lesion [trials] [segundos] | visualize <on|off> | mute <grupo> | unmute <grupo|all> | "
+                + "stimulate <grupo> <amplitude>";
     }
 
     @Override

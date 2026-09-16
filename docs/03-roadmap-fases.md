@@ -219,8 +219,8 @@ especula; isso exigiria a curadoria pendente de RN-08 e mais experimentos direci
 ## F5 — Observabilidade e experimentos 🚧 em andamento
 
 - [x] Visualizar disparos no mundo — `ActivityVisualizer` + `/flywirebee visualize <on|off>`
-- [ ] Ferramenta de lesão: silenciar neurônio/tipo por comando
-- [ ] Estimulação dirigida de tipos específicos
+- [x] Ferramenta de lesão: silenciar neurônio/tipo por comando — `/flywirebee mute|unmute`
+- [x] Estimulação dirigida de tipos específicos — `/flywirebee stimulate <grupo> <amp>`
 - [ ] Documentar resultados
 
 **Critério de saída:** um observador humano consegue, olhando o mundo, dizer qual parte
@@ -233,6 +233,21 @@ proporcional a |valor| do canal (até 6 por grupo), renderizado a ~4Hz ao redor 
 (20Hz de partículas seria spam visual). Liga junto com `control start`, comando
 `/flywirebee visualize <on|off>` para alternar. Usuário confirmou ver as partículas
 coloridas em servidor real.
+
+**Lesão e estimulação por comando — implementadas em 16/09/2026, testadas via TCP
+manual (não em servidor com jogador ainda).** Estendem o protocolo com dois campos
+opcionais (`mute`, `stimulate` — ver `docs/02-arquitetura.md`). `mute` silencia de
+verdade a saída sináptica do grupo no `engine.py` (`set_silenced`) — mecanismo
+DIFERENTE do experimento de lesão da F4 (que só zera `light`, não desliga neurônio
+nenhum). `stimulate` injeta corrente extra num grupo (`set_directed_stimulus`),
+somada ao estímulo de luz, não substituindo. Ambos testados fim a fim: mutar DNp fez
+o canal ir a exatamente 0,0 (depois da janela de 50ms esvaziar); estimular DNg com
+amplitude 5,0 saturou o canal perto de 1,0; os dois voltam ao baseline ao limpar.
+Comandos: `/flywirebee mute <grupo>`, `unmute <grupo|all>`,
+`stimulate <grupo> <amplitude>`, `stimulate stop`.
+
+**Pendente:** confirmar em servidor real com jogador (só testado via cliente TCP
+direto) e o item "documentar resultados" (relato coerente de F1-F5, não é código).
 
 ---
 

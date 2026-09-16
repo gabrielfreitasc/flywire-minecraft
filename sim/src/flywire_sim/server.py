@@ -3,8 +3,24 @@ L5 — ponte TCP com o plugin Minecraft.
 
 Protocolo: JSON-lines sobre TCP em BRIDGE_PORT. Ver docs/02-arquitetura.md.
 
-  plugin -> sim : {"t_ms":.., "light":.., "dorsal_light":.., "damage":false}
+  plugin -> sim : {"t_ms":.., "light":.., "dorsal_light":.., "damage":false,
+                    "mute": ["DNp", "sensory"],               # opcional
+                    "stimulate": {"group": "DNg", "amplitude": 3.0}}  # opcional
   sim -> plugin : {"t_ms":.., "motor": {<canal>: valor, ...}, "active_dn":..}
+
+Campo `mute` (F5, ferramenta de lesão por comando): lista de nomes de grupo a
+silenciar (os 8 grupos de `motor.groups` + "sensory" = os 273 fotorreceptores).
+Quando AUSENTE, o silenciamento atual não muda — só é alterado quando o campo
+está presente (mesmo lista vazia, que limpa o silenciamento). Ver
+`engine.py::Engine.set_silenced`. Mecanismo DIFERENTE do experimento de lesão
+da F4 (que zera `light`, não silencia neurônio nenhum) — aqui a saída
+sináptica do grupo é removida da rede de verdade.
+
+Campo `stimulate` (F5, estimulação dirigida): injeta corrente extra num grupo
+nomeado, SOMADA ao estímulo de luz dos fotorreceptores (não substitui). Mesma
+semântica de "ausente = sem mudança" do `mute`. `{"group": null}` ou
+`{"group": "", "amplitude": 0}` limpa o estímulo dirigido. Ver
+`engine.py::Engine.set_directed_stimulus`.
 
 RN-06 — o simulador roda em thread própria a dt=1 ms, desacoplado do tick do
 jogo. O jogo nunca espera o simulador terminar passos extras: cada linha de
@@ -31,6 +47,8 @@ import socketserver
 import threading
 import time
 from typing import Any, Self
+
+import numpy as np
 
 from . import config as C
 from . import graph
@@ -83,8 +101,16 @@ class SimulationServer:
 
         self._lock = threading.Lock()
         self._light = 0.0
+        self._pending_mute: list[str] | None = None
+        self._pending_stimulate: dict[str, Any] | None = None
         self._latest: dict[str, Any] = {"t_ms": 0, "motor": {}, "active_dn": 0}
         self._stop = threading.Event()
+
+        # F5 — nomes válidos para o campo "mute": os 8 grupos por prefixo +
+        # "sensory" (fotorreceptores, não incluídos em motor.groups porque
+        # esse dict só cobre descendentes).
+        self._group_lookup: dict[str, np.ndarray] = dict(self.motor.groups)
+        self._group_lookup["sensory"] = connectome.sensory
 
         self._tcp = _TCPServer((host, port), _Handler)
         self._tcp.bridge = self  # type: ignore[attr-defined]
@@ -116,12 +142,38 @@ class SimulationServer:
         espera a thread de simulação (RN-06).
         """
         light = float(sensor.get("light", 0.0))
+        mute = sensor.get("mute")
+        stimulate = sensor.get("stimulate")
         with self._lock:
             self._light = light
+            if mute is not None:
+                self._pending_mute = list(mute)
+            if stimulate is not None:
+                self._pending_stimulate = dict(stimulate)
 
     def latest_frame(self) -> dict[str, Any]:
         with self._lock:
             return dict(self._latest)
+
+    def _apply_mute(self, group_names: list[str]) -> None:
+        """Roda só na thread de simulação — única que toca em self.engine."""
+        nids: list[int] = []
+        for name in group_names:
+            group = self._group_lookup.get(name)
+            if group is None:
+                continue
+            nids.extend(int(n) for n in group)
+        self.engine.set_silenced(np.array(nids, dtype=np.int64))
+
+    def _apply_stimulate(self, spec: dict[str, Any]) -> None:
+        """Roda só na thread de simulação — única que toca em self.engine."""
+        name = spec.get("group")
+        amplitude = float(spec.get("amplitude", 0.0))
+        group = self._group_lookup.get(name) if name else None
+        if group is None:
+            self.engine.set_directed_stimulus(np.array([], dtype=np.int64), 0.0)
+        else:
+            self.engine.set_directed_stimulus(np.asarray(group, dtype=np.int64), amplitude)
 
     def _sim_loop(self) -> None:
         """Roda a dt=1 ms em tempo real, independente de qualquer conexão."""
@@ -132,6 +184,15 @@ class SimulationServer:
         while not self._stop.is_set():
             with self._lock:
                 light = self._light
+                mute = self._pending_mute
+                self._pending_mute = None
+                stimulate = self._pending_stimulate
+                self._pending_stimulate = None
+            if mute is not None:
+                self._apply_mute(mute)
+            if stimulate is not None:
+                self._apply_stimulate(stimulate)
+
             self.engine.stimulate(self.connectome.sensory, light * C.SENSOR_LIGHT_GAIN)
             frame = self.engine.step()
             self.motor.push(frame.t_ms, frame.spikes)
