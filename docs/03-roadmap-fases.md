@@ -216,12 +216,12 @@ especula; isso exigiria a curadoria pendente de RN-08 e mais experimentos direci
 
 ---
 
-## F5 — Observabilidade e experimentos 🚧 critério de saída atingido, falta documentar
+## F5 — Observabilidade e experimentos ✅ concluída
 
 - [x] Visualizar disparos no mundo — `ActivityVisualizer` + `/flywirebee visualize <on|off>`
 - [x] Ferramenta de lesão: silenciar neurônio/tipo por comando — `/flywirebee mute|unmute`
 - [x] Estimulação dirigida de tipos específicos — `/flywirebee stimulate <grupo> <amp>`
-- [ ] Documentar resultados
+- [x] Documentar resultados — `docs/05-resultados.md`
 
 **Critério de saída:** um observador humano consegue, olhando o mundo, dizer qual parte
 do circuito está ativa.
