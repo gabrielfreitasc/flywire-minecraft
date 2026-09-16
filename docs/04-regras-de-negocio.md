@@ -164,13 +164,27 @@ bruto.** Cruzando com nossos 46 tipos: **12 batem** (27 de 92 neurônios, ~29%):
 | DNp06, DNp20 | Anterior Movements |
 | DNg11, DNp10, DNp27 | Wing & Abdomen Movements |
 
-**Só Fast+Broad Locomotion viram `locomotion_drive`, usado por `MotorMapping.java`
-junto com `phototaxis`.** Anterior Movements e Wing & Abdomen Movements têm dado real
-também, mas o ensaio de Namiki testa **mosca andando** (perna dianteira, extensão de
-asa em contexto de canto de corte) — sem tradução validada pra voo de abelha. Expostos
-em `motor.py::decode()` para visualização/exploração (F5: `/flywirebee
-mute|stimulate`), deliberadamente fora do cálculo de velocidade. Usar seria fabricar a
-mesma coisa que esta regra sempre proibiu, só com uma citação em cima.
+**Fast+Broad Locomotion viram o canal `locomotion_drive`** — mas **não** entra em
+`MotorMapping.java` (ver abaixo, testado e revertido). Anterior Movements e Wing &
+Abdomen Movements também têm dado real, mas o ensaio de Namiki testa **mosca andando**
+(perna dianteira, extensão de asa em contexto de canto de corte) — sem tradução
+validada pra voo de abelha. Os 4 canais ficam expostos em `motor.py::decode()` para
+visualização/exploração (F5: `/flywirebee mute|stimulate`), fora do cálculo de
+velocidade.
+
+**Tentativa de usar `locomotion_drive` na velocidade — testada e revertida
+(16/09/2026).** `MotorMapping.java` passou a somar `phototaxis` + `locomotion_drive`.
+Experimento de lesão re-rodado deu nulo: p=0,43 (N=20). Hipótese alternativa
+levantada pelo usuário — abelha tinha spawnado **dentro de casa**, luz quase
+constante, podia estar mascarando o efeito de luz independente do canal novo.
+Testado: refeito ao ar livre (céu visível), **ainda nulo** (p=0,27, N=20). Isso
+descarta o confundidor de local e aponta pra causa real: `locomotion_drive` vem de
+neurônios que não têm relação com o caminho de luz (escolhidos só por categoria
+comportamental publicada, não por topologia de sinal RN-09) — somar esse canal
+dilui o sinal que `phototaxis` carregava sozinho. **Mesma armadilha de "agregar
+cancela o efeito" que já apareceu em RN-09 (F1) e no primeiro experimento de lesão
+(F4)** — terceira vez. Não ajustamos peso até achar p&lt;0,05 de novo (seria
+manipular o resultado); revertido pra `phototaxis` sozinho, que continua validado.
 
 **O que isso NÃO resolve ainda:** os outros 34 tipos (65 neurônios) seguem sem dado
 publicado localizável — tentamos extrair o restante do PDF suplementar do Namiki 2018
