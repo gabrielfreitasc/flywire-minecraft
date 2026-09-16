@@ -51,14 +51,14 @@ def check_md5() -> None:
 
 
 def schema_of(path: Path):
-    import pyarrow.feather as feather
+    from pyarrow import feather
     return feather.read_table(path, memory_map=True).schema
 
 
 def compare_edges() -> None:
     """Confronta o espelho (Connectivity_783.parquet) com o primário."""
-    import pyarrow.feather as feather
     import pandas as pd
+    from pyarrow import feather
 
     primary = RAW / "proofread_connections_783.feather"
     mirror = RAW / "Connectivity_783.parquet"
