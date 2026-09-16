@@ -22,7 +22,9 @@ import java.util.logging.Level;
  *   <li>{@code control start|stop} — liga/desliga o loop de controle real,
  *       sensor→ponte→motor→velocidade a 20 Hz (ver {@link ControlLoop});</li>
  *   <li>{@code lesion [trials] [segundos]} — experimento de lesão, critério
- *       de saída da F4 (ver {@link LesionExperiment}).</li>
+ *       de saída da F4 (ver {@link LesionExperiment});</li>
+ *   <li>{@code visualize <on|off>} — partículas de atividade por grupo,
+ *       critério de saída da F5 (ver {@link ActivityVisualizer}).</li>
  * </ul>
  *
  * <p>Regra dura (ver plugin/README.md e CONVENCOES.md): o plugin NUNCA altera
@@ -91,6 +93,7 @@ public final class FlywireBeePlugin extends JavaPlugin {
             case "spike" -> handleSpike(player, args);
             case "control" -> handleControl(player, args);
             case "lesion" -> handleLesion(player, args);
+            case "visualize" -> handleVisualize(player, args);
             default -> sender.sendMessage(usage());
         }
         return true;
@@ -162,8 +165,19 @@ public final class FlywireBeePlugin extends JavaPlugin {
         new LesionExperiment(this, controlLoop).run(bee.get(), trials, secondsPerTrial, player);
     }
 
+    private void handleVisualize(Player player, String[] args) {
+        if (args.length < 2 || (!args[1].equalsIgnoreCase("on") && !args[1].equalsIgnoreCase("off"))) {
+            player.sendMessage("Uso: /flywirebee visualize <on|off>");
+            return;
+        }
+        boolean on = args[1].equalsIgnoreCase("on");
+        controlLoop.setVisualize(on);
+        player.sendMessage("Visualização de atividade " + (on ? "ligada" : "desligada") + ".");
+    }
+
     private String usage() {
-        return "Uso: /flywirebee give | kill | spike <modo> | control <start|stop> | lesion [trials] [segundos]";
+        return "Uso: /flywirebee give | kill | spike <modo> | control <start|stop> | "
+                + "lesion [trials] [segundos] | visualize <on|off>";
     }
 
     @Override

@@ -142,6 +142,15 @@ lesionado 27,56±5,08 blocos, N=20). Ver `docs/03-roadmap-fases.md` para a
 tabela completa e as ressalvas (N pequeno, mapeamento motor ainda só
 magnitude, sem yaw/direção própria do circuito).
 
+## Visualização de atividade (F5)
+
+`/flywirebee visualize <on|off>` — liga junto com `control start` por padrão.
+`ActivityVisualizer` spawna partículas coloridas (`Particle.DUST`) ao redor da
+abelha, uma cor fixa por canal do vetor motor (8 grupos por prefixo + `phototaxis`,
+que tem cor própria — amarelo — por ser o único com direção validada). Quantidade
+de partículas por canal é proporcional a |valor| do canal, renderizado a ~4Hz (20Hz
+seria spam visual). **✅ Confirmado visualmente em servidor real, 16/09/2026.**
+
 ## Regra
 
 O plugin **nunca** altera a simulação. Se o comportamento não emerge, o problema
