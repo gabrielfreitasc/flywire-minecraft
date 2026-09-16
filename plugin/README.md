@@ -149,10 +149,12 @@ magnitude, sem yaw/direção própria do circuito).
 
 `/flywirebee visualize <on|off>` — liga junto com `control start` por padrão.
 `ActivityVisualizer` spawna partículas coloridas (`Particle.DUST`) ao redor da
-abelha, uma cor fixa por canal do vetor motor (8 grupos por prefixo + `phototaxis`,
-que tem cor própria — amarelo — por ser o único com direção validada). Quantidade
-de partículas por canal é proporcional a |valor| do canal, renderizado a ~4Hz (20Hz
-seria spam visual). **✅ Confirmado visualmente em servidor real, 16/09/2026.**
+abelha, uma cor fixa por canal do vetor motor. `phototaxis` (amarelo) e
+`locomotion_drive` (branco) têm cor própria — são os dois canais que de fato movem a
+abelha (`MotorMapping`). Quantidade de partículas por canal é proporcional a |valor|
+do canal, renderizado a ~4Hz (20Hz seria spam visual).
+**✅ Confirmado visualmente em servidor real — 16/09/2026 (phototaxis) e de novo após
+RN-08/AD-14 (locomotion_drive, partículas brancas visíveis junto das amarelas).**
 
 ## Lesão e estimulação por comando (F5)
 
