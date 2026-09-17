@@ -62,6 +62,40 @@ Minecraft. Subcircuito ocelar: 625 neurônios, 2.981 conexões.
 - **`String.format`/`printf` com `%f` usa o locale padrão da JVM.** Em servidor pt_BR,
   vírgula é separador decimal — corrompe qualquer CSV silenciosamente (vírgula decimal
   colide com vírgula de coluna). Sempre `Locale.ROOT` em código que escreve arquivo.
+- **`Block.getLightFromSky()` (nosso `dorsal_light`) NÃO varia com hora do dia — só com
+  exposição ao céu.** Confirmado na Minecraft Wiki (F6, 16/09/2026): o skylight bruto por
+  bloco fica travado em 15 ao ar livre em qualquer hora, dia ou noite. Quem escurece à
+  noite é o "internal sky light" (meio-dia=15, meia-noite=4), calculado à parte a partir
+  do skylight bruto + hora do mundo — e é isso que `Block.getLightLevel()` (nosso `light`)
+  já incorpora. **Contra-intuitivo, ao contrário do que os nomes sugerem:** `light` é o
+  canal sensível a dia/noite; `dorsal_light` é sensível a teto/céu aberto (indoor vs.
+  outdoor), não a hora do dia. Não trocar um pelo outro esperando pegar dia/noite — usar
+  `dorsal_light` só como filtro de "a abelha está mesmo ao ar livre?" antes de comparar
+  dia vs. noite via `light`. Ver F6 em `docs/03-roadmap-fases.md` e `plugin/README.md`.
+- **Nunca comparar rodadas de experimento feitas em origens diferentes.** Medido (F6,
+  16/09/2026): duas rodadas na MESMA condição (abelha cega), a 70 blocos uma da outra,
+  diferiram 9 blocos de trajetória (p&lt;0,001) — só terreno. Isso é maior que o efeito
+  de lesão da F4 (3,7 blocos). Uma comparação normal × cega entre rodadas pareceu dar
+  efeito forte (~10 blocos) e era quase toda local. **Toda condição comparada tem que
+  ser sorteada trial a trial dentro da MESMA rodada, mesma origem** — como
+  `LesionExperiment` e `DayNightExperiment` já fazem internamente. A origem é a posição
+  da **abelha** no comando, não a do jogador.
+- **A IA nativa da abelha é uma fonte de ruído maior do que parecia.** Medido (F6,
+  17/09/2026): removendo os objetivos de IA que competem com locomoção via Mob Goal
+  API do Paper (`Bukkit.getMobGoals().removeGoal(...)`, não `setAI(false)` — que
+  continua travando física, ver acima), o desvio-padrão da trajetória caiu de
+  ~0,6–8,2 blocos pra **0,22** entre trials da mesma condição. A API funciona sem
+  travar (testado isolado antes de integrar: 96% do deslocamento esperado, igual ao
+  modo com IA ligada). `BEE_GO_TO_HIVE`/`BEE_LOCATE_HIVE`/`BEE_ENTER_HIVE` (voltar pra
+  colmeia à noite) eram candidatos a confundidor de dia/noite; `BEE_WANDER`/
+  `BEE_GO_TO_KNOWN_FLOWER`/`BEE_POLLINATE` competem com locomoção em geral. **Sem
+  volta pela API pública** — abelha precisa ser respawnada pra ter os goals padrão de
+  volta. Ver `CompetingGoals.java`, `/flywirebee goals off`, `docs/03-roadmap-fases.md`
+  (F6). **Confirmado (17/09/2026, réplica em 2 locais):** com IA ligada, dia/noite deu
+  nulo em 3 rodadas independentes (p≥0,29); com `goals off`, efeito real e replicado
+  (p&lt;0,002 nos dois testes) — a IA nativa estava mesmo mascarando o sinal. Direção do
+  efeito veio invertida do esperado (menos luz → mais distância) e não está explicada
+  — não inventar motivo sem o teste de dose-resposta pendente.
 
 ## Papéis no projeto
 

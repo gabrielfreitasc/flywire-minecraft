@@ -261,6 +261,179 @@ não é código).
 
 ---
 
+## F6 — RN-08 completa (BANC) + multi-sensor dia/noite ✅ dia/noite: efeito real, direção inesperada
+
+### RN-08 — segunda fonte via BANC connectome ✅ concluída
+
+- [x] BANC (Bates, Phelps, Kim, Yang et al. 2026) baixado do Harvard Dataverse,
+      cruzado contra os 34 tipos sem curadoria (AD-15)
+- [x] 5 tipos novos com comportamento medido (literatura), 7 conflitos Namiki×BANC
+      resolvidos tipo a tipo, 27 tipos com cluster de conectividade (evidência mais
+      fraca, exposto como telemetria `conn_*`)
+- [x] `motor.py` atualizado (`PUBLISHED_DN_BEHAVIOR`, `CONNECTIVITY_CLUSTER_BANC`),
+      20/20 testes passando
+
+Ver `docs/04-regras-de-negocio.md` RN-08 para a tabela completa. `MotorMapping.java`
+não foi tocado — os canais novos ficam fora do cálculo de velocidade até validação
+própria por lesão.
+
+### Multi-sensor: dia/noite ✅ efeito confirmado com `goals off` — direção inesperada, não explicada
+
+**Correção de premissa (16/09/2026) — a nota original desta seção estava errada.**
+A ideia inicial era: "`dorsal_light` (luz do céu) é quase de graça pra dia/noite, só
+falta usar". Investigando a API do Bukkit antes de implementar, achamos o oposto:
+`Block.getLightFromSky()` (nosso `dorsal_light`) retorna o **skylight bruto**, que
+fica travado em 15 ao ar livre **independente da hora do dia** — é sensor de
+teto/céu aberto (indoor vs. outdoor), não de hora. Quem já é sensível a dia/noite é
+`Block.getLightLevel()` (nosso `light` — o mesmo canal que já validou `phototaxis`,
+p=0,0014) — confirmado via Minecraft Wiki (skylight bruto vs. "internal sky light",
+que aplica a redução por hora do mundo). Ver `CONVENCOES.md`, "Armadilhas conhecidas".
+
+**Desenho adotado, sem tocar no estímulo já validado:** `light` continua
+alimentando os fotorreceptores exatamente como na F4. `dorsal_light` vira **filtro
+de confundidor** — confirma que a abelha está mesmo ao ar livre (skylight=15) antes
+de rodar um trial, evitando o mesmo confundidor de "abelha dentro de casa" que já
+apareceu uma vez em RN-08/F6. Novo experimento (`DayNightExperiment.java`, mesmo
+padrão do experimento de lesão da F4): N trials, `world.setTime()` alternando
+meio-dia/meia-noite por trial, mede `path_length`/`avg_speed`, compara com
+`sim/tools/daynight_analysis.py` (mesma dupla Welch t-test + Mann-Whitney U).
+
+- [x] `DayNightExperiment.java` + `/flywirebee daynight [trials] [segundos] [blind]`
+- [x] `sim/tools/daynight_analysis.py`
+- [x] Controle cego (`blind`, `light=0`) — adicionado antes de rodar: abelha vanilla
+      muda de comportamento à noite pela IA nativa, então diferença dia/noite sem
+      controle não seria atribuível ao circuito
+- [x] Rodado em servidor real, 16/09/2026 — **resultado negativo**, ver abaixo
+
+**Critério de saída:** diferença estatisticamente mensurável entre trials de dia e
+de noite — mesmo critério de falsificação do experimento de lesão da F4, aplicado a
+um novo eixo de variação (hora do mundo em vez de fotorreceptor silenciado).
+
+**❌ Não atingido — resultado negativo, registrado como tal (16/09/2026).** Três
+rodadas de 20×10s, dia/noite sorteado por trial dentro de cada rodada:
+
+| Rodada | Origem (dist. da normal) | Geral (blocos) | Dia | Noite | Dia × noite (MW) |
+|---|---|---|---|---|---|
+| Normal | (129,6; 71,4; -116,0) — 0 | 31,31 ± 1,53 | 31,34 | 31,29 | p=0,29 (Welch 0,94) |
+| Cega | (137,8; 72,5; -108,1) — 11,5 | 29,96 ± 0,54 | 29,88 | 30,04 | p=0,68 |
+| Cega | (179,7; 69,0; -169,7) — 70 | 20,97 ± 8,21 | 22,27 | 19,91 | p=0,40 |
+
+**Checagem de manipulação — passou.** `light` logado pelo `ControlLoop` por
+condição: dia 0,987, noite 0,250 (= 4/15, exatamente o "internal sky light" de
+meia-noite da Minecraft Wiki — confirma empiricamente que `getLightLevel()` varia
+com a hora). Na rodada cega, `light` enviado = 0,000 em 100% das amostras, com a
+luz real seguindo variando (0,97/0,26). O experimento testou o que pretendia; o nulo
+é da hipótese, não do desenho.
+
+**O que isso mostra:**
+1. **Reduzir a luz em 75% (1,0 → 0,25) não muda o comportamento.** Nenhuma das três
+   rodadas mostra diferença dia/noite. A abelha não responde ao ciclo dia/noite do
+   mundo na faixa de luz que o ciclo produz.
+2. **A IA nativa noturna não é confundidor detectável** — rodadas cegas também não
+   mostram diferença dia/noite.
+3. **O local da origem pesa mais que a luz.** As duas rodadas cegas (mesma condição)
+   diferem em 9 blocos (p&lt;0,001) só por estarem a 70 blocos de distância — a
+   rodada a 70 blocos teve trial de 1,78 blocos (abelha presa em terreno). A queda
+   "normal × cega" de ~10 blocos que apareceu primeiro era quase toda terreno.
+   **Comparação entre rodadas com origens diferentes não é válida** — virou armadilha
+   registrada em `CONVENCOES.md`.
+
+**O que NÃO dá pra afirmar:**
+- **Lesão reproduzida nesta sessão.** Normal × cega a 11,5 blocos dá 1,35 blocos
+  (~4%, MW p=5·10⁻⁵), mesma direção da F4 — mas com efeito de local de até 9 blocos,
+  11,5 blocos de distância bastam pra explicar 1,35. A evidência válida de lesão
+  continua sendo a da F4 (normal/lesionado sorteado **dentro** da mesma rodada e
+  origem, p=0,0014).
+- **Resposta à luz saturante.** Luz 0,25 ≈ luz 1,0, e luz 0 aparentemente abaixo, é
+  compatível com saturação em luz baixa — mas o ponto "luz 0" desta sessão vem de
+  comparação entre rodadas. Testar exige dose-resposta (luz 0 / 0,25 / 1,0) sorteada
+  trial a trial numa rodada só, mesma origem. Não feito.
+
+CSVs brutos preservados em `mc-server/plugins/FlywireBee/`:
+`daynight_experiment_normal_local129.csv`, `daynight_experiment_blind_local137.csv`,
+`daynight_experiment_blind_local179.csv`.
+
+### Hipótese do usuário — IA nativa mascarando o efeito (17/09/2026)
+
+**`setAI(false)` já tinha sido descartado na F4** (congela a física). Investigado
+mecanismo novo, nunca testado: **Mob Goal API do Paper** (`Bukkit.getMobGoals()`),
+que remove objetivos de IA específicos sem tocar em `setAI`. Implementado
+(`CompetingGoals.java`, `/flywirebee goals off`, spike
+`no-competing-goals`) e **testado isolado antes de integrar** (mesma disciplina da
+F4): 28,84 de 30 blocos em 5s (96%, igual ao modo com IA ligada) — a física não
+trava. Remove `BEE_WANDER`, `BEE_GO_TO_KNOWN_FLOWER`, `BEE_POLLINATE`,
+`BEE_GO_TO_HIVE`, `BEE_LOCATE_HIVE`, `BEE_ENTER_HIVE` (candidatos a competir com
+locomoção — os três últimos, específicos de voltar pra colmeia à noite, eram o
+candidato mais forte pro confundidor dia/noite). Sem volta pela API pública —
+abelha precisa ser respawnada (`kill`+`give`) pra ter os goals padrão de volta.
+
+**Resultado — real, mas ambíguo, e ainda com confundidor de local.** Rodada com
+`goals off`, origem a 38 blocos da rodada normal (não o ponto combinado):
+
+| | Dia | Noite |
+|---|---|---|
+| Distância (blocos) | 30,01 ± 0,22 | 30,23 ± 0,21 |
+
+Welch p=0,047 (limítrofe), Mann-Whitney p=0,10 (não significativo) — pelo padrão
+já estabelecido na F4 (Mann-Whitney decide quando os dois discordam), **continua
+nulo**. Direção inversa da esperada (noite andou um pouco mais que dia, não
+menos), efeito do tamanho do próprio desvio-padrão.
+
+**Achado real, mesmo sem confirmar dia/noite:** desvio-padrão caiu de ~0,6–8,2
+blocos (rodadas com IA nativa ligada) pra **0,22** — quase 3 a 40× menos ruído.
+Isso é evidência de que a IA nativa competia pelo controle e adicionava variação;
+a hipótese do usuário tinha fundamento nesse sentido, mesmo sem confirmar que
+essa competição mascarava um efeito de dia/noite. Com ruído tão menor, uma rodada
+maior (mais trials) teria bem mais poder estatístico que as anteriores.
+
+**Pendente:** repetir com `goals off` na origem exata da rodada normal
+((129,58; 71,40; -116,01)) pra eliminar o confundidor de local e decidir se o
+p=0,047/0,10 é sinal real ou ruído residual. CSV desta rodada preservado como
+`daynight_experiment_goalsoff_local92.csv`.
+
+### Confirmado — efeito real de dia/noite com `goals off`, direção não explicada (17/09/2026)
+
+Repetido com `goals off`, origem (129,37; 71,00; -102,07) — 13,9 blocos do ponto
+combinado (X/Y bateram, Z não; `/tp` no jogador não move onde a abelha vai spawnar,
+ver armadilha em `CONVENCOES.md`).
+
+| | Dia (n=9) | Noite (n=11) |
+|---|---|---|
+| Distância (blocos) | 29,95 ± 0,15 | 30,26 ± 0,18 |
+
+Welch p=0,00087, Mann-Whitney p=0,00184 — **os dois testes concordam, diferença real.**
+Checagem de manipulação passou de novo (`light` 1,00 de dia, 0,27 à noite).
+
+**Replicação entre locais, só nas rodadas `goals off`:** esta rodada (13,9 blocos do
+alvo) e a anterior (`daynight_experiment_goalsoff_local92.csv`, 38 blocos do alvo)
+deram médias praticamente idênticas — 30,12 ± 0,22 nas duas, p=0,96/0,92 entre elas.
+**Com os goals desligados, o confundidor de local que dominava as rodadas com IA
+ligada (9 blocos de diferença só por terreno) praticamente desaparece** — evidência
+adicional de que a IA nativa, não o terreno em si, era a maior fonte de ruído.
+
+**O que fica confirmado:**
+1. A hipótese do usuário estava certa: a IA nativa mascarava um efeito real. Com ela
+   competindo, três rodadas independentes deram nulo (p≥0,29); sem ela, o efeito
+   aparece de forma consistente e replicada.
+2. O circuito ocelar responde ao ciclo dia/noite do mundo — não só a lesão binária já
+   provada na F4.
+
+**O que NÃO está explicado — direção inversa da esperada.** Menos luz (noite,
+`light`≈0,27) produziu **mais** distância percorrida que luz cheia (dia,
+`light`=1,0), não menos. Isso não é o que RN-09/F4 sugeririam de forma ingênua (mais
+luz → mais `phototaxis` → mais velocidade). Efeito é pequeno (~1%, 0,3 de ~30 blocos)
+mas estatisticamente sólido. Hipótese não testada: **resposta não-monotônica à
+luz** — luz parcial poderia desinibir uma via excitatória de forma diferente de luz
+plena ou luz zero (compatível com F4: luz zero deu a MENOR distância das três
+condições já medidas — 27,56, contra 29,95–30,26 aqui e ~31 com IA ligada). Só um
+teste de dose-resposta (0 / 0,25 / 0,5 / 1,0 sorteado numa rodada só, `goals off`,
+origem fixa) decide se é isso ou outra coisa. **Não inventar explicação sem esse
+teste** — registrado como pergunta em aberto, não como conclusão.
+
+CSV desta rodada: `daynight_experiment_goalsoff_local129z-14.csv`.
+
+---
+
 ## Fora de escopo (candidatos a v2+)
 
 | Item | Fase provável |
@@ -270,13 +443,13 @@ não é código).
 | Circuito de 2 saltos (10.578 neurônios) | v2 |
 | Cérebro inteiro (139k) fora do loop | v3 |
 | Plasticidade / aprendizado | v3 — o conectoma é estático por natureza |
-| Multi-sensor: dia/noite, chuva, toque | v2 — ver nota abaixo |
+| Multi-sensor: chuva, toque | v2 — ver nota abaixo (dia/noite saiu daqui, ver F6) |
 
-**Nota — multi-sensor (16/09/2026):** ideia do usuário, avaliada antes da F5. Por sensor:
+**Nota — multi-sensor (16/09/2026, atualizada na F6):** ideia do usuário, avaliada
+antes da F5. Dia/noite passou a ser trabalho da F6 (ver acima) depois que a premissa
+inicial ("quase de graça") se mostrou tecnicamente errada. Os outros dois sensores
+continuam fora de escopo:
 
-- **Dia/noite** — quase de graça. `ControlLoop` já lê `dorsal_light` (luz do céu) mas só usa
-  `light` (luz do bloco) na estimulação. É só decidir como combinar os dois, não precisa de
-  dado novo nem circuito novo.
 - **Chuva** — parcialmente de graça: chuva escurece o céu no Minecraft, já afeta luz
   indiretamente. Um sensor de chuva independente exigiria achar (se existir) um circuito
   higro-sensorial no conectoma e extraí-lo à parte — mesmo processo da F0, semente diferente.

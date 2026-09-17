@@ -23,6 +23,10 @@ import java.util.logging.Level;
  *       sensor→ponte→motor→velocidade a 20 Hz (ver {@link ControlLoop});</li>
  *   <li>{@code lesion [trials] [segundos]} — experimento de lesão, critério
  *       de saída da F4 (ver {@link LesionExperiment});</li>
+ *   <li>{@code daynight [trials] [segundos]} — experimento dia/noite, F6
+ *       (ver {@link DayNightExperiment}). Exige abelha ao ar livre —
+ *       {@code light} (não {@code dorsal_light}) é quem varia com a hora do
+ *       mundo, ver {@code CONVENCOES.md};</li>
  *   <li>{@code visualize <on|off>} — partículas de atividade por grupo,
  *       critério de saída da F5 (ver {@link ActivityVisualizer});</li>
  *   <li>{@code mute <grupo>} / {@code unmute <grupo|all>} — ferramenta de
@@ -32,6 +36,10 @@ import java.util.logging.Level;
  *   <li>{@code stimulate <grupo> <amplitude>} / {@code stimulate stop} —
  *       estimulação dirigida da F5: injeta corrente extra num grupo, soma
  *       com o estímulo de luz (não substitui).</li>
+ *   <li>{@code goals off} — F6, hipótese do usuário pro nulo do dia/noite:
+ *       remove objetivos de IA nativa que competem com locomoção (vagar,
+ *       flor, colmeia) via Mob Goal API do Paper, sem tocar em {@code setAI}
+ *       (ver {@link CompetingGoals}). Sem volta pela API pública.</li>
  * </ul>
  *
  * <p>Regra dura (ver plugin/README.md e CONVENCOES.md): o plugin NUNCA altera
@@ -43,8 +51,10 @@ public final class FlywireBeePlugin extends JavaPlugin {
     /** Nomes válidos tanto para {@code mute}/{@code unmute} quanto para {@code stimulate}. */
     private static final List<String> VALID_GROUPS = List.of(
             "sensory", "DNp", "DNpe", "DNg", "DNge", "DNb", "DNbe", "DNa", "DNae",
-            // RN-08/AD-14 — categorias de comportamento publicado (Namiki et al. 2018).
-            "fast_locomotion", "broad_locomotion", "anterior_movements", "wing_abdomen_movements"
+            // RN-08/AD-14+AD-15 — categorias de comportamento publicado (Namiki et al.
+            // 2018 + BANC connectome). Ver docs/04-regras-de-negocio.md.
+            "fast_locomotion", "broad_locomotion", "wing_abdomen_movements", "steering",
+            "escape_takeoff", "landing", "flight", "walking", "ocellar", "neuromodulatory"
     );
 
     private BridgeClient startupCheckBridge;
@@ -107,10 +117,12 @@ public final class FlywireBeePlugin extends JavaPlugin {
             case "spike" -> handleSpike(player, args);
             case "control" -> handleControl(player, args);
             case "lesion" -> handleLesion(player, args);
+            case "daynight" -> handleDayNight(player, args);
             case "visualize" -> handleVisualize(player, args);
             case "mute" -> handleMute(player, args);
             case "unmute" -> handleUnmute(player, args);
             case "stimulate" -> handleStimulate(player, args);
+            case "goals" -> handleGoals(player, args);
             default -> sender.sendMessage(usage());
         }
         return true;
@@ -131,6 +143,7 @@ public final class FlywireBeePlugin extends JavaPlugin {
             case "velocity-ai" -> probe.runVelocityWithAI(bee.get());
             case "pathfinder" -> probe.runPathfinder(bee.get());
             case "teleport" -> probe.runTeleport(bee.get());
+            case "no-competing-goals" -> probe.runVelocityNoCompetingGoals(bee.get());
             default -> {
                 player.sendMessage("Modo desconhecido: " + mode);
                 return;
@@ -180,6 +193,37 @@ public final class FlywireBeePlugin extends JavaPlugin {
             return;
         }
         new LesionExperiment(this, controlLoop).run(bee.get(), trials, secondsPerTrial, player);
+    }
+
+    private void handleDayNight(Player player, String[] args) {
+        Optional<Bee> bee = player.getWorld().getEntitiesByClass(Bee.class).stream()
+                .filter(marker::isMarked)
+                .findFirst();
+        if (bee.isEmpty()) {
+            player.sendMessage("Nenhuma abelha do FlyWire encontrada neste mundo. Use /flywirebee give primeiro.");
+            return;
+        }
+        int trials = 20;
+        int secondsPerTrial = 10;
+        boolean blind = false;
+        try {
+            if (args.length >= 2) {
+                trials = Integer.parseInt(args[1]);
+            }
+            if (args.length >= 3) {
+                secondsPerTrial = Integer.parseInt(args[2]);
+            }
+            if (args.length >= 4) {
+                if (!args[3].equalsIgnoreCase("blind")) {
+                    throw new NumberFormatException(args[3]);
+                }
+                blind = true;
+            }
+        } catch (NumberFormatException e) {
+            player.sendMessage("Uso: /flywirebee daynight [trials=20] [segundosPorTrial=10] [blind]");
+            return;
+        }
+        new DayNightExperiment(this, controlLoop).run(bee.get(), trials, secondsPerTrial, blind, player);
     }
 
     private void handleVisualize(Player player, String[] args) {
@@ -239,10 +283,31 @@ public final class FlywireBeePlugin extends JavaPlugin {
                 + " (soma com o estímulo de luz — não substitui).");
     }
 
+    private void handleGoals(Player player, String[] args) {
+        if (args.length < 2 || !args[1].equalsIgnoreCase("off")) {
+            player.sendMessage("Uso: /flywirebee goals off — remove os objetivos de IA nativa que "
+                    + "competem com locomoção (vagar, ir pra flor/colmeia). Sem volta: abelha nova "
+                    + "(kill + give) tem os goals default de novo. Ver CompetingGoals.java.");
+            return;
+        }
+        Optional<Bee> bee = player.getWorld().getEntitiesByClass(Bee.class).stream()
+                .filter(marker::isMarked)
+                .findFirst();
+        if (bee.isEmpty()) {
+            player.sendMessage("Nenhuma abelha do FlyWire encontrada neste mundo. Use /flywirebee give primeiro.");
+            return;
+        }
+        CompetingGoals.disable(bee.get());
+        player.sendMessage("Objetivos de IA que competem com locomoção removidos (vagar, ir pra "
+                + "flor/polinizar, ir/localizar/entrar na colmeia). Testado isolado via 'spike "
+                + "no-competing-goals' — não congela a física, mas ainda não validado se muda o "
+                + "resultado do experimento dia/noite.");
+    }
+
     private String usage() {
         return "Uso: /flywirebee give | kill | spike <modo> | control <start|stop> | "
-                + "lesion [trials] [segundos] | visualize <on|off> | mute <grupo> | unmute <grupo|all> | "
-                + "stimulate <grupo> <amplitude>";
+                + "lesion [trials] [segundos] | daynight [trials] [segundos] [blind] | visualize <on|off> | "
+                + "mute <grupo> | unmute <grupo|all> | stimulate <grupo> <amplitude> | goals off";
     }
 
     @Override

@@ -14,6 +14,7 @@ from flywire_sim import graph
 from flywire_sim.motor import (
     MotorDecoder,
     group_by_cell_type_prefix,
+    group_by_connectivity_cluster,
     group_by_published_behavior,
 )
 from flywire_sim.telemetry import Recorder, top_cell_types
@@ -45,23 +46,56 @@ def test_motor_decode_range(connectome):
         set(motor.groups)
         | {"phototaxis", "locomotion_drive"}
         | set(group_by_published_behavior(connectome))
+        | {f"conn_{name}" for name in group_by_connectivity_cluster(connectome)}
     )
     assert set(vec) == expected_keys
     assert all(-1.0 < v < 1.0 for v in vec.values())
 
 
 def test_published_behavior_groups_are_real_types(connectome):
-    """RN-08 — os 13 tipos com categoria publicada existem de fato no subcircuito."""
+    """RN-08/AD-14+AD-15 — os 18 tipos com categoria publicada (Namiki 2018 +
+    BANC) existem de fato no subcircuito."""
     groups = group_by_published_behavior(connectome)
     assert set(groups) == {
         "fast_locomotion",
         "broad_locomotion",
-        "anterior_movements",
         "wing_abdomen_movements",
+        "steering",
+        "escape_takeoff",
+        "landing",
+        "flight",
+        "walking",
+        "ocellar",
+        "neuromodulatory",
     }
     total = sum(len(nids) for nids in groups.values())
-    assert total == 29  # 13 tipos, 29 neurônios — conferido manualmente contra o dado
+    assert total == 39  # 18 tipos, 39 neurônios — conferido manualmente contra o dado
     assert total < len(connectome.output)  # cobertura parcial, não fabricar o resto
+
+
+def test_connectivity_cluster_groups_are_real_types(connectome):
+    """RN-08/AD-15 — os 27 tipos com cluster de conectividade BANC (sem
+    comportamento medido) existem de fato no subcircuito."""
+    groups = group_by_connectivity_cluster(connectome)
+    assert set(groups) == {
+        "flight_steering_1",
+        "flight_steering_2",
+        "head_orienting",
+        "flight_power",
+        "walking",
+        "postural_control",
+        "threat_response",
+        "probing",
+    }
+    total = sum(len(nids) for nids in groups.values())
+    assert total == 50  # 27 tipos, 50 neurônios — conferido manualmente contra o dado
+    assert total < len(connectome.output)  # cobertura parcial, não fabricar o resto
+    # sem sobreposição com o que já tem comportamento medido (evidências não se misturam)
+    published_nids = {
+        nid for nids in group_by_published_behavior(connectome).values() for nid in nids
+    }
+    connectivity_nids = {nid for nids in groups.values() for nid in nids}
+    assert published_nids.isdisjoint(connectivity_nids)
 
 
 def test_motor_decode_empty_history_is_zero(connectome):

@@ -34,23 +34,41 @@ uma vez em RN-09 (agregar excitatório+inibitório cancela o sinal). Ver
 `docs/04-regras-de-negocio.md`.
 
 **Canais de comportamento publicado (RN-08, F5→F6, 16/09/2026)** — início da
-curadoria real de RN-08. `PUBLISHED_DN_BEHAVIOR` mapeia 13 dos nossos 46 tipos
-de descendente para a categoria comportamental que Namiki et al. 2018 (eLife,
-Figura 6) mediu por ativação optogenética — leitura direta dos rótulos da
-figura (classificação dos autores) para 12 tipos, mais 1 (`DNge070`) via
-correspondência de identidade entre conectomas (`hemibrain_type`, Schlegel et
-al. 2024) — não inferência nossa a partir de gráfico bruto (ver AD-14).
-Cobertura: 29 de 92 neurônios (~32%); o resto segue sem dado publicado.
+curadoria real de RN-08. `PUBLISHED_DN_BEHAVIOR` mapeia 18 dos nossos 47 tipos
+de descendente (39/92 neurônios, ~42%) para categoria comportamental medida —
+Namiki et al. 2018 (eLife, Figura 6, ativação optogenética) e, desde AD-15,
+Bates/Phelps/Kim/Yang et al. 2026 (BANC connectome, `Supplementary Data 9` —
+revisão de literatura dos próprios autores, mesmo nível de evidência que
+Namiki). Ver `docs/04-regras-de-negocio.md` RN-08 pra tabela completa de
+fontes e a resolução tipo-a-tipo dos 7 conflitos entre as duas fontes.
 
 **Só "fast_locomotion" e "broad_locomotion" entram em `locomotion_drive`,
-usado pelo `MotorMapping.java`.** "anterior_movements" e
-"wing_abdomen_movements" também têm dado real (2 e 3 tipos), mas o ensaio de
-Namiki testa MOSCA ANDANDO (perna dianteira, extensão de asa em contexto de
-canto de corte) — sem tradução validada pra voo de abelha. Expostos em
-`decode()` para visualização/exploração (F5: `/flywirebee mute|stimulate`),
-mas deliberadamente FORA do cálculo de velocidade — usar seria fabricar a
-mesma semântica que RN-08 proíbe, só que com uma camada a mais de disfarce
-("tem citação" ≠ "a tradução é válida").
+usado pelo `MotorMapping.java`.** As outras categorias (`steering`,
+`escape_takeoff`, `landing`, `flight`, `walking`, `ocellar`,
+`wing_abdomen_movements`, `neuromodulatory`) têm dado real mas sem tradução
+validada pra magnitude de voo da abelha (algumas vêm de ensaio de mosca
+ANDANDO; `neuromodulatory` nem é categoria motora). Expostas em `decode()`
+para visualização/exploração (F5: `/flywirebee mute|stimulate`), mas
+deliberadamente FORA do cálculo de velocidade — usar seria fabricar a mesma
+semântica que RN-08 proíbe, só que com uma camada a mais de disfarce ("tem
+citação" ≠ "a tradução é válida").
+
+**Canais de cluster de conectividade BANC (RN-08/AD-15, F6, 16/09/2026)** —
+`CONNECTIVITY_CLUSTER_BANC` mapeia mais 27 tipos (50/92 neurônios) que não
+têm comportamento medido, só cluster de UMAP sobre conectividade até
+efetores (`Supplementary Data 6` do BANC, Fig. 3/Extended Data Fig. 6 do
+paper). **Nível de evidência mais fraco que `PUBLISHED_DN_BEHAVIOR`** — é
+inferência de topologia, igual ao que gerou `phototaxis`, mas sem a validação
+estatística que `phototaxis` teve (RN-09/lesão F4). Expostos em `decode()`
+com prefixo `conn_` pra deixar isso visualmente óbvio, e ficam fora de
+`locomotion_drive`/`MotorMapping.java` até validação própria por lesão —
+agregar canal não validado em cima de `phototaxis` já diluiu o sinal 3 vezes
+neste projeto (RN-08/RN-09), não repetir.
+
+Dois tipos ficam de fora de tudo: `DNpe027` (2 neurônios) é ambíguo — os 3
+neurônios do tipo se dividem entre clusters diferentes no BANC, sem consenso
+por tipo; `DNp40` (1 neurônio) não aparece em BANC, nem literatura nem
+conectividade.
 """
 from __future__ import annotations
 
@@ -66,51 +84,116 @@ from .graph import Connectome
 
 _PREFIX_RE = re.compile(r"^[A-Za-z]+")
 
-# RN-08 / AD-14 — Namiki, Cande et al. 2018, eLife, Figura 6 (DOI:
-# 10.7554/eLife.34275). Leitura direta dos rótulos da figura de categorização
-# dos autores (não gráfico bruto). Só os tipos que existem no nosso
-# subcircuito e aparecem nomeados na figura.
+# RN-08 / AD-14+AD-15 — comportamento medido, duas fontes:
 #
-# "DNge070" não está na Figura 6 diretamente — entra via correspondência
-# hemibrain_type=="DNb06" (coluna já presente em
-# Supplemental_file1_neuron_annotations.tsv, gerada por Schlegel et al. 2024
-# comparando FlyWire x Hemibrain). Match limpo: os 2 neurônios de DNge070
-# batem 100% com DNb06 no hemibrain_type, conferido manualmente. É um passo
-# de inferência a mais que os outros 12 (identidade de tipo entre
-# conectomas, não behavior medido direto nesse root_id) — ver
-# docs/04-regras-de-negocio.md (RN-08).
+# (1) Namiki, Cande et al. 2018, eLife, Figura 6 (DOI: 10.7554/eLife.34275).
+#     Leitura direta dos rótulos da figura de categorização dos autores (não
+#     gráfico bruto). "DNge070" entra por correspondência de identidade
+#     hemibrain_type=="DNb06" (Schlegel et al. 2024) — segue a classificação
+#     que DNb06 tiver, não tem citação própria.
+#
+# (2) Bates, Phelps, Kim, Yang et al. 2026 (BANC connectome), Nature (DOI:
+#     10.1038/s41586-026-10735-w), `Supplementary Data 9` — revisão de
+#     literatura curada pelos próprios autores do BANC, citando o paper
+#     original que mediu o comportamento (não é achado do BANC em si).
+#     Harvard Dataverse DOI 10.7910/DVN/7WTH1N, baixado 16/09/2026.
+#
+# Conflitos entre as duas fontes (7 tipos) resolvidos em 16/09/2026 — ver
+# docs/04-regras-de-negocio.md RN-08 pra tabela com a justificativa de cada
+# um. Critério geral: medido bate putativo; entre duas fontes medidas,
+# prevalece a mais específica sobre direção e/ou mais relevante a voo (não
+# mosca andando).
 PUBLISHED_DN_BEHAVIOR: dict[str, str] = {
     "DNa10": "fast_locomotion",
-    "DNb05": "fast_locomotion",
-    "DNb06": "fast_locomotion",
-    "DNge070": "fast_locomotion",  # via hemibrain_type==DNb06, ver nota acima
-    "DNp05": "fast_locomotion",
+    "DNp05": "fast_locomotion",  # Namiki medido > BANC putativo (Cheong & Eichler 2023)
     "DNp16": "fast_locomotion",
     "DNp18": "fast_locomotion",
     "DNp28": "broad_locomotion",
-    "DNp06": "anterior_movements",
-    "DNp20": "anterior_movements",
     "DNg11": "wing_abdomen_movements",
-    "DNp10": "wing_abdomen_movements",
-    "DNp27": "wing_abdomen_movements",
+    # steering — Feng et al. 2024 (DNa03/DNae003), Yang et al. 2024 (DNb05/DNb06).
+    # DNb05/DNb06 eram "fast_locomotion" no AD-14; mudaram porque BANC também é
+    # medido (não putativo) e é mais específico sobre o eixo que falta (direção).
+    "DNa03": "steering",
+    "DNae003": "steering",
+    "DNb05": "steering",
+    "DNb06": "steering",
+    "DNge070": "steering",  # segue DNb06 (hemibrain_type), ver nota acima
+    "DNp06": "escape_takeoff",  # era anterior_movements (Namiki, mosca andando); Kim et al. 2023
+    "DNp10": "landing",  # era wing_abdomen_movements (Namiki, mosca andando); Ache et al. 2019
+    "DNg79": "landing",  # Liessem et al. 2025
+    "DNp20": "flight",  # era anterior_movements (Namiki); Suver et al. 2016 — mesmo paper de DNp22/ocellar
+    "DNg75": "walking",  # =cDN1, Sapkal et al. 2024
+    "DNp22": "ocellar",  # =DNOVS1, Suver et al. 2016 — único tipo com função ocelar específica
+    "DNp27": "neuromodulatory",  # era wing_abdomen_movements; não é categoria motora (RN-01a)
 }
 
 # Categorias com tradução defensável pra magnitude de voo (locomoção em
-# geral). "anterior_movements" e "wing_abdomen_movements" ficam de fora — ver
-# docstring do módulo.
+# geral). As demais têm dado real mas não entram — ver docstring do módulo.
 _LOCOMOTION_CATEGORIES = {"fast_locomotion", "broad_locomotion"}
+
+# RN-08/AD-15 — cluster de conectividade do BANC (`Supplementary Data 6`,
+# PCA-UMAP sobre influência até efetores; Fig. 3/Extended Data Fig. 6 do
+# paper). NÃO é comportamento medido — é o mesmo tipo de inferência que gerou
+# `phototaxis`, só que sem a validação estatística que `phototaxis` teve
+# (RN-09/lesão F4). Só os 27 tipos com cluster CONSISTENTE (mesmo cluster em
+# todos os neurônios do tipo); `DNpe027` ficou de fora por ser ambíguo (3
+# neurônios divididos entre "postural control" e "walking"). `DNp40` não tem
+# nenhuma entrada no BANC. Ver docs/04-regras-de-negocio.md RN-08.
+CONNECTIVITY_CLUSTER_BANC: dict[str, str] = {
+    "DNbe001": "flight_steering_1",
+    "DNbe005": "flight_steering_1",
+    "DNge107": "flight_steering_1",
+    "DNp31": "flight_steering_1",
+    "DNpe017": "flight_steering_1",
+    "DNg99": "flight_steering_2",
+    "DNp19": "flight_steering_2",
+    "DNp73": "flight_steering_2",
+    "DNg49": "head_orienting",
+    "DNg94": "head_orienting",
+    "DNge043": "head_orienting",
+    "DNge088": "head_orienting",
+    "DNp53": "head_orienting",
+    "DNpe004": "head_orienting",
+    "DNpe009": "head_orienting",
+    "DNpe013": "head_orienting",
+    "DNge091": "flight_power",
+    "DNpe011": "flight_power",
+    "DNpe012": "flight_power",
+    "DNpe014": "flight_power",
+    "DNp102": "walking",
+    "DNp41": "walking",
+    "DNp12": "postural_control",
+    "DNpe021": "postural_control",
+    "DNp103": "threat_response",
+    "DNpe026": "threat_response",
+    "DNg90": "probing",
+}
 
 
 def group_by_published_behavior(connectome: Connectome) -> dict[str, NDArray[np.int64]]:
     """RN-08 — agrupa os nids de saída pela categoria comportamental publicada
-    (Namiki et al. 2018), só para os 12 tipos com dado real. Ver docstring
-    do módulo."""
+    (Namiki et al. 2018 + BANC/AD-15), só para os 18 tipos com dado real. Ver
+    docstring do módulo."""
     groups: dict[str, list[int]] = {}
     out_nodes = connectome.nodes.loc[connectome.output]
     for nid, cell_type in zip(out_nodes.index, out_nodes.cell_type):
         category = PUBLISHED_DN_BEHAVIOR.get(cell_type)
         if category is not None:
             groups.setdefault(category, []).append(nid)
+    return {name: np.array(sorted(nids), dtype=np.int64) for name, nids in groups.items()}
+
+
+def group_by_connectivity_cluster(connectome: Connectome) -> dict[str, NDArray[np.int64]]:
+    """RN-08/AD-15 — agrupa os nids de saída pelo cluster de conectividade
+    BANC, só para os 27 tipos sem comportamento medido mas com cluster
+    consistente. Evidência mais fraca que `group_by_published_behavior` — ver
+    docstring do módulo. Não usar pra cálculo de velocidade sem validar."""
+    groups: dict[str, list[int]] = {}
+    out_nodes = connectome.nodes.loc[connectome.output]
+    for nid, cell_type in zip(out_nodes.index, out_nodes.cell_type):
+        cluster = CONNECTIVITY_CLUSTER_BANC.get(cell_type)
+        if cluster is not None:
+            groups.setdefault(cluster, []).append(nid)
     return {name: np.array(sorted(nids), dtype=np.int64) for name, nids in groups.items()}
 
 
@@ -134,6 +217,7 @@ class MotorDecoder:
         self.groups = group_by_cell_type_prefix(connectome)
         self._excitatory, self._inhibitory = topology.group_outputs_by_predicted_sign(connectome)
         self._published_groups = group_by_published_behavior(connectome)
+        self._connectivity_groups = group_by_connectivity_cluster(connectome)
         self._locomotion_nids = np.array(
             sorted(
                 nid
@@ -163,11 +247,12 @@ class MotorDecoder:
 
         Inclui, além dos 8 grupos provisórios por prefixo de cell_type
         (RN-08): `phototaxis` (validado por RN-09/lesão F4), os canais de
-        comportamento publicado (`fast_locomotion`, `broad_locomotion`,
-        `anterior_movements`, `wing_abdomen_movements` — Namiki et al. 2018,
-        só os presentes em `PUBLISHED_DN_BEHAVIOR`) e `locomotion_drive`
-        (agregado de fast+broad, o único desses usado por `MotorMapping.java`
-        — ver docstring do módulo pra por que os outros dois ficam de fora).
+        comportamento publicado (`PUBLISHED_DN_BEHAVIOR` — Namiki et al. 2018
+        + BANC/AD-15), os canais de cluster de conectividade BANC com prefixo
+        `conn_` (`CONNECTIVITY_CLUSTER_BANC` — evidência mais fraca, ver
+        docstring do módulo) e `locomotion_drive` (agregado de fast+broad, o
+        único desses usado por `MotorMapping.java` — os demais ficam de fora
+        do cálculo de velocidade, ver docstring do módulo).
         """
         vec = {name: float(np.tanh(self._rate_hz(nids) / C.MOTOR_RATE_SCALE))
                for name, nids in self.groups.items()}
@@ -179,6 +264,9 @@ class MotorDecoder:
         for name, nids in self._published_groups.items():
             vec[name] = float(np.tanh(self._rate_hz(nids) / C.MOTOR_RATE_SCALE))
         vec["locomotion_drive"] = float(np.tanh(self._rate_hz(self._locomotion_nids) / C.MOTOR_RATE_SCALE))
+
+        for name, nids in self._connectivity_groups.items():
+            vec[f"conn_{name}"] = float(np.tanh(self._rate_hz(nids) / C.MOTOR_RATE_SCALE))
 
         return vec
 

@@ -204,6 +204,104 @@ dois voltam ao baseline ao limpar).
   invalida os testes, é ruído de fundo com a mesma expectativa nos dois
   grupos de qualquer comparação.
 
+## Experimento dia/noite (F6)
+
+`/flywirebee daynight [trials=20] [segundos=10]` — mesmo desenho do
+`/flywirebee lesion` (F4), trocando a variável manipulada: em vez de silenciar
+fotorreceptores, alterna a hora do mundo (`world.setTime()`) entre meio-dia
+(tick 6000) e meia-noite (tick 18000) por trial, em ordem aleatória. Grava CSV
+em `plugins/FlywireBee/daynight_experiment.csv`.
+
+**Achado técnico antes de implementar (16/09/2026) — a premissa original estava
+errada.** A ideia inicial (`docs/03-roadmap-fases.md`, nota de multi-sensor) era
+usar `dorsal_light` (`Block.getLightFromSky()`) pra dia/noite, achando que era
+"quase de graça". Verificamos a API do Bukkit antes de mexer em código e achamos
+o oposto: `getLightFromSky()` retorna o **skylight bruto**, travado em 15 ao ar
+livre **independente da hora do dia** (confirmado via Minecraft Wiki) — é sensor
+de teto/céu aberto, não de hora. Quem já varia com dia/noite é
+`Block.getLightLevel()` — o `light` que a F4 já usa e já validou (p=0,0014).
+Substituir `light` por `dorsal_light` teria trocado sensibilidade a dia/noite por
+sensibilidade a indoor/outdoor — o oposto do que "multi-sensor dia/noite" pede.
+Ver `CONVENCOES.md`, "Armadilhas conhecidas".
+
+**Desenho final:** `light` continua alimentando os fotorreceptores exatamente
+como na F4 — nenhuma mudança em `server.py` nem no protocolo. `dorsal_light`
+entra só como **filtro de confundidor**: `DayNightExperiment` recusa rodar se a
+abelha não estiver ao ar livre (skylight bruto &lt; 15), porque debaixo de teto
+`light` não varia com a hora do mundo e o experimento ficaria nulo por desenho
+errado — mesma armadilha de "abelha dentro de casa" que já apareceu uma vez em
+RN-08/F6 (locomotion_drive).
+
+Analisar com (a partir de `sim/`, venv ativo):
+```
+python tools/daynight_analysis.py
+```
+Compara `path_length`/`avg_speed` entre trials de dia e de noite (Welch t-test +
+Mann-Whitney U, mesma dupla do experimento de lesão).
+
+**Controle cego:** `/flywirebee daynight 20 10 blind` roda o mesmo experimento com
+`light=0` (mesmo mecanismo do `lesion`), gravando em
+`daynight_experiment_blind.csv`. Existe porque abelha vanilla muda de comportamento à
+noite pela IA nativa — sem esse controle, diferença dia/noite não seria atribuível ao
+circuito. Analisar passando o caminho: `python tools/daynight_analysis.py
+../mc-server/plugins/FlywireBee/daynight_experiment_blind.csv`.
+
+**Rodado em servidor real, 16/09/2026 — resultado negativo.** Dia × noite nulo nas
+três rodadas (normal p=0,29; cegas p=0,68 e p=0,40), com checagem de manipulação
+passando (`light` 0,987 de dia, 0,250 à noite). Tabela completa e o que dá/não dá
+pra afirmar em `docs/03-roadmap-fases.md`, F6.
+
+**Armadilhas de operação encontradas rodando:**
+- **A origem é a posição da ABELHA quando o comando roda, não a sua.** `/tp` no
+  jogador não move a origem — spawne a abelha no bloco onde você está e rode o
+  comando logo em seguida.
+- **Não compare rodadas feitas em lugares diferentes.** Duas rodadas cegas a 70
+  blocos de distância diferiram 9 blocos só por terreno (ver `CONVENCOES.md`).
+- **Nova rodada sobrescreve o CSV.** Renomeie o anterior antes de rodar de novo.
+- **`/flywirebee kill` durante a rodada aborta o experimento sem gravar CSV** e
+  desliga o modo cego — comportamento esperado, não bug.
+- Use `/gamemode creative` e `/difficulty peaceful`: o experimento força meia-noite,
+  e monstros podem matar a abelha no meio da rodada.
+
+## Desligar IA que compete com locomoção (F6)
+
+`/flywirebee goals off` — hipótese do usuário (16/09/2026) pro resultado nulo do
+experimento dia/noite: a IA nativa estaria mascarando um efeito real do circuito,
+não que o efeito não existe.
+
+**`setAI(false)` já foi testado e descartado na F4** — congela a física inteira, não
+só a decisão (0,000 blocos em 5s, ver "Risco investigado" acima). Alternativa nunca
+testada até agora: a **Mob Goal API do Paper** (`Bukkit.getMobGoals()`), que remove
+objetivos específicos de IA sem tocar em `setAI`. `/flywirebee goals off` remove só
+os que competem com locomoção — `BEE_WANDER` (vagar aleatório), `BEE_GO_TO_KNOWN_FLOWER`/
+`BEE_POLLINATE` (o "vazamento" já visto na F5), `BEE_GO_TO_HIVE`/`BEE_LOCATE_HIVE`/
+`BEE_ENTER_HIVE` (candidato mais forte pro confundidor dia/noite — vanilla bee tenta
+voltar pra colmeia à noite). Mantém ataque/fúria/dor/crescer planta — não competem
+com locomoção aqui. Ver `CompetingGoals.java`.
+
+**✅ Testado isolado em servidor real, 17/09/2026** (`/flywirebee spike
+no-competing-goals`): 28,84 de 30 blocos esperados em 5s (96%, igual ao modo com IA
+ligada da F4) — a física não trava, diferente do `setAI(false)`.
+
+**Sem volta pela API pública** — não existe forma de re-registrar a implementação
+vanilla original a partir do `GoalKey`. Pra essa abelha específica voltar a ter os
+goals padrão: `/flywirebee kill` + `give` (spawna uma abelha nova).
+
+**✅ Confirmado em servidor real, 17/09/2026 — hipótese do usuário estava certa.**
+Três rodadas com IA nativa ligada deram dia/noite nulo (p≥0,29). Com `goals off`,
+repetido em dois locais diferentes (38 e 14 blocos do ponto de referência): efeito
+real e replicado (Welch p=0,00087, Mann-Whitney p=0,00184 na rodada mais próxima do
+ponto certo; as duas rodadas `goals off` concordam entre si, p=0,96). Desvio-padrão
+caiu de ~0,6–8,2 blocos pra ~0,22 — a IA nativa realmente competia pelo controle e
+mascarava o sinal.
+
+**Mas a direção veio invertida do esperado:** menos luz (noite) produziu MAIS
+distância que luz cheia (dia), não menos — e isso não está explicado. Hipótese
+candidata (não testada): resposta não-monotônica à luz, já que luz zero (F4) deu a
+MENOR distância das três condições. Só um teste de dose-resposta decide. Ver
+`docs/03-roadmap-fases.md`, F6, pra tabela completa e a ressalva de não inventar a
+explicação sem esse teste.
+
 ## Regra
 
 O plugin **nunca** altera a simulação. Se o comportamento não emerge, o problema

@@ -108,7 +108,7 @@ Onde: `neuron.py`.
 
 ---
 
-## RN-08 · Mapeamento descendente → comportamento (curadoria parcial: 13/46 tipos)
+## RN-08 · Mapeamento descendente → comportamento (curadoria parcial: 18/47 tipos)
 
 Os 92 descendentes precisam virar canais motores com significado (forward/yaw/lift...).
 **A semântica ainda não está definida** — exige curadoria por tipo celular (DNp, DNa,
@@ -155,7 +155,9 @@ descendente via ativação optogenética. A Figura 6 desse paper categoriza 53 d
 tipos testados em 7 categorias (Fast/Slow/Broad Locomotion, Slow/Still, Anterior
 Movements, Anterior Groom, Wing & Abdomen Movements) — **leitura direta dos rótulos da
 figura (classificação dos próprios autores), não inferência nossa a partir de gráfico
-bruto.** Cruzando com nossos 46 tipos: **12 batem direto** (27 de 92 neurônios,
+bruto.** Cruzando com nossos 47 tipos (contagem corrigida em 16/09/2026 — ver nota
+abaixo; o texto original desta seção dizia 46 por erro de contagem manual): **12 batem
+direto** (27 de 92 neurônios,
 ~29%), **+1 via `hemibrain_type`** (Schlegel et al. 2024 — coluna já presente em
 `Supplemental_file1_neuron_annotations.tsv`, identidade de tipo cruzada entre
 conectomas FlyWire/Hemibrain, não behavior medido nesse root_id específico):
@@ -168,7 +170,7 @@ conectomas FlyWire/Hemibrain, não behavior medido nesse root_id específico):
 | DNp06, DNp20 | Anterior Movements | Namiki 2018, Fig. 6 (direto) |
 | DNg11, DNp10, DNp27 | Wing & Abdomen Movements | Namiki 2018, Fig. 6 (direto) |
 
-**13/46 tipos, 29/92 neurônios (~32%).** Um segundo candidato (`DNpe011`) foi
+**13/47 tipos, 29/92 neurônios (~31%).** Um segundo candidato (`DNpe011`) foi
 descartado por ambiguidade: só 1 dos 3 neurônios desse tipo bate com `DNp16` no
 `hemibrain_type`, os outros batem com `PS227` (sem categoria conhecida) — não dá
 pra afirmar o tipo inteiro sem inventar.
@@ -195,13 +197,107 @@ cancela o efeito" que já apareceu em RN-09 (F1) e no primeiro experimento de le
 (F4)** — terceira vez. Não ajustamos peso até achar p&lt;0,05 de novo (seria
 manipular o resultado); revertido pra `phototaxis` sozinho, que continua validado.
 
-**O que isso NÃO resolve ainda:** os outros 33 tipos (63 neurônios) seguem sem dado
+**O que isso NÃO resolvia até aqui:** os outros 34 tipos (63 neurônios) seguiam sem dado
 publicado localizável — tentamos extrair o restante do PDF suplementar do Namiki 2018
 (50MB, quase todo imagem/gráfico bruto de rastreamento) e não foi possível de forma
 confiável (interpretar gráfico de densidade visualmente seria fabricar classificação,
-não ler uma real). Também sem direção (yaw/lift) — só magnitude. Curadoria segue aberta
-para esse restante; próxima fonte candidata: Schlegel et al. 2024 (whole-brain), não
-tentada ainda. Ver `docs/adr/README.md` AD-14 e `FlyWire Citation Guidelines - Data.csv`
+não ler uma real). Também sem direção (yaw/lift) — só magnitude.
+
+---
+
+**Atualização — segunda fonte via BANC connectome (AD-15, 16/09/2026).** Bates, Phelps,
+Kim, Yang et al. 2026, *"Distributed control circuits across a brain-and-cord
+connectome"*, Nature (DOI: `10.1038/s41586-026-10735-w`; preprint bioRxiv DOI:
+`10.1101/2025.07.31.667571`). Conectoma novo (BANC) que une cérebro + cordão nervoso
+ventral da fêmea de *Drosophila*, com nomenclatura de tipo compatível com FlyWire/FAFB
+v783 (o `cell_type` do BANC **é** o nome batido contra FAFB para neurônios de cérebro/DN
+— ver Supplementary Data 1/3). Dados baixados do Harvard Dataverse (DOI:
+`10.7910/DVN/7WTH1N`) — arquivos `supplemental_data_6.txt`, `supplemental_data_9.txt` e
+`supplemental_data_3.txt` (cross-referência FAFB v783), 16/09/2026.
+
+O BANC traz **duas fontes distintas, com peso epistêmico diferente** — não podem ser
+misturadas na mesma tabela sem marcar qual é qual:
+
+1. **`Supplementary Data 9`** — revisão de literatura curada pelos autores do BANC
+   (comportamento medido experimentalmente por outros papers, mesmo nível de evidência
+   que Namiki 2018/AD-14). **5 tipos novos, mesmo padrão de confiança do AD-14:**
+
+   | Nosso tipo | Função publicada | Fonte |
+   |---|---|---|
+   | DNa03, DNae003 | steering | Feng et al. 2024, DOI 10.1101/2024.06.27.601106 |
+   | DNg75 (=cDN1) | walking | Sapkal et al. 2024, DOI 10.1038/s41586-024-07854-7 |
+   | DNg79 | landing | Liessem et al. 2025, DOI 10.1016/j.cub.2022.12.005, 10.1101/2025.12.13.693955 |
+   | DNp22 (=DNOVS1) | **ocellar** | Suver et al. 2016, DOI 10.1523/jneurosci.2277-16.2016 |
+
+   `DNp22`/DNOVS1 é achado notável: é um descendente com função publicada
+   **especificamente ocelar** (Suver et al. 2016 estudou resposta de voo a estímulo
+   ocelar) — o único caso onde a fonte de curadoria bate exatamente com o estímulo do
+   nosso subcircuito, não só com locomoção genérica.
+
+   **Novo total com literatura: 18/47 tipos, 39/92 neurônios (~42%)** — sobe de
+   13/47 (29/92) do AD-14.
+
+2. **`Supplementary Data 6`** — cluster comportamental por **conectividade** (PCA-UMAP
+   sobre o padrão de influência até efetores, Fig. 3/Extended Data Fig. 6 do paper),
+   não comportamento medido. **Mesmo nível epistêmico do canal `phototaxis`** (RN-09):
+   inferência de topologia/conectividade, não leitura de ensaio comportamental. Cobre
+   **33 dos 34 tipos** que ainda não tinham nada — só `DNp40` segue sem qualquer entrada
+   no BANC. Categorias observadas: `flight steering 1`, `flight steering 2`,
+   `head orienting`, `postural control`, `flight power`, `walking`, `threat response`,
+   `probing`. **Não promover isso a comportamento "sabido"** sem dizer explicitamente
+   que é cluster de conectividade — mesma armadilha que já gerou 3 diluições de
+   sinal neste projeto (ver seção "Armadilhas conhecidas" do `CONVENCOES.md`).
+
+   **Verificado (16/09/2026): o paper NÃO explica o que distingue `flight steering 1`
+   de `flight steering 2`.** bioRxiv bloqueou download direto do PDF (HTTP 429, 4
+   tentativas); o texto completo foi checado via PMC (`PMC13518251`) especificamente
+   atrás dessa distinção. Os dois nomes aparecem só como rótulos de cluster na Fig. 3d
+   e Extended Data Fig. 8a (links de Neuroglancer para "flight steering 1"/"2"), sem
+   nenhuma frase no corpo do texto ou legenda que diga se é eixo (yaw vs. roll), lado,
+   ou população de motoneurônio-alvo diferente. **A distinção existe só no espaço de
+   conectividade (UMAP), não foi caracterizada pelos autores em texto — não dá pra
+   assumir que 1/2 = agonista/antagonista.** Se isso for necessário, a única forma de
+   descobrir é inspecionar conectividade individual (`Supplementary Data 7`, efetores)
+   dos neurônios de cada cluster — não tentado ainda.
+
+**Conflito Namiki×BANC — resolvido em 16/09/2026, decisão registrada tipo a tipo:**
+
+| Tipo | Namiki 2018 (antigo) | BANC (`Supplementary Data 9`) | Decisão | Por quê |
+|---|---|---|---|---|
+| DNp05 | fast_locomotion | escape_takeoff (**putativo**, Cheong & Eichler 2023) | **Mantém fast_locomotion** | BANC marca a própria fonte como putativa; Namiki é comportamento medido direto (optogenética). Medido bate contra putativo, medido vence. |
+| DNb05, DNb06 | fast_locomotion | steering (Yang et al. 2024) | **Muda para steering** | Ambas as fontes são medidas, não putativas — nesse empate, prevalece a mais específica e mais recente sobre o eixo que RN-08 precisa (direção, não magnitude). |
+| DNge070 | fast_locomotion (via `hemibrain_type`==DNb06) | — | **Muda para steering** | Segue DNb06, de quem herdou a classificação por identidade cruzada — não tem citação própria, então segue o que DNb06 virou. |
+| DNp06 | anterior_movements | escape_takeoff (Kim et al. 2023) | **Muda para escape_takeoff** | Namiki mede mosca **andando** (não traduz pra voo, por isso já ficava fora do cálculo de velocidade); BANC é medido e mais relevante ao domínio de voo. |
+| DNp20 | anterior_movements | flight (Suver et al. 2016) | **Muda para flight** | Mesmo motivo do DNp06 — e Suver et al. 2016 é o mesmo paper que deu `DNp22`=ocellar (ambos rotulados `DNOVS1` em `other_names`), reforçando relevância pro nosso circuito. |
+| DNp10 | wing_abdomen_movements | landing (Ache et al. 2019) | **Muda para landing** | Namiki mede mosca andando; landing é comportamento de voo real, mais útil pro nosso contexto. |
+| DNp27 | wing_abdomen_movements | **neuromodulatory** (Meiselman et al. 2022, imuno; Chen et al. 2015, imuno) | **Muda para neuromodulatory, fora de qualquer categoria motora** | "Neuromodulatory" não é nem magnitude nem direção — é liberação de neuromodulador. Mantê-lo como categoria motora seria fabricar semântica. Consistente com o alerta de RN-01a sobre neuromoduladores. |
+
+Critério geral aplicado: **medido bate putativo**; entre duas fontes igualmente medidas,
+prevalece a mais específica sobre o eixo que falta (direção) e/ou mais relevante ao
+domínio de voo (não andar). Nenhuma junção silenciosa — cada linha tem justificativa
+própria.
+
+**`PUBLISHED_DN_BEHAVIOR` atualizado em `motor.py`** com as 5 categorias novas (AD-15,
+`Supplementary Data 9`) e as 7 reclassificações acima. Novo total: **18/47 tipos,
+39/92 neurônios (~42%)** — `anterior_movements` deixou de existir (ficou vazia após as
+duas reclassificações); `wing_abdomen_movements` ficou só com `DNg11`.
+
+**Canais de conectividade BANC (`Supplementary Data 6`) — adicionados como telemetria,
+NÃO usados no cálculo de velocidade.** 27 dos 34 tipos que não tinham nada (50
+neurônios) ganharam cluster de conectividade (prefixo `conn_` em `motor.py::decode()`
+pra deixar claro que é evidência mais fraca — UMAP de conectividade, não comportamento
+medido): `conn_flight_steering_1`, `conn_flight_steering_2`, `conn_head_orienting`,
+`conn_flight_power`, `conn_walking`, `conn_postural_control`, `conn_threat_response`,
+`conn_probing`. **Ficam de fora de `MotorMapping.java`/`locomotion_drive`** até serem
+validados por experimento de lesão individual — mesmo risco de diluição que já
+aconteceu 3 vezes se forem agregados sem validar primeiro.
+
+`DNpe027` (2 neurônios) ficou **de fora dos dois** — os 3 neurônios do tipo se dividem
+entre `postural control` e `walking` no BANC, sem consenso por tipo; classificar
+qualquer um dos dois seria inventar. `DNp40` (1 neurônio) segue **sem nenhum dado**,
+nem literatura nem conectividade — não aparece em BANC.
+
+Ver `docs/adr/README.md` AD-14, AD-15 e `FlyWire Citation Guidelines - Data.csv`
 (citação oficial por coluna de dado, fornecida pelo usuário).
 
 ---
@@ -275,5 +371,5 @@ estatística em `sim/tools/calibration_check.py` — reproduz os números acima.
 | RN-05 | `ingest.py` | `test_nid_stability` | Alto |
 | RN-06 | `engine.py`, `server.py`, `ControlLoop.java` | `test_bridge_request_response_no_frame_loss`, `test_bridge_history_stays_bounded_by_window` (`test_server.py`); validado em produção — 1500 trocas/0 falhas em servidor real (F4) | Médio |
 | RN-07 | `neuron.py` | `test_refractory` | Alto |
-| RN-08 | `motor.py`, `MotorMapping.java` | `test_motor_groups_cover_all_descendants`, `test_motor_decode_range`, `test_published_behavior_groups_are_real_types` | **Crítico — 13/46 tipos com dado real (AD-14), 33 sem curadoria** |
+| RN-08 | `motor.py`, `MotorMapping.java` | `test_motor_groups_cover_all_descendants`, `test_motor_decode_range`, `test_published_behavior_groups_are_real_types`, `test_connectivity_cluster_groups_are_real_types` | **Crítico — 18/47 tipos com literatura real (AD-14+AD-15), 27/34 restantes com cluster de conectividade BANC (telemetria só, não behavior medido), 1 tipo (DNpe027) ambíguo, 1 tipo (DNp40) sem nenhum dado. `MotorMapping.java` continua só com `phototaxis`.** |
 | RN-09 | `engine.py` | `tools/calibration_check.py` (estatístico, manual — não roda no CI) | Alto — validado por teste estatístico, ver acima |
