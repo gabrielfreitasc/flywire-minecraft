@@ -35,6 +35,8 @@ As três lacunas caem exatamente no escopo de geometria, descartado na v1.
 (b) agruparmos por região cerebral, ou (c) precisarmos reproduzir o pipeline a partir da
 fonte primária sem depender de terceiros.
 
+**(a) e (b) feitos em 17/09/2026** — ver "Anatomia real" mais abaixo (AD-11).
+
 **Dívida técnica assumida:** dependemos de um espelho para os dados e de Shiu et al. para a
 regra de sinal. A validação numérica cobre integridade, não proveniência. Quando a Zenodo
 voltar, baixar só `proofread_connections_783.feather` (852 MB) ou usar o portal do Codex
@@ -127,8 +129,30 @@ código que tente buscar da Zenodo — vai falhar.
 |---|---|---|
 | DT-1 proveniência | aberta | fechável por `sim/tools/verify_primary.py` |
 | Validação | 2 totais agregados | **aresta por aresta** contra o primário |
-| Quebra por neurópilo | indisponível | disponível (habilita v2) |
-| Coordenadas por sinapse | indisponível | disponível (habilita v2) |
+| Quebra por neurópilo | indisponível | **extraída** (17/09/2026) — `sim/tools/extract_anatomy.py` |
+| Coordenadas por sinapse | indisponível | **extraída** (17/09/2026, centroide por neurônio) — idem |
+
+### Anatomia real — extraída pros 625 neurônios do subcircuito (17/09/2026)
+
+`sim/tools/extract_anatomy.py` gera `data/processed/anatomy_783.parquet`
+(não versionado, mesma regra de `data/processed/`): `nid`, `side`,
+`neuropil_dominant` (via `per_neuron_neuropil_count_{pre,post}_783.feather`,
+241 MB — não precisa do arquivo de 9,5GB pra isso) e `pos_x/y/z` (centroide de
+todas as posições de sinapse do neurônio, pré ou pós — só isso precisa do
+arquivo grande).
+
+**Streaming por record batch (AD-12), não leitura integral:** 1985 batches de
+~65536 linhas, filtrados pros 625 neurônios a cada lote — 21s, 1.813.778
+sinapses casadas de 54,5 milhões no arquivo. 625/625 neurônios (100%) saíram
+com neurópilo e posição.
+
+**Checagem de sanidade:** os dois neurônios de `DNp22` (um `side=left`, outro
+`side=right`) caem em `IPS_L`/`IPS_R` respectivamente, e a coordenada X bate
+com o lado (esquerda menor, direita maior) — dado consistente internamente,
+sem precisar confiar cegamente.
+
+Coordenadas em unidades brutas do dataset (espaço de voxel do FlyWire) — sem
+conversão de escala pra metros ou blocos do Minecraft.
 
 ### AD-12 — Restrição de memória: nada de leitura integral
 

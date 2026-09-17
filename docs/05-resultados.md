@@ -105,7 +105,17 @@ não de teoria:
    neurônio esquerda + 1 direita cada). Virou o canal `yaw_steering`, primeiro
    candidato real a direção além de `phototaxis` — só telemetria, sentido do
    sinal (qual lado do MUNDO) não validado. Motivou pular na frente do
-   processamento do arquivo de 9,5GB da Zenodo, que segue pendente.
+   processamento do arquivo de 9,5GB da Zenodo, feito logo em seguida (achado
+   8 abaixo).
+
+8. **O arquivo de 9,5GB, uma vez processado direito (streaming por batch,
+   AD-12), levou 21 segundos, não horas.** `sim/tools/extract_anatomy.py`
+   extraiu posição 3D e neurópilo dominante pros 625 neurônios — 100% de
+   cobertura nos dois, checagem de sanidade bateu (os dois neurônios de
+   `DNp22` caem em `IPS_L`/`IPS_R`, coordenada X consistente com `side`). O
+   medo de "arquivo grande demais" que segurou esse trabalho desde a F0 (AD-05)
+   não se confirmou, uma vez que a extração é filtrada pros 625 neurônios do
+   subcircuito, não pro conectoma inteiro.
 
 ## O que está validado (pode ser citado com confiança)
 
@@ -131,6 +141,10 @@ não de teoria:
   níveis de luz (0/0,25/0,5/1,0), N=32, reproduzível via `/flywirebee goals off`
   + `control start` + `doseresponse` + `sim/tools/doseresponse_analysis.py`.
   Pico em luz=0,25 (maior que luz=1,0, p=0,005); mecanismo não explicado.
+- **Anatomia real dos 625 neurônios** (F6/AD-11): posição 3D (centroide) +
+  neurópilo dominante, 625/625 cobertos, reproduzível via
+  `sim/tools/extract_anatomy.py` (21s, streaming por batch — não precisa
+  carregar o arquivo de 9,5GB inteiro).
 
 ## O que NÃO está provado (não afirmar isso)
 
@@ -184,10 +198,11 @@ não de teoria:
   + física da abelha em 10s) — duas explicações candidatas, nenhuma testada: (1)
   dinâmica de estado contínuo do engine; (2) algo do lado `MotorMapping.java`/
   física do jogo, não do circuito. Ver `docs/03-roadmap-fases.md` F6.
-- **Anatomia real** (posição 3D, agrupamento por neurópilo) — exige o arquivo de
-  9,5GB da Zenodo (AD-11), já baixado mas não processado.
 - **Circuito de 2 saltos** (10.578 neurônios) — v2, muda a escala do problema
   inteiro.
+- **Usar a posição 3D real** (extraída em 17/09/2026, ver achado 8 abaixo) —
+  cruzar com os 32 tipos bilaterais de AD-16 pra refinar os pares
+  esquerda/direita além da categoria discreta `side`.
 
 ## Como reproduzir os números citados aqui
 

@@ -552,6 +552,27 @@ experimento que testa se o sinal corresponde a virar pra um lado ou outro.
 Processamento do arquivo de 9,5GB (posição XYZ, neurópilo por sinapse) segue
 pendente — ficou pra depois dessa checagem mais barata, decisão do usuário.
 
+### Anatomia real — arquivo de 9,5GB processado (17/09/2026)
+
+`sim/tools/extract_anatomy.py` — streaming por record batch (AD-12), 21s,
+1.813.778 de 54,5 milhões de sinapses casadas com os 625 neurônios do
+subcircuito. Resultado em `data/processed/anatomy_783.parquet` (não
+versionado): posição 3D (centroide por neurônio) + neurópilo dominante,
+**625/625 neurônios (100%) cobertos nos dois**.
+
+Checagem de sanidade: os dois neurônios de `DNp22` caem em `IPS_L`/`IPS_R`
+(bate com `side`), coordenada X consistente com o lado. Distribuição de
+neurópilo dominante faz sentido biológico — `OCG` (ganglio ocelar, 314
+neurônios, onde o circuito nasce) domina, seguido de regiões que descendentes
+atravessam a caminho do cordão nervoso (`GNG`, `SPS`, `IPS`, `PLP`) e do lobo
+óptico (`ME`, `LO` — parte do circuito passa perto de vias visuais mais
+amplas, não só ocelar).
+
+**Não usado em nada ainda** — é enriquecimento, não input de nenhum cálculo.
+Candidato natural: cruzar posição X real (não só `side` categórico) contra os
+32 tipos bilaterais achados em AD-16, pra confirmar/refinar os pares
+esquerda/direita com mais precisão que a categoria discreta já dá.
+
 ---
 
 ## Fora de escopo (candidatos a v2+)
