@@ -524,6 +524,34 @@ outlier (lesão), tem que medir de novo em cada caso, não assumir a direção.
 
 CSV: `lesion_experiment_goalsoff_local129.csv`.
 
+### RN-08 completa — primeiro canal de direção real, `yaw_steering` (AD-16, 17/09/2026)
+
+Início de "anatomia real", pedido pelo usuário. Antes de processar o arquivo de
+9,5GB da Zenodo (posição XYZ por sinapse), achado que não precisava dele:
+`nodes.parquet` já tem uma coluna `side` (esquerda/direita/centro, do
+`Supplemental_file1` original) **nunca usada em lugar nenhum do código**.
+
+Cruzando `side` contra os 5 tipos `steering` já resolvidos (RN-08/AD-15, Feng et
+al. 2024 e Yang et al. 2024): **4 têm par bilateral limpo — 1 neurônio à
+esquerda + 1 à direita, exatamente** (`DNae003`, `DNb05`, `DNb06`, `DNge070`).
+`DNa03` (5º tipo steering) fica de fora, só tem 1 neurônio no subcircuito.
+
+Implementado `motor.py::group_steering_by_side` + canal `yaw_steering =
+tanh((taxa_esquerda − taxa_direita) / MOTOR_RATE_SCALE)`, exposto em
+`decode()`. **Só telemetria** — `side` é o lado do corpo celular, não
+necessariamente o lado do efeito comportamental (RN-08/AD-15 já registrou a
+mesma ressalva pro `side` do BANC). Não entra em `MotorMapping.java` até um
+experimento validar o sentido do sinal — precisaria medir mudança de direção
+da abelha (heading), infraestrutura que não existe ainda.
+
+**É o primeiro candidato real a canal de direção além de `phototaxis`** desde
+que RN-08 foi aberta — construído de um tipo com função medida (não cluster
+fraco) e anatomia bilateral real, não fabricada. Pendente: desenhar o
+experimento que testa se o sinal corresponde a virar pra um lado ou outro.
+
+Processamento do arquivo de 9,5GB (posição XYZ, neurópilo por sinapse) segue
+pendente — ficou pra depois dessa checagem mais barata, decisão do usuário.
+
 ---
 
 ## Fora de escopo (candidatos a v2+)

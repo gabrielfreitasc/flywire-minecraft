@@ -69,6 +69,25 @@ Dois tipos ficam de fora de tudo: `DNpe027` (2 neurônios) é ambíguo — os 3
 neurônios do tipo se dividem entre clusters diferentes no BANC, sem consenso
 por tipo; `DNp40` (1 neurônio) não aparece em BANC, nem literatura nem
 conectividade.
+
+**Canal `yaw_steering` (RN-08, F6, 17/09/2026) — primeiro candidato real a
+direção além de `phototaxis`.** `nodes.parquet` tem uma coluna `side`
+(esquerda/direita/centro, de `Supplemental_file1`) que nunca tinha sido usada
+em lugar nenhum do código. Cruzando contra `PUBLISHED_DN_BEHAVIOR`: dos 5
+tipos rotulados `steering` (Feng et al. 2024, Yang et al. 2024), **4 têm par
+bilateral limpo — exatamente 1 neurônio à esquerda + 1 à direita cada**
+(`DNae003`, `DNb05`, `DNb06`, `DNge070`; `DNa03` fica de fora, só tem 1
+neurônio, sem par). `yaw_steering = tanh((taxa_esquerda − taxa_direita) /
+MOTOR_RATE_SCALE)`.
+
+**O que isso NÃO estabelece:** que o sinal do canal corresponde a "virar pra
+esquerda" ou "virar pra direita" no mundo. `side` é o lado do CORPO CELULAR,
+não necessariamente o lado do efeito comportamental (circuito pode ser
+ipsi- ou contralateral) — mesma ressalva já registrada pro `side` do BANC.
+**Exposto só como telemetria** (`decode()`), fora de `MotorMapping.java` até
+um experimento real validar o que o sinal significa (precisaria medir
+mudança de direção da abelha, não só distância — infraestrutura que não
+existe ainda). Ver `docs/04-regras-de-negocio.md` RN-08.
 """
 from __future__ import annotations
 
@@ -197,6 +216,25 @@ def group_by_connectivity_cluster(connectome: Connectome) -> dict[str, NDArray[n
     return {name: np.array(sorted(nids), dtype=np.int64) for name, nids in groups.items()}
 
 
+# RN-08/F6 — os 4 tipos "steering" (PUBLISHED_DN_BEHAVIOR) com par bilateral
+# limpo (1 neurônio esquerda + 1 direita cada, via coluna `side` de
+# nodes.parquet). `DNa03` (5º tipo steering) fica de fora — só 1 neurônio,
+# sem par. Ver docstring do módulo — canal de telemetria, sentido do sinal
+# (esquerda/direita do MUNDO) não validado.
+_STEERING_BILATERAL_TYPES = {"DNae003", "DNb05", "DNb06", "DNge070"}
+
+
+def group_steering_by_side(connectome: Connectome) -> tuple[NDArray[np.int64], NDArray[np.int64]]:
+    """RN-08/F6 — separa os 4 tipos steering bilaterais em (esquerda, direita)
+    pela coluna `side`. Base do canal de telemetria `yaw_steering` em
+    `decode()`. Ver docstring do módulo."""
+    out_nodes = connectome.nodes.loc[connectome.output]
+    sub = out_nodes[out_nodes.cell_type.isin(_STEERING_BILATERAL_TYPES)]
+    left = np.array(sorted(sub.index[sub.side == "left"]), dtype=np.int64)
+    right = np.array(sorted(sub.index[sub.side == "right"]), dtype=np.int64)
+    return left, right
+
+
 def group_by_cell_type_prefix(connectome: Connectome) -> dict[str, NDArray[np.int64]]:
     """RN-08 provisório — agrupa os nids de saída pelo prefixo alfabético do cell_type."""
     groups: dict[str, list[int]] = {}
@@ -218,6 +256,7 @@ class MotorDecoder:
         self._excitatory, self._inhibitory = topology.group_outputs_by_predicted_sign(connectome)
         self._published_groups = group_by_published_behavior(connectome)
         self._connectivity_groups = group_by_connectivity_cluster(connectome)
+        self._steering_left, self._steering_right = group_steering_by_side(connectome)
         self._locomotion_nids = np.array(
             sorted(
                 nid
@@ -250,9 +289,11 @@ class MotorDecoder:
         comportamento publicado (`PUBLISHED_DN_BEHAVIOR` — Namiki et al. 2018
         + BANC/AD-15), os canais de cluster de conectividade BANC com prefixo
         `conn_` (`CONNECTIVITY_CLUSTER_BANC` — evidência mais fraca, ver
-        docstring do módulo) e `locomotion_drive` (agregado de fast+broad, o
-        único desses usado por `MotorMapping.java` — os demais ficam de fora
-        do cálculo de velocidade, ver docstring do módulo).
+        docstring do módulo), `yaw_steering` (par bilateral dos 4 tipos
+        steering, telemetria — sentido do sinal não validado) e
+        `locomotion_drive` (agregado de fast+broad, o único desses usado por
+        `MotorMapping.java` — os demais ficam de fora do cálculo de
+        velocidade, ver docstring do módulo).
         """
         vec = {name: float(np.tanh(self._rate_hz(nids) / C.MOTOR_RATE_SCALE))
                for name, nids in self.groups.items()}
@@ -267,6 +308,10 @@ class MotorDecoder:
 
         for name, nids in self._connectivity_groups.items():
             vec[f"conn_{name}"] = float(np.tanh(self._rate_hz(nids) / C.MOTOR_RATE_SCALE))
+
+        left_rate = self._rate_hz(self._steering_left)
+        right_rate = self._rate_hz(self._steering_right)
+        vec["yaw_steering"] = float(np.tanh((left_rate - right_rate) / C.MOTOR_RATE_SCALE))
 
         return vec
 

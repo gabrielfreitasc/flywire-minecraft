@@ -20,11 +20,12 @@ Decisões com consequência arquitetural. Uma ADR nunca é editada depois de ace
 | AD-13 | Corrente tônica de base + ruído no LIF (RN-09) | 2026-09-16 | Aceita |
 | AD-14 | Curadoria parcial de RN-08 via Namiki et al. 2018 (13/47 tipos) | 2026-09-16 | Aceita |
 | AD-15 | Segunda fonte de curadoria de RN-08 via BANC connectome (Bates, Phelps, Kim, Yang et al. 2026) — literatura (+5 tipos) e cluster de conectividade (+33 tipos, epistemicamente mais fraco) | 2026-09-16 | Aceita |
+| AD-16 | Canal `yaw_steering` (RN-08) — direção via par bilateral (`side`) dos 4 tipos steering; telemetria só, sem tradução validada pra `MotorMapping.java` | 2026-09-17 | Aceita |
 
 AD-01 a AD-05 estão detalhadas em [`../01-camada-de-dados.md`](../01-camada-de-dados.md).
 AD-07 a AD-10 estão detalhadas em [`../02-arquitetura.md`](../02-arquitetura.md).
-AD-13, AD-14, AD-15 estão detalhadas em [`../04-regras-de-negocio.md`](../04-regras-de-negocio.md)
-como RN-09, RN-08.
+AD-13, AD-14, AD-15, AD-16 estão detalhadas em
+[`../04-regras-de-negocio.md`](../04-regras-de-negocio.md) como RN-09, RN-08.
 
 ## Formato para novas ADRs
 

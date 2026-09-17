@@ -334,6 +334,34 @@ nem literatura nem conectividade — não aparece em BANC.
 Ver `docs/adr/README.md` AD-14, AD-15 e `FlyWire Citation Guidelines - Data.csv`
 (citação oficial por coluna de dado, fornecida pelo usuário).
 
+**Atualização — canal `yaw_steering`, primeira direção além de `phototaxis`
+(AD-16, 17/09/2026).** `nodes.parquet` tem uma coluna `side` (esquerda/direita/
+centro, do `Supplemental_file1` original do FlyWire) que nunca tinha sido usada
+em nenhum lugar do código — só carregada, nunca lida pra agrupar nada.
+
+Cruzando `side` contra os 5 tipos rotulados `steering` (Feng et al. 2024, Yang
+et al. 2024 — ver tabela acima): **4 têm par bilateral limpo, exatamente 1
+neurônio à esquerda + 1 à direita cada** (`DNae003`, `DNb05`, `DNb06`,
+`DNge070`). `DNa03` (5º tipo steering) fica de fora — só tem 1 neurônio no
+subcircuito, sem par.
+
+Implementado `motor.py::group_steering_by_side` +
+canal `yaw_steering = tanh((taxa_esquerda − taxa_direita) / MOTOR_RATE_SCALE)`,
+exposto em `decode()`. **Exclusivamente telemetria** — não entra em
+`MotorMapping.java`. Motivo: `side` é o lado do **corpo celular**, não
+necessariamente o lado do efeito comportamental (circuito pode ser ipsi- ou
+contralateral) — a mesma ressalva que já vale pro `side` do BANC (RN-08/AD-15).
+Validar exigiria medir MUDANÇA DE DIREÇÃO da abelha (heading), não só
+distância percorrida — infraestrutura que não existe ainda no plugin.
+
+**O que isso é:** primeiro candidato real a canal de direção que não seja
+`phototaxis`, construído a partir de um tipo com função já medida (não cluster
+de conectividade) e anatomia bilateral real (não fabricada). **O que isso NÃO
+é:** confirmação de que o sinal corresponde a "virar pra esquerda"/"virar pra
+direita" no mundo — isso é a próxima pergunta a responder, não a resposta.
+
+Ver `docs/adr/README.md` AD-16.
+
 ---
 
 ## RN-09 · Corrente tônica de base + ruído
@@ -405,5 +433,5 @@ estatística em `sim/tools/calibration_check.py` — reproduz os números acima.
 | RN-05 | `ingest.py` | `test_nid_stability` | Alto |
 | RN-06 | `engine.py`, `server.py`, `ControlLoop.java` | `test_bridge_request_response_no_frame_loss`, `test_bridge_history_stays_bounded_by_window` (`test_server.py`); validado em produção — 1500 trocas/0 falhas em servidor real (F4) | Médio |
 | RN-07 | `neuron.py` | `test_refractory` | Alto |
-| RN-08 | `motor.py`, `MotorMapping.java` | `test_motor_groups_cover_all_descendants`, `test_motor_decode_range`, `test_published_behavior_groups_are_real_types`, `test_connectivity_cluster_groups_are_real_types` | **Crítico — 18/47 tipos com literatura real (AD-14+AD-15), 27/34 restantes com cluster de conectividade BANC (telemetria só, não behavior medido), 1 tipo (DNpe027) ambíguo, 1 tipo (DNp40) sem nenhum dado. `MotorMapping.java` continua só com `phototaxis`.** |
+| RN-08 | `motor.py`, `MotorMapping.java` | `test_motor_groups_cover_all_descendants`, `test_motor_decode_range`, `test_published_behavior_groups_are_real_types`, `test_connectivity_cluster_groups_are_real_types`, `test_steering_bilateral_pairs_are_balanced` | **Crítico — 18/47 tipos com literatura real (AD-14+AD-15), 27/34 restantes com cluster de conectividade BANC (telemetria só, não behavior medido), 1 tipo (DNpe027) ambíguo, 1 tipo (DNp40) sem nenhum dado. Canal `yaw_steering` (AD-16) é telemetria, sentido não validado. `MotorMapping.java` continua só com `phototaxis`.** |
 | RN-09 | `engine.py` | `tools/calibration_check.py` (estatístico, manual — não roda no CI) | Alto — validado por teste estatístico, ver acima |

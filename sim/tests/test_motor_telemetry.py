@@ -16,6 +16,7 @@ from flywire_sim.motor import (
     group_by_cell_type_prefix,
     group_by_connectivity_cluster,
     group_by_published_behavior,
+    group_steering_by_side,
 )
 from flywire_sim.telemetry import Recorder, top_cell_types
 
@@ -44,7 +45,7 @@ def test_motor_decode_range(connectome):
     vec = motor.decode()
     expected_keys = (
         set(motor.groups)
-        | {"phototaxis", "locomotion_drive"}
+        | {"phototaxis", "locomotion_drive", "yaw_steering"}
         | set(group_by_published_behavior(connectome))
         | {f"conn_{name}" for name in group_by_connectivity_cluster(connectome)}
     )
@@ -96,6 +97,20 @@ def test_connectivity_cluster_groups_are_real_types(connectome):
     }
     connectivity_nids = {nid for nids in groups.values() for nid in nids}
     assert published_nids.isdisjoint(connectivity_nids)
+
+
+def test_steering_bilateral_pairs_are_balanced(connectome):
+    """RN-08/F6 — os 4 tipos steering bilaterais têm exatamente 1 neurônio à
+    esquerda e 1 à direita cada (achado 17/09/2026, coluna `side`)."""
+    left, right = group_steering_by_side(connectome)
+    assert len(left) == 4
+    assert len(right) == 4
+    assert set(left).isdisjoint(right)
+    # os tipos dos dois lados batem — é par bilateral, não coincidência de contagem
+    out_nodes = connectome.nodes.loc[connectome.output]
+    left_types = set(out_nodes.loc[left].cell_type)
+    right_types = set(out_nodes.loc[right].cell_type)
+    assert left_types == right_types == {"DNae003", "DNb05", "DNb06", "DNge070"}
 
 
 def test_motor_decode_empty_history_is_zero(connectome):

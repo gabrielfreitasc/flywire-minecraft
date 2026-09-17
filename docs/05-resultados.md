@@ -97,6 +97,16 @@ não de teoria:
    `daynight`/`doseresponse` passaram a aceitar a coordenada no próprio comando,
    teleportando no mesmo instante que o primeiro trial começa.
 
+7. **Uma coluna de dado que já estava disponível desde o início nunca tinha
+   sido usada** (F6/AD-16). `nodes.parquet` carrega `side`
+   (esquerda/direita/centro) desde o `Supplemental_file1` original — nenhum
+   código lia, só carregava. Cruzando contra os 5 tipos `steering` já
+   resolvidos por literatura (RN-08/AD-15), 4 têm par bilateral limpo (1
+   neurônio esquerda + 1 direita cada). Virou o canal `yaw_steering`, primeiro
+   candidato real a direção além de `phototaxis` — só telemetria, sentido do
+   sinal (qual lado do MUNDO) não validado. Motivou pular na frente do
+   processamento do arquivo de 9,5GB da Zenodo, que segue pendente.
+
 ## O que está validado (pode ser citado com confiança)
 
 - **Extração e integridade do subcircuito** (F0): 625 nós, 2.981 arestas, validado
@@ -151,9 +161,12 @@ não de teoria:
 
 ## Trabalho futuro (não iniciado)
 
-- **RN-08 completa** — curadoria de direção (yaw/lift), não só magnitude. Exigiria
-  achar pares agonista/antagonista publicados, o que não apareceu na pesquisa até
-  agora.
+- **RN-08 completa (direção)** — pares agonista/antagonista publicados seguem
+  sem aparecer na pesquisa direto, mas achou-se um caminho indireto: canal
+  `yaw_steering` (AD-16, F6) via par bilateral (`side`) dos 4 tipos steering.
+  **Pendente:** validar o que o sinal significa no mundo — exigiria medir
+  mudança de direção da abelha (heading), infraestrutura que não existe ainda
+  no plugin. Ver `docs/03-roadmap-fases.md` F6.
 - **Multi-sensor** (chuva, toque) — toque exige extrair um circuito mecanossensorial
   inteiro, diferente do ocelar. Ver `docs/03-roadmap-fases.md`, seção "Fora de escopo".
   **Dia/noite saiu desta lista:** feito na F6, com um giro de dois atos. Primeiro deu
