@@ -115,6 +115,15 @@ Minecraft. Subcircuito ocelar: 625 neurônios, 2.981 conexões.
   teleportar no mesmo instante de execução, sem intervalo nenhum. Regra geral: se um
   comando depende de posição exata, teleportar tem que acontecer DENTRO do mesmo
   comando que começa a medir, nunca num comando manual anterior.
+- **Ruído de IA nativa não tem direção previsível — pode mascarar OU inflar um
+  efeito, dependendo do experimento.** Medido (F6, 17/09/2026): no dia/noite, IA
+  nativa ligada MASCARAVA o efeito (nulo com ela, p=0,00184 sem). Na repetição da
+  lesão da F4 com `goals off`, foi o OPOSTO — o efeito ficou MENOR (4,4% vs. 12%
+  da F4 original), não maior; a F4 tinha um outlier específico inflando a
+  diferença, e ruído baixo revelou o efeito real mais modesto (porém mais
+  confiável: Welch e Mann-Whitney concordaram, contra Welch só marginal na F4).
+  **Não assumir a direção do viés a partir de outro experimento — medir de novo
+  em cada caso.**
 
 ## Papéis no projeto
 

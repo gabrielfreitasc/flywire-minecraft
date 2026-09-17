@@ -105,7 +105,10 @@ não de teoria:
   sair do silêncio; efeito do estímulo de luz mensurável no grupo inibitório
   (p=0,0028, `tools/calibration_check.py`).
 - **Acoplamento luz → comportamento** (F4): Mann-Whitney p=0,0014, reproduzível via
-  `/flywirebee lesion` + `sim/tools/lesion_analysis.py`.
+  `/flywirebee lesion` + `sim/tools/lesion_analysis.py`. **Replicado com `goals off`
+  (F6, 17/09/2026):** p≈0,00000 (Welch) / 0,0002 (Mann-Whitney) — os dois testes
+  concordam agora, ao contrário da F4 (Welch só marginal, p=0,078, por outlier).
+  Efeito absoluto ficou menor (4,4% vs. 12% da F4) mas muito mais confiável.
 - **Ponte assíncrona sem perda de frame** (F3): 1500 trocas / 0 falhas em 58s reais,
   ~26 Hz efetivo, RN-06 respeitada (rede nunca bloqueia o tick do jogo).
 - **18 tipos de descendente com função publicada** (RN-08/AD-14+AD-15): Namiki et al.
@@ -139,11 +142,11 @@ não de teoria:
 | Item | Descrição | Onde tratado |
 |---|---|---|
 | DT-1 | Dados vêm de espelho GitHub, não da fonte primária (parcialmente fechado, AD-11) | `docs/01-camada-de-dados.md` |
-| DT-2 | Regra de sinal (RN-01) herdada de Shiu et al., não validada por nós | `docs/04-regras-de-negocio.md` |
-| DT-3 | Override de histamina (RN-02) é hipótese nossa, não dado direto | `docs/04-regras-de-negocio.md` |
+| DT-2 | Regra de sinal (RN-01) — validação parcial 17/09/2026: 13/168 tipos com ground truth independente (drosophila_neurotransmitters), 12 confirmam, 1 diverge (DNp27, sem impacto — RN-01a) | `docs/04-regras-de-negocio.md` |
+| DT-3 | Override de histamina (RN-02) — sem ground truth direto pra ocelo; achado 17/09/2026 dá apoio indireto (R7/R8 do olho composto confirmados histaminérgicos), continua sendo analogia biológica nossa, não dado do ocelo em si | `docs/04-regras-de-negocio.md` |
 | RN-08 parcial | 29 de 47 tipos de descendente sem função publicada localizável (27 têm cluster de conectividade, evidência mais fraca) | `docs/04-regras-de-negocio.md` |
 | N pequeno | Experimentos de lesão e dia/noite validados com N=20; mais trials fortaleceriam a conclusão | `plugin/README.md` |
-| Ruído de IA nativa | **Não é só ruído simétrico — mascara efeito real.** Confirmado na F6: dia/noite deu nulo em 3 rodadas com IA nativa ligada (p≥0,29) e virou significativo (p=0,00184) removendo os goals que competem via Mob Goal API (`/flywirebee goals off`). Experimentos anteriores (F4, lesão) tiveram esse ruído mas ainda assim deram significância — não invalida os resultados já publicados, mas sugere que o tamanho de efeito real pode ser maior do que o medido com IA ligada. | `plugin/README.md`, `docs/03-roadmap-fases.md` F6 |
+| Ruído de IA nativa | **Não é só ruído simétrico — pode mascarar OU inflar efeito, dependendo do caso.** Dia/noite: mascarava (nulo com IA ligada, p=0,00184 sem — F6). Lesão: era o oposto — repetida com `goals off` (F6, 17/09/2026), o efeito ficou MENOR (4,4% vs. 12% da F4), não maior; a F4 tinha um outlier específico inflando a diferença. Ruído de IA nativa não tem direção previsível — sempre medir de novo, não assumir. | `plugin/README.md`, `docs/03-roadmap-fases.md` F6 |
 | Mecanismo da curva de luz não explicado | Resposta à luz tem pico em 0,25, não é monotônica (Kruskal-Wallis p=0,00003) — confirmado que existe, não confirmado por quê | `docs/03-roadmap-fases.md` F6 |
 
 ## Trabalho futuro (não iniciado)
@@ -161,13 +164,13 @@ não de teoria:
   `docs/03-roadmap-fases.md`.
 - **Explicar o mecanismo da curva não-monotônica de luz** (F6) — dose-resposta
   confirmou QUE existe pico em luz=0,25 (p=0,005 contra luz=1,0), não explica POR
-  QUÊ. Candidato levantado, não testado: as duas vias de sinal da topologia (RN-09,
-  29 excitatórios/desinibição vs. 63 inibitórios) podem ter sensibilidade à
-  intensidade de luz diferente. Exigiria expor `photo_exc`/`photo_inh` separados em
-  `motor.py::decode()` e repetir a dose-resposta olhando as duas curvas.
-- **Repetir a lesão da F4 com `goals off`** — se a IA nativa mascarava o efeito
-  dia/noite, pode estar diluindo também o tamanho do efeito de lesão medido (p=0,0014
-  já é significativo, mas o tamanho pode estar subestimado).
+  QUÊ. Hipótese das duas vias (RN-09) terem sensibilidade diferente **testada e
+  descartada** (`sim/tools/light_curve_check.py`, sem Minecraft): as duas vias
+  ficam achatadas de 0,25 a 1,0, nenhuma mostra pico. Discrepância não resolvida
+  entre esse teste (engine novo por trial) e o experimento real (engine contínuo
+  + física da abelha em 10s) — duas explicações candidatas, nenhuma testada: (1)
+  dinâmica de estado contínuo do engine; (2) algo do lado `MotorMapping.java`/
+  física do jogo, não do circuito. Ver `docs/03-roadmap-fases.md` F6.
 - **Anatomia real** (posição 3D, agrupamento por neurópilo) — exige o arquivo de
   9,5GB da Zenodo (AD-11), já baixado mas não processado.
 - **Circuito de 2 saltos** (10.578 neurônios) — v2, muda a escala do problema

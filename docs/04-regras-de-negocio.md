@@ -20,6 +20,17 @@ Erro clássico de quem porta modelos de mamífero.
 
 > **Isto é regra nossa, não dado da fonte.** Versionar. Onde: `graph.py::assign_sign`.
 
+**Validação parcial (17/09/2026, DT-2 em `docs/05-resultados.md`).** Cruzado
+`top_nt` predito (Eckstein et al. 2024) contra `gt_data.csv`
+(flyconnectome/drosophila_neurotransmitters — dado de literatura, não predição de
+classificador) para os 168 tipos celulares do subcircuito v1: **13 tipos têm
+ground truth independente, 12 confirmam a predição exatamente** (`DNa10`, `DNb05`,
+`DNp05`, `DNp06`, `DNp10`, `DNp102`, `DNp103`, `DNp18`, `DNp20`, `DNp28`, `PS091`,
+`PS093`, `cM15`). **1 diverge** (`DNp27` — ver RN-01a abaixo, sem impacto no
+resultado por outro motivo). Cobertura pequena (13/168, ~8%) — não valida RN-01
+como um todo, mas é a primeira checagem independente real desde que a regra foi
+adotada. Reproduzível cruzando `nodes.parquet::cell_type` contra `gt_data.csv`.
+
 ### RN-01a · Serotonina não está coberta ⚠️ em aberto
 
 Serotonina é **neuromodulador**, não neurotransmissor rápido — não tem sinal óbvio.
@@ -32,6 +43,19 @@ fronteira motora, onde RN-04 já os torna folhas — logo o impacto atual é **n
 Deixar como está na v1. **Reabrir obrigatoriamente** ao ampliar o escopo (2 saltos ou
 cérebro inteiro), onde neuromoduladores aparecem em massa no meio do circuito e silenciá-los
 deixa de ser inócuo.
+
+**Achado (17/09/2026) — `DNp27` provavelmente é erro de classificador, não
+neurônio serotonérgico de verdade.** Cruzando nossos 168 tipos celulares contra
+`gt_data.csv` (flyconnectome/drosophila_neurotransmitters — dado de literatura,
+não predição), 13 tipos batem, 12 confirmam exatamente nossa predição (Eckstein et
+al. 2024). **1 diverge:** `DNp27` está com `top_nt=serotonina` no nosso dado
+(confiança 0,35-0,79, já sinalizado como baixa), mas o ground truth (Cheong et
+al. 2023) diz **acetilcolina** (excitatório). Não muda nada em código — `DNp27` é
+descendente, RN-04 já o torna folha, o impacto de RN-01a continua nulo — mas
+registra que a fonte provável do erro é falha real do classificador nessa
+proteína específica, não ambiguidade genuína de sinal. `DNg94` (os outros 2
+neurônios afetados por RN-01a) não tem entrada no ground truth, segue sem
+checagem independente.
 
 ---
 
@@ -48,7 +72,17 @@ recebe sinal **−1**, ignorando `top_nt`.
 > Como é o início da cadeia, o comportamento inteiro do mob sairia errado.
 > Onde: `graph.py::apply_nt_overrides`. Teste obrigatório.
 
----
+**Evidência de apoio, não prova direta (17/09/2026, DT-3 em `docs/05-resultados.md`).**
+`gt_data.csv` (flyconnectome/drosophila_neurotransmitters) não tem entrada de
+ground truth para `cell_sub_class == "ocellar"` especificamente — os fotorreceptores
+do nosso subcircuito não têm `cell_type` nomeado, só a subclasse, então não há como
+cruzar direto. Mas o dado confirma histamina em **R7 e R8** (fotorreceptores do
+olho composto, `histamine=1`, fontes Davis et al. 2020 e Sarthy 1991) — mesma
+classe geral de neurônio, biologia consistente com o override. **Isto não é
+confirmação direta pros ocelos** — continua sendo inferência nossa por analogia
+biológica (fotorreceptor → histaminérgico é regra geral em *Drosophila*, não
+específica de ocelo), só que agora com um ponto de apoio a mais do que "nenhum
+dado direto".
 
 ## RN-03 · Limiar de 5 sinapses por conexão
 

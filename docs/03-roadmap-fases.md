@@ -462,22 +462,67 @@ estatisticamente, com poder adequado, o achado "invertido" da seção anterior
 (que tinha vindo com confundidor de local). Luz 0,5 volta ao mesmo patamar de luz
 1,0. Formato: sobe de 0 pra 0,25 (pico), desce de 0,25 pra 0,5/1,0 (platô).
 
-**Hipótese candidata, NÃO testada — não promover a conclusão:** RN-09 mostrou que
+**Hipótese candidata testada (17/09/2026) — NÃO se sustentou.** RN-09 mostrou que
 os 92 descendentes se dividem em 29 com caminho de sinal excitatório (desinibição
-de 2 saltos) e 63 com caminho inibitório direto a partir dos fotorreceptores. O
-canal `phototaxis` usado aqui é `tanh(taxa_excitatória − taxa_inibitória)`, um
-único número — se as duas vias tiverem curvas de resposta à intensidade de luz
-diferentes (ex.: a desinibição satura mais cedo que a inibição direta), o
-resultado líquido pode não ser monotônico mesmo que cada via individual seja.
-**Para testar isso de verdade:** expor `photo_exc`/`photo_inh` (as duas taxas
-separadas, não só a diferença) como canais de telemetria em `motor.py::decode()`,
-e repetir a dose-resposta olhando as duas curvas por separado. Não implementado —
-próximo passo natural, não decisão tomada aqui.
+de 2 saltos) e 63 com caminho inibitório direto. A hipótese era: se as duas vias
+tiverem curvas de resposta à intensidade de luz diferentes, a diferença
+(`phototaxis`) pode ficar não-monotônica mesmo que cada via sozinha seja mais
+simples. Testado com `sim/tools/light_curve_check.py` (novo — mesma filosofia de
+`calibration_check.py`, roda sem Minecraft): mede taxa excitatória e inibitória
+separadas para os 4 níveis de luz, `Engine` novo e semente pareada por trial (30
+sementes, 200ms cada).
+
+**Resultado: as duas vias NÃO explicam o pico.** As duas mudam de light=0 pra
+qualquer light>0 (p&lt;0,001 nas duas), mas ficam achatadas entre 0,25/0,5/1,0
+(p>0,7 em ambas, nada de pico). `phototaxis` bruto também sai achatado nesse
+teste (0,016 / 0,013 / 0,013 — dentro do próprio desvio-padrão), nada parecido
+com os 30,36 blocos medidos no jogo. **A hipótese registrada não se sustenta —
+não citar "as duas vias têm curvas diferentes" como explicação.**
+
+**Discrepância em aberto, não resolvida:** o teste usa um `Engine` novo por
+trial (estado zerado); o experimento real no Minecraft usa UM `Engine` contínuo
+rodando os 32 trials, com estado (potencial de membrana, refratário, fluxo de
+ruído) carregando de um nível de luz pro outro, e mede distância acumulada em
+10s de física da abelha, não taxa instantânea. Duas explicações candidatas, **nenhuma
+testada**: (1) o pico vem da dinâmica contínua do engine, não do circuito em
+estado estacionário; (2) o pico vem do lado Minecraft (`MotorMapping.java`,
+física/momento da abelha), não do `phototaxis` em si. Registrado como pergunta
+em aberto — não investigado mais a fundo por decisão do usuário (17/09/2026),
+prioridade foi pra outros itens.
 
 CSVs brutos: `doseresponse_experiment_local129z-92_old.csv` (origem errada, 23,9
 blocos de erro, só a forma dentro da rodada é válida),
 `doseresponse_experiment_local129_32trials.csv` (origem exata — usar este pra
-qualquer citação).
+qualquer citação), `doseresponse_experiment_local129_replica20.csv` (réplica,
+N=20, mesma origem — confirma a forma: 0,25 no topo, 0,5/1,0 empatados, 0,00
+abaixo, Kruskal-Wallis p=0,01).
+
+### Lesão da F4 repetida com `goals off` — hipótese errada na direção (17/09/2026)
+
+Testado se a IA nativa estava subestimando o efeito de lesão (mesmo raciocínio
+que valeu pro dia/noite). **20 trials, mesma origem exata (129,58; 71,40;
+-116,01), `goals off`:**
+
+| | Normal | Lesionado |
+|---|---|---|
+| F4 original (IA ligada, N=20) | 31,26 ± 1,60 | 27,56 ± 5,08 |
+| F6 (`goals off`, N=20) | 29,98 ± 0,17 | 28,66 ± 0,10 |
+
+F4: diferença 3,70 blocos (~12%), Mann-Whitney p=0,0014, Welch só marginal
+(p=0,078, outlier de 13,6 blocos já documentado). F6: diferença **1,32 blocos
+(~4,4%)** — menor — mas Welch e Mann-Whitney concordam fortemente agora
+(p≈0,00000 / 0,0002). Checagem de manipulação: luz real variava (~0,86-0,91,
+não forçada quando normal), luz enviada forçada em 0,000 exatamente quando
+lesionado.
+
+**A hipótese registrada ontem estava errada na direção.** Não era "IA nativa
+dilui o efeito, tamanho real é maior" — foi o oposto: o efeito de 12% da F4
+vinha inflado por um outlier específico; com ruído baixo, o efeito real é mais
+modesto, só que muito mais confiável estatisticamente. **Lição geral: ruído de
+IA nativa não tem direção previsível** — pode mascarar (dia/noite) ou inflar via
+outlier (lesão), tem que medir de novo em cada caso, não assumir a direção.
+
+CSV: `lesion_experiment_goalsoff_local129.csv`.
 
 ---
 

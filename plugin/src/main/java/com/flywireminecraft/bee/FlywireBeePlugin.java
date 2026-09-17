@@ -24,8 +24,8 @@ import java.util.logging.Level;
  *       (ver {@link VelocityProbe});</li>
  *   <li>{@code control start|stop} — liga/desliga o loop de controle real,
  *       sensor→ponte→motor→velocidade a 20 Hz (ver {@link ControlLoop});</li>
- *   <li>{@code lesion [trials] [segundos]} — experimento de lesão, critério
- *       de saída da F4 (ver {@link LesionExperiment});</li>
+ *   <li>{@code lesion [trials] [segundos] [x y z]} — experimento de lesão,
+ *       critério de saída da F4 (ver {@link LesionExperiment});</li>
  *   <li>{@code daynight [trials] [segundos]} — experimento dia/noite, F6
  *       (ver {@link DayNightExperiment}). Exige abelha ao ar livre —
  *       {@code light} (não {@code dorsal_light}) é quem varia com a hora do
@@ -197,6 +197,7 @@ public final class FlywireBeePlugin extends JavaPlugin {
         }
         int trials = 20;
         int secondsPerTrial = 10;
+        Location origin = null;
         try {
             if (args.length >= 2) {
                 trials = Integer.parseInt(args[1]);
@@ -204,11 +205,16 @@ public final class FlywireBeePlugin extends JavaPlugin {
             if (args.length >= 3) {
                 secondsPerTrial = Integer.parseInt(args[2]);
             }
+            if (args.length == 6) {
+                origin = parseXyz(player, args, 3);
+            } else if (args.length != 3 && args.length != 2 && args.length != 1) {
+                throw new NumberFormatException(String.join(" ", args));
+            }
         } catch (NumberFormatException e) {
-            player.sendMessage("Uso: /flywirebee lesion [trials=20] [segundosPorTrial=10]");
+            player.sendMessage("Uso: /flywirebee lesion [trials=20] [segundosPorTrial=10] [x y z]");
             return;
         }
-        new LesionExperiment(this, controlLoop).run(bee.get(), trials, secondsPerTrial, player);
+        new LesionExperiment(this, controlLoop).run(bee.get(), trials, secondsPerTrial, origin, player);
     }
 
     private void handleDayNight(Player player, String[] args) {
@@ -396,7 +402,7 @@ public final class FlywireBeePlugin extends JavaPlugin {
 
     private String usage() {
         return "Uso: /flywirebee give | kill | spike <modo> | control <start|stop> | "
-                + "lesion [trials] [segundos] | daynight [trials] [segundos] [blind] | "
+                + "lesion [trials] [segundos] [x y z] | daynight [trials] [segundos] [blind] | "
                 + "doseresponse [trials] [segundos] | visualize <on|off> | "
                 + "mute <grupo> | unmute <grupo|all> | stimulate <grupo> <amplitude> | goals off | "
                 + "goto <x> <y> <z>";

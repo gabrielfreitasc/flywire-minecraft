@@ -113,12 +113,14 @@ Comandos: `/flywirebee control start` | `/flywirebee control stop`.
 
 ## Experimento de lesão
 
-`/flywirebee lesion [trials=20] [segundos=10]` — critério de saída da F4
+`/flywirebee lesion [trials=20] [segundos=10] [x y z]` — critério de saída da F4
 (`docs/00-visao-geral.md`, "Critério de falsificação"). Precisa do loop de controle
 já rodando. Roda N trials com ordem aleatória entre fotorreceptores normais e
 silenciados (lesão = plugin sempre manda `light=0`, sem mudar `server.py`), teleporta
 a abelha de volta à origem a cada trial, mede comprimento de trajetória. Grava CSV em
-`plugins/FlywireBee/lesion_experiment.csv`.
+`plugins/FlywireBee/lesion_experiment.csv`. `x y z` opcional (adicionado F6) teleporta
+a abelha pra lá no mesmo instante que o experimento começa — mesma correção de deriva
+de `daynight`/`doseresponse`, ver `CONVENCOES.md`.
 
 Analisar com (a partir de `sim/`, venv ativo):
 ```
@@ -150,6 +152,17 @@ Mann-Whitney U p=0,0014 (distância percorrida: normal 31,26±1,60 vs.
 lesionado 27,56±5,08 blocos, N=20). Ver `docs/03-roadmap-fases.md` para a
 tabela completa e as ressalvas (N pequeno, mapeamento motor ainda só
 magnitude, sem yaw/direção própria do circuito).
+
+**✅ Repetido com `goals off` (F6, 17/09/2026) — hipótese estava errada na
+direção.** A previsão era que o efeito estivesse subestimado com IA nativa
+ligada (ruído 3-40× maior). Saiu o oposto: com `goals off`, normal
+29,98±0,17 vs. lesionado 28,66±0,10 (N=20) — diferença de **1,32 blocos
+(~4,4%)**, menor que os 3,70 blocos (~12%) da F4. Mas Welch e Mann-Whitney
+concordam fortemente agora (p≈0,00000/0,0002, contra Welch só marginal
+p=0,078 na F4). O efeito de 12% da F4 tinha um outlier específico (13,6
+blocos, já documentado) inflando a diferença — com ruído baixo, o efeito
+real parece mais modesto, mas muito mais confiável estatisticamente. Ver
+`docs/03-roadmap-fases.md`, F6.
 
 ## Visualização de atividade (F5)
 

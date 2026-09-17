@@ -48,10 +48,22 @@ public final class LesionExperiment {
         this.controlLoop = controlLoop;
     }
 
-    public void run(Bee bee, int trials, int secondsPerTrial, CommandSender notify) {
+    /**
+     * @param forcedOrigin se não-nulo, a abelha é teleportada pra cá ANTES do
+     *     primeiro trial, no mesmo instante de execução do comando — sem
+     *     intervalo pra IA nativa derivar (achado F6, 17/09/2026: um comando
+     *     de teleporte separado ainda deixava a abelha andar/voar no tempo
+     *     entre ele e o comando do experimento rodar). Se nulo, usa a posição
+     *     atual da abelha, como antes.
+     */
+    public void run(Bee bee, int trials, int secondsPerTrial, Location forcedOrigin, CommandSender notify) {
         if (!controlLoop.isRunning()) {
             notify.sendMessage("Loop de controle precisa estar rodando primeiro: /flywirebee control start");
             return;
+        }
+        if (forcedOrigin != null) {
+            bee.teleport(forcedOrigin);
+            bee.setVelocity(new Vector(0, 0, 0));
         }
         Location origin = bee.getLocation().clone();
         List<TrialResult> results = new ArrayList<>();
