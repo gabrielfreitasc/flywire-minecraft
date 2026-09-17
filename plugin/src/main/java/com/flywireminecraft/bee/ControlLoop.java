@@ -57,7 +57,7 @@ public final class ControlLoop {
     private volatile long exchangeCount = 0;
     private volatile long exchangeFailures = 0;
     private long tickCount = 0;
-    private volatile boolean lesioned = false;
+    private volatile Double forcedLight = null;
     private volatile boolean visualize = true;
 
     // F5 — ferramenta de lesão por comando (server.py, campo "mute"). Nomes
@@ -112,10 +112,22 @@ public final class ControlLoop {
      * se envia light=0 — os fotorreceptores nunca recebem estímulo do mundo,
      * só a dinâmica basal (bias+ruído) do circuito continua rodando. A lesão
      * é aplicada aqui (do lado do plugin, antes de mandar pra ponte), não no
-     * simulador — mais simples e não exige mudar o protocolo.
+     * simulador — mais simples e não exige mudar o protocolo. Implementado
+     * em cima de {@link #setForcedLight} (lesão = caso particular, light=0).
      */
     public void setLesioned(boolean lesioned) {
-        this.lesioned = lesioned;
+        this.forcedLight = lesioned ? 0.0 : null;
+    }
+
+    /**
+     * F6 — experimento de dose-resposta ({@link LightDoseResponseExperiment}):
+     * substitui a luz real por um valor arbitrário em [0, 1], ignorando o
+     * bloco onde a abelha está. {@code null} volta a usar a luz real. Mesmo
+     * mecanismo de {@link #setLesioned} generalizado — dois overrides ao
+     * mesmo tempo não fazem sentido, quem chamar por último vence.
+     */
+    public void setForcedLight(Double level) {
+        this.forcedLight = level;
     }
 
     public ControlLoop(
@@ -183,12 +195,13 @@ public final class ControlLoop {
         }
 
         double realLight = bee.getLocation().getBlock().getLightLevel() / 15.0;
-        double light = lesioned ? 0.0 : realLight;
+        Double forced = forcedLight;
+        double light = forced != null ? forced : realLight;
 
         if (tickCount % LOG_EVERY_TICKS == 0) {
             plugin.getLogger().info(String.format(Locale.ROOT,
-                    "[ControlLoop] light=%.2f (real=%.2f, lesionado=%s) vel=%s trocas=%d falhas=%d",
-                    light, realLight, lesioned, latestVelocity, exchangeCount, exchangeFailures));
+                    "[ControlLoop] light=%.2f (real=%.2f, forçado=%s) vel=%s trocas=%d falhas=%d",
+                    light, realLight, forced, latestVelocity, exchangeCount, exchangeFailures));
         }
         tickCount++;
 

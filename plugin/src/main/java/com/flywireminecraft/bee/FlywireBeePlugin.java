@@ -1,13 +1,16 @@
 package com.flywireminecraft.bee;
 
+import org.bukkit.Location;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Bee;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.util.Vector;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.logging.Level;
 
@@ -27,6 +30,9 @@ import java.util.logging.Level;
  *       (ver {@link DayNightExperiment}). Exige abelha ao ar livre —
  *       {@code light} (não {@code dorsal_light}) é quem varia com a hora do
  *       mundo, ver {@code CONVENCOES.md};</li>
+ *   <li>{@code doseresponse [trials] [segundos]} — dose-resposta de luz, F6
+ *       (ver {@link LightDoseResponseExperiment}): 4 níveis (0/0,25/0,5/1,0)
+ *       sorteados via {@link ControlLoop#setForcedLight}, não hora do mundo;</li>
  *   <li>{@code visualize <on|off>} — partículas de atividade por grupo,
  *       critério de saída da F5 (ver {@link ActivityVisualizer});</li>
  *   <li>{@code mute <grupo>} / {@code unmute <grupo|all>} — ferramenta de
@@ -40,6 +46,14 @@ import java.util.logging.Level;
  *       remove objetivos de IA nativa que competem com locomoção (vagar,
  *       flor, colmeia) via Mob Goal API do Paper, sem tocar em {@code setAI}
  *       (ver {@link CompetingGoals}). Sem volta pela API pública.</li>
+ *   <li>{@code goto <x> <y> <z>} — F6, achado 17/09/2026: a abelha sai
+ *       andando/voando pela IA nativa entre o spawn e o comando de
+ *       experimento rodar, então a origem medida nunca batia com o ponto
+ *       pretendido (era o motivo real da rodada dia/noite a 38/70 blocos do
+ *       alvo). {@code /tp} do jogador NÃO move a abelha — este comando
+ *       teleporta a abelha marcada direto, sem depender de onde ela derivou
+ *       até. Rodar logo depois de {@code goals off} (que já para a maior
+ *       parte do vagar) pra minimizar a janela de deriva.</li>
  * </ul>
  *
  * <p>Regra dura (ver plugin/README.md e CONVENCOES.md): o plugin NUNCA altera
@@ -118,11 +132,13 @@ public final class FlywireBeePlugin extends JavaPlugin {
             case "control" -> handleControl(player, args);
             case "lesion" -> handleLesion(player, args);
             case "daynight" -> handleDayNight(player, args);
+            case "doseresponse" -> handleDoseResponse(player, args);
             case "visualize" -> handleVisualize(player, args);
             case "mute" -> handleMute(player, args);
             case "unmute" -> handleUnmute(player, args);
             case "stimulate" -> handleStimulate(player, args);
             case "goals" -> handleGoals(player, args);
+            case "goto" -> handleGoto(player, args);
             default -> sender.sendMessage(usage());
         }
         return true;
@@ -206,6 +222,7 @@ public final class FlywireBeePlugin extends JavaPlugin {
         int trials = 20;
         int secondsPerTrial = 10;
         boolean blind = false;
+        Location origin = null;
         try {
             if (args.length >= 2) {
                 trials = Integer.parseInt(args[1]);
@@ -213,17 +230,63 @@ public final class FlywireBeePlugin extends JavaPlugin {
             if (args.length >= 3) {
                 secondsPerTrial = Integer.parseInt(args[2]);
             }
-            if (args.length >= 4) {
-                if (!args[3].equalsIgnoreCase("blind")) {
-                    throw new NumberFormatException(args[3]);
-                }
+            // Restante depois de trials/segundos: nada | "blind" | "x y z" | "x y z blind".
+            // Determinístico pela contagem — sem isso, "posição x depois de blind" seria
+            // ambíguo com "blind depois de x".
+            int remaining = args.length - 3;
+            if (remaining == 1 && args[3].equalsIgnoreCase("blind")) {
                 blind = true;
+            } else if (remaining == 3) {
+                origin = parseXyz(player, args, 3);
+            } else if (remaining == 4 && args[6].equalsIgnoreCase("blind")) {
+                origin = parseXyz(player, args, 3);
+                blind = true;
+            } else if (remaining != 0) {
+                throw new NumberFormatException(String.join(" ", args));
             }
         } catch (NumberFormatException e) {
-            player.sendMessage("Uso: /flywirebee daynight [trials=20] [segundosPorTrial=10] [blind]");
+            player.sendMessage("Uso: /flywirebee daynight [trials=20] [segundosPorTrial=10] [x y z] [blind]");
             return;
         }
-        new DayNightExperiment(this, controlLoop).run(bee.get(), trials, secondsPerTrial, blind, player);
+        new DayNightExperiment(this, controlLoop).run(bee.get(), trials, secondsPerTrial, blind, origin, player);
+    }
+
+    private void handleDoseResponse(Player player, String[] args) {
+        Optional<Bee> bee = player.getWorld().getEntitiesByClass(Bee.class).stream()
+                .filter(marker::isMarked)
+                .findFirst();
+        if (bee.isEmpty()) {
+            player.sendMessage("Nenhuma abelha do FlyWire encontrada neste mundo. Use /flywirebee give primeiro.");
+            return;
+        }
+        int trials = 20;
+        int secondsPerTrial = 10;
+        Location origin = null;
+        try {
+            if (args.length >= 2) {
+                trials = Integer.parseInt(args[1]);
+            }
+            if (args.length >= 3) {
+                secondsPerTrial = Integer.parseInt(args[2]);
+            }
+            if (args.length == 6) {
+                origin = parseXyz(player, args, 3);
+            } else if (args.length != 3 && args.length != 2 && args.length != 1) {
+                throw new NumberFormatException(String.join(" ", args));
+            }
+        } catch (NumberFormatException e) {
+            player.sendMessage("Uso: /flywirebee doseresponse [trials=20] [segundosPorTrial=10] [x y z]");
+            return;
+        }
+        new LightDoseResponseExperiment(this, controlLoop).run(bee.get(), trials, secondsPerTrial, origin, player);
+    }
+
+    /** {@code x y z} a partir de {@code args[startIndex]} — mesmo mundo do jogador. */
+    private Location parseXyz(Player player, String[] args, int startIndex) {
+        double x = Double.parseDouble(args[startIndex]);
+        double y = Double.parseDouble(args[startIndex + 1]);
+        double z = Double.parseDouble(args[startIndex + 2]);
+        return new Location(player.getWorld(), x, y, z);
     }
 
     private void handleVisualize(Player player, String[] args) {
@@ -304,10 +367,39 @@ public final class FlywireBeePlugin extends JavaPlugin {
                 + "resultado do experimento dia/noite.");
     }
 
+    private void handleGoto(Player player, String[] args) {
+        if (args.length < 4) {
+            player.sendMessage("Uso: /flywirebee goto <x> <y> <z> — teleporta a abelha MARCADA (não você) "
+                    + "pro ponto exato. Rode logo depois de 'goals off' pra minimizar deriva da IA nativa.");
+            return;
+        }
+        Optional<Bee> bee = player.getWorld().getEntitiesByClass(Bee.class).stream()
+                .filter(marker::isMarked)
+                .findFirst();
+        if (bee.isEmpty()) {
+            player.sendMessage("Nenhuma abelha do FlyWire encontrada neste mundo. Use /flywirebee give primeiro.");
+            return;
+        }
+        Location dest;
+        try {
+            dest = parseXyz(player, args, 1);
+        } catch (NumberFormatException e) {
+            player.sendMessage("Coordenadas inválidas: " + args[1] + " " + args[2] + " " + args[3]);
+            return;
+        }
+        Bee target = bee.get();
+        target.teleport(dest);
+        target.setVelocity(new Vector(0, 0, 0));
+        player.sendMessage(String.format(Locale.ROOT,
+                "Abelha teleportada pra (%.2f, %.2f, %.2f).", dest.getX(), dest.getY(), dest.getZ()));
+    }
+
     private String usage() {
         return "Uso: /flywirebee give | kill | spike <modo> | control <start|stop> | "
-                + "lesion [trials] [segundos] | daynight [trials] [segundos] [blind] | visualize <on|off> | "
-                + "mute <grupo> | unmute <grupo|all> | stimulate <grupo> <amplitude> | goals off";
+                + "lesion [trials] [segundos] | daynight [trials] [segundos] [blind] | "
+                + "doseresponse [trials] [segundos] | visualize <on|off> | "
+                + "mute <grupo> | unmute <grupo|all> | stimulate <grupo> <amplitude> | goals off | "
+                + "goto <x> <y> <z>";
     }
 
     @Override

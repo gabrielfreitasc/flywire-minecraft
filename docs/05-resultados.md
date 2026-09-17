@@ -78,9 +78,24 @@ não de teoria:
    Goal API do Paper (`Bukkit.getMobGoals()`) remove objetivos específicos
    (voltar pra colmeia, vagar, polinizar) sem travar física — testado isolado
    antes de integrar (mesma disciplina do achado 3). Com isso, o efeito apareceu
-   e replicou em 2 locais (p=0,00184). Direção veio invertida do esperado (menos
-   luz → mais distância) — não explicada, registrada como pergunta aberta, não
-   como conclusão inventada.
+   e replicou em 2 locais (p=0,00184).
+
+6. **A resposta à luz não é monotônica — tem um pico em luz baixa, não um
+   platô** (F6). O achado 5 veio com uma direção invertida do esperado (menos
+   luz → mais distância) que não tinha explicação na hora. Dose-resposta (4
+   níveis sorteados numa rodada só, origem exata, N=32) resolveu: luz 0,25 dá
+   distância MAIOR que luz 1,0 (p=0,005), luz 0,5 iguala luz 1,0 (p=0,48), luz 0
+   cai abaixo de todos (p=0,0002) — Kruskal-Wallis p=0,00003. Não é saturação
+   nem ruído, é curva real com pico em luz baixa. Mecanismo não explicado —
+   hipótese candidata (não testada): as duas vias de sinal da topologia (RN-09,
+   29 excitatórios/desinibição vs. 63 inibitórios) podem ter sensibilidade à
+   intensidade de luz diferente entre si.
+
+   **Achado de operação, junto:** um comando `/flywirebee goto` separado do
+   comando do experimento ainda deixava a IA nativa mover a abelha no intervalo
+   entre os dois (24–38 blocos de erro medidos). Só resolveu de verdade quando
+   `daynight`/`doseresponse` passaram a aceitar a coordenada no próprio comando,
+   teleportando no mesmo instante que o primeiro trial começa.
 
 ## O que está validado (pode ser citado com confiança)
 
@@ -98,8 +113,11 @@ não de teoria:
 - **Resposta a dia/noite** (F6): Mann-Whitney p=0,00184, reproduzível via
   `/flywirebee goals off` + `control start` + `daynight` +
   `sim/tools/daynight_analysis.py` — **só aparece com `goals off`** (IA nativa
-  mascara o efeito quando ligada, ver limitação abaixo). Direção do efeito
-  (menos luz → mais distância) não está explicada.
+  mascara o efeito quando ligada, ver limitação abaixo).
+- **Resposta à luz é não-monotônica** (F6): Kruskal-Wallis p=0,00003 entre 4
+  níveis de luz (0/0,25/0,5/1,0), N=32, reproduzível via `/flywirebee goals off`
+  + `control start` + `doseresponse` + `sim/tools/doseresponse_analysis.py`.
+  Pico em luz=0,25 (maior que luz=1,0, p=0,005); mecanismo não explicado.
 
 ## O que NÃO está provado (não afirmar isso)
 
@@ -126,7 +144,7 @@ não de teoria:
 | RN-08 parcial | 29 de 47 tipos de descendente sem função publicada localizável (27 têm cluster de conectividade, evidência mais fraca) | `docs/04-regras-de-negocio.md` |
 | N pequeno | Experimentos de lesão e dia/noite validados com N=20; mais trials fortaleceriam a conclusão | `plugin/README.md` |
 | Ruído de IA nativa | **Não é só ruído simétrico — mascara efeito real.** Confirmado na F6: dia/noite deu nulo em 3 rodadas com IA nativa ligada (p≥0,29) e virou significativo (p=0,00184) removendo os goals que competem via Mob Goal API (`/flywirebee goals off`). Experimentos anteriores (F4, lesão) tiveram esse ruído mas ainda assim deram significância — não invalida os resultados já publicados, mas sugere que o tamanho de efeito real pode ser maior do que o medido com IA ligada. | `plugin/README.md`, `docs/03-roadmap-fases.md` F6 |
-| Direção do efeito dia/noite não explicada | Menos luz produziu MAIS distância, não menos — hipótese de resposta não-monotônica levantada, não testada | `docs/03-roadmap-fases.md` F6 |
+| Mecanismo da curva de luz não explicado | Resposta à luz tem pico em 0,25, não é monotônica (Kruskal-Wallis p=0,00003) — confirmado que existe, não confirmado por quê | `docs/03-roadmap-fases.md` F6 |
 
 ## Trabalho futuro (não iniciado)
 
@@ -141,11 +159,12 @@ não de teoria:
   hipótese de que a IA nativa mascarava o efeito se confirmou: com `/flywirebee
   goals off`, o efeito aparece e replica (p=0,00184). Ver F6 em
   `docs/03-roadmap-fases.md`.
-- **Explicar a direção do efeito dia/noite** (novo, da F6) — menos luz produziu MAIS
-  distância, o oposto do esperado. Candidato: resposta não-monotônica à luz (luz
-  zero, medida na F4, deu a MENOR distância das três condições já vistas). Só um
-  teste de dose-resposta (luz 0 / 0,25 / 0,5 / 1,0 sorteada trial a trial, `goals
-  off`, origem fixa) decide.
+- **Explicar o mecanismo da curva não-monotônica de luz** (F6) — dose-resposta
+  confirmou QUE existe pico em luz=0,25 (p=0,005 contra luz=1,0), não explica POR
+  QUÊ. Candidato levantado, não testado: as duas vias de sinal da topologia (RN-09,
+  29 excitatórios/desinibição vs. 63 inibitórios) podem ter sensibilidade à
+  intensidade de luz diferente. Exigiria expor `photo_exc`/`photo_inh` separados em
+  `motor.py::decode()` e repetir a dose-resposta olhando as duas curvas.
 - **Repetir a lesão da F4 com `goals off`** — se a IA nativa mascarava o efeito
   dia/noite, pode estar diluindo também o tamanho do efeito de lesão medido (p=0,0014
   já é significativo, mas o tamanho pode estar subestimado).

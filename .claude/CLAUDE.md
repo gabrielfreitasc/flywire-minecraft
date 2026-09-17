@@ -93,9 +93,26 @@ Minecraft. Subcircuito ocelar: 625 neurônios, 2.981 conexões.
   volta. Ver `CompetingGoals.java`, `/flywirebee goals off`, `docs/03-roadmap-fases.md`
   (F6). **Confirmado (17/09/2026, réplica em 2 locais):** com IA ligada, dia/noite deu
   nulo em 3 rodadas independentes (p≥0,29); com `goals off`, efeito real e replicado
-  (p&lt;0,002 nos dois testes) — a IA nativa estava mesmo mascarando o sinal. Direção do
-  efeito veio invertida do esperado (menos luz → mais distância) e não está explicada
-  — não inventar motivo sem o teste de dose-resposta pendente.
+  (p&lt;0,002 nos dois testes) — a IA nativa estava mesmo mascarando o sinal.
+- **A resposta à luz não é monotônica — tem um pico em luz baixa, não é "mais luz =
+  mais movimento".** Medido (F6, dose-resposta, 17/09/2026, N=32, `goals off`, mesma
+  origem exata): luz 0,25 deu distância MAIOR que luz 1,0 (p=0,005), luz 0,5 voltou
+  ao mesmo patamar de 1,0, luz 0 caiu abaixo de todos (p=0,0002). Kruskal-Wallis
+  p=0,00003. Não afirmar "mais luz → mais phototaxis" sem checar — o achado
+  "invertido" do dia/noite (light=0,25 vs 1,0) não era ruído nem confundidor, era essa
+  curva. Mecanismo não explicado — hipótese candidata (não testada): as duas vias de
+  sinal da topologia (29 excitatórios/desinibição vs. 63 inibitórios, RN-09) podem ter
+  sensibilidade à intensidade de luz diferente uma da outra. Ver
+  `docs/03-roadmap-fases.md` F6.
+- **Deriva de IA nativa entre comandos manuais invalida origem, mesmo com um comando
+  de teleporte dedicado.** Medido (F6, 17/09/2026): mesmo criando `/flywirebee goto
+  <x> <y> <z>` pra reposicionar a abelha antes de um experimento, o tempo real de
+  digitar o próximo comando já bastava pra IA nativa mover a abelha nas rodadas
+  seguintes (24 e 38 blocos de erro, mesmo com `goto` rodado antes). **Só resolveu de
+  verdade** quando o próprio comando do experimento passou a aceitar `x y z` e
+  teleportar no mesmo instante de execução, sem intervalo nenhum. Regra geral: se um
+  comando depende de posição exata, teleportar tem que acontecer DENTRO do mesmo
+  comando que começa a medir, nunca num comando manual anterior.
 
 ## Papéis no projeto
 

@@ -66,10 +66,21 @@ public final class DayNightExperiment {
         this.controlLoop = controlLoop;
     }
 
-    public void run(Bee bee, int trials, int secondsPerTrial, boolean blind, CommandSender notify) {
+    /**
+     * @param forcedOrigin se não-nulo, a abelha é teleportada pra cá ANTES do
+     *     primeiro trial, no mesmo instante de execução do comando — sem
+     *     intervalo pra IA nativa derivar. Se nulo, usa a posição atual da
+     *     abelha, como antes.
+     */
+    public void run(Bee bee, int trials, int secondsPerTrial, boolean blind, Location forcedOrigin,
+            CommandSender notify) {
         if (!controlLoop.isRunning()) {
             notify.sendMessage("Loop de controle precisa estar rodando primeiro: /flywirebee control start");
             return;
+        }
+        if (forcedOrigin != null) {
+            bee.teleport(forcedOrigin);
+            bee.setVelocity(new Vector(0, 0, 0));
         }
         Location origin = bee.getLocation().clone();
         int skylight = origin.getBlock().getLightFromSky();

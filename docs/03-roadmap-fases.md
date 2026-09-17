@@ -261,7 +261,7 @@ não é código).
 
 ---
 
-## F6 — RN-08 completa (BANC) + multi-sensor dia/noite ✅ dia/noite: efeito real, direção inesperada
+## F6 — RN-08 completa (BANC) + multi-sensor dia/noite ✅ concluída — resposta à luz é não-monotônica
 
 ### RN-08 — segunda fonte via BANC connectome ✅ concluída
 
@@ -277,7 +277,7 @@ Ver `docs/04-regras-de-negocio.md` RN-08 para a tabela completa. `MotorMapping.j
 não foi tocado — os canais novos ficam fora do cálculo de velocidade até validação
 própria por lesão.
 
-### Multi-sensor: dia/noite ✅ efeito confirmado com `goals off` — direção inesperada, não explicada
+### Multi-sensor: dia/noite ✅ efeito confirmado com `goals off`; explicado pela dose-resposta
 
 **Correção de premissa (16/09/2026) — a nota original desta seção estava errada.**
 A ideia inicial era: "`dorsal_light` (luz do céu) é quase de graça pra dia/noite, só
@@ -346,8 +346,8 @@ luz real seguindo variando (0,97/0,26). O experimento testou o que pretendia; o 
   origem, p=0,0014).
 - **Resposta à luz saturante.** Luz 0,25 ≈ luz 1,0, e luz 0 aparentemente abaixo, é
   compatível com saturação em luz baixa — mas o ponto "luz 0" desta sessão vem de
-  comparação entre rodadas. Testar exige dose-resposta (luz 0 / 0,25 / 1,0) sorteada
-  trial a trial numa rodada só, mesma origem. Não feito.
+  comparação entre rodadas. **Resolvido mais abaixo** (seção "Dose-resposta de
+  luz") — não era saturação, é curva não-monotônica com pico em luz=0,25.
 
 CSVs brutos preservados em `mc-server/plugins/FlywireBee/`:
 `daynight_experiment_normal_local129.csv`, `daynight_experiment_blind_local137.csv`,
@@ -391,7 +391,7 @@ maior (mais trials) teria bem mais poder estatístico que as anteriores.
 p=0,047/0,10 é sinal real ou ruído residual. CSV desta rodada preservado como
 `daynight_experiment_goalsoff_local92.csv`.
 
-### Confirmado — efeito real de dia/noite com `goals off`, direção não explicada (17/09/2026)
+### Confirmado — efeito real de dia/noite com `goals off` (17/09/2026)
 
 Repetido com `goals off`, origem (129,37; 71,00; -102,07) — 13,9 blocos do ponto
 combinado (X/Y bateram, Z não; `/tp` no jogador não move onde a abelha vai spawnar,
@@ -418,19 +418,66 @@ adicional de que a IA nativa, não o terreno em si, era a maior fonte de ruído.
 2. O circuito ocelar responde ao ciclo dia/noite do mundo — não só a lesão binária já
    provada na F4.
 
-**O que NÃO está explicado — direção inversa da esperada.** Menos luz (noite,
+**Na hora, direção inversa da esperada não estava explicada.** Menos luz (noite,
 `light`≈0,27) produziu **mais** distância percorrida que luz cheia (dia,
-`light`=1,0), não menos. Isso não é o que RN-09/F4 sugeririam de forma ingênua (mais
-luz → mais `phototaxis` → mais velocidade). Efeito é pequeno (~1%, 0,3 de ~30 blocos)
-mas estatisticamente sólido. Hipótese não testada: **resposta não-monotônica à
-luz** — luz parcial poderia desinibir uma via excitatória de forma diferente de luz
-plena ou luz zero (compatível com F4: luz zero deu a MENOR distância das três
-condições já medidas — 27,56, contra 29,95–30,26 aqui e ~31 com IA ligada). Só um
-teste de dose-resposta (0 / 0,25 / 0,5 / 1,0 sorteado numa rodada só, `goals off`,
-origem fixa) decide se é isso ou outra coisa. **Não inventar explicação sem esse
-teste** — registrado como pergunta em aberto, não como conclusão.
+`light`=1,0), não menos — o oposto do que RN-09/F4 sugeririam de forma ingênua.
+Efeito pequeno (~1%, 0,3 de ~30 blocos) mas estatisticamente sólido. Hipótese
+levantada então, não testada ainda: resposta não-monotônica à luz. **Resolvido
+logo abaixo, com o experimento de dose-resposta.**
 
 CSV desta rodada: `daynight_experiment_goalsoff_local129z-14.csv`.
+
+### Dose-resposta de luz — curva não-monotônica confirmada, "pico" em 0,25 (17/09/2026)
+
+Implementado `LightDoseResponseExperiment.java` (`/flywirebee doseresponse`) —
+4 níveis (0 / 0,25 / 0,5 / 1,0) sorteados trial a trial, `ControlLoop.setForcedLight`
+(generalização do mecanismo que já fazia `lesion` mandar `light=0`; não depende de
+hora do mundo, funciona em qualquer lugar).
+
+**Achado de engenharia, não só ciência:** as duas primeiras tentativas derivaram 24
+e 38 blocos do ponto pretendido — mesmo depois de criar `/flywirebee goto <x> <y>
+<z>` pra reposicionar a abelha, o intervalo real entre digitar `goto` e digitar o
+comando do experimento era tempo suficiente pra IA nativa mover a abelha de novo.
+**Corrigido de verdade:** `daynight`/`doseresponse` passaram a aceitar `x y z`
+opcional no próprio comando, teleportando a abelha no mesmo instante de execução —
+zero janela de deriva. Origem bateu exata na rodada final (129,58; 71,40; -116,01,
+0 blocos de erro).
+
+**Resultado, 32 trials na origem exata, `goals off`:**
+
+| Luz | n | Distância (blocos) | vs. luz=1,0 (Mann-Whitney) |
+|---|---|---|---|
+| 0,00 | 7 | 28,75 ± 0,14 | menor, p=0,00017 |
+| 0,25 | 7 | **30,36 ± 0,08** | **maior**, p=0,00524 |
+| 0,50 | 9 | 30,02 ± 0,16 | sem diferença, p=0,48 |
+| 1,00 | 9 | 30,12 ± 0,13 | (referência) |
+
+Kruskal-Wallis (4 níveis): H=23,57, **p=0,00003**. Checagem de manipulação: cada
+nível foi enviado exatamente como pedido (0/0,25/0,5/1,0, desvio zero).
+
+**A curva é não-monotônica — pico em luz=0,25, não platô nem inversão simples.**
+Escuro total reduz o movimento (consistente com F4/RN-09). Luz 0,25 é
+**significativamente maior** que luz plena — reproduz e agora confirma
+estatisticamente, com poder adequado, o achado "invertido" da seção anterior
+(que tinha vindo com confundidor de local). Luz 0,5 volta ao mesmo patamar de luz
+1,0. Formato: sobe de 0 pra 0,25 (pico), desce de 0,25 pra 0,5/1,0 (platô).
+
+**Hipótese candidata, NÃO testada — não promover a conclusão:** RN-09 mostrou que
+os 92 descendentes se dividem em 29 com caminho de sinal excitatório (desinibição
+de 2 saltos) e 63 com caminho inibitório direto a partir dos fotorreceptores. O
+canal `phototaxis` usado aqui é `tanh(taxa_excitatória − taxa_inibitória)`, um
+único número — se as duas vias tiverem curvas de resposta à intensidade de luz
+diferentes (ex.: a desinibição satura mais cedo que a inibição direta), o
+resultado líquido pode não ser monotônico mesmo que cada via individual seja.
+**Para testar isso de verdade:** expor `photo_exc`/`photo_inh` (as duas taxas
+separadas, não só a diferença) como canais de telemetria em `motor.py::decode()`,
+e repetir a dose-resposta olhando as duas curvas por separado. Não implementado —
+próximo passo natural, não decisão tomada aqui.
+
+CSVs brutos: `doseresponse_experiment_local129z-92_old.csv` (origem errada, 23,9
+blocos de erro, só a forma dentro da rodada é válida),
+`doseresponse_experiment_local129_32trials.csv` (origem exata — usar este pra
+qualquer citação).
 
 ---
 

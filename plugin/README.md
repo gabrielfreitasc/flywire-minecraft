@@ -206,7 +206,7 @@ dois voltam ao baseline ao limpar).
 
 ## Experimento dia/noite (F6)
 
-`/flywirebee daynight [trials=20] [segundos=10]` — mesmo desenho do
+`/flywirebee daynight [trials=20] [segundos=10] [x y z] [blind]` — mesmo desenho do
 `/flywirebee lesion` (F4), trocando a variável manipulada: em vez de silenciar
 fotorreceptores, alterna a hora do mundo (`world.setTime()`) entre meio-dia
 (tick 6000) e meia-noite (tick 18000) por trial, em ordem aleatória. Grava CSV
@@ -253,8 +253,17 @@ pra afirmar em `docs/03-roadmap-fases.md`, F6.
 
 **Armadilhas de operação encontradas rodando:**
 - **A origem é a posição da ABELHA quando o comando roda, não a sua.** `/tp` no
-  jogador não move a origem — spawne a abelha no bloco onde você está e rode o
-  comando logo em seguida.
+  jogador não move a origem. **Causa raiz do drift (17/09/2026):** a abelha sai
+  andando/voando pela IA nativa entre um comando e o próximo — mesmo um
+  `/flywirebee goto` separado do comando do experimento deixa uma janela de
+  deriva (o tempo que você leva pra digitar o próximo comando). **Corrigido de
+  verdade:** `daynight`/`doseresponse` aceitam `x y z` opcional no final, que
+  teleporta a abelha no mesmo instante de execução do comando, sem intervalo:
+  `/flywirebee daynight [trials] [segundos] [x y z] [blind]` e
+  `/flywirebee doseresponse [trials] [segundos] [x y z]`. `/flywirebee goto <x> <y>
+  <z>` continua existindo pra reposicionar manualmente fora de um experimento
+  (ex.: antes de `control start`), mas **não substitui** passar a coordenada
+  direto no comando do experimento.
 - **Não compare rodadas feitas em lugares diferentes.** Duas rodadas cegas a 70
   blocos de distância diferiram 9 blocos só por terreno (ver `CONVENCOES.md`).
 - **Nova rodada sobrescreve o CSV.** Renomeie o anterior antes de rodar de novo.
@@ -295,12 +304,49 @@ ponto certo; as duas rodadas `goals off` concordam entre si, p=0,96). Desvio-pad
 caiu de ~0,6–8,2 blocos pra ~0,22 — a IA nativa realmente competia pelo controle e
 mascarava o sinal.
 
-**Mas a direção veio invertida do esperado:** menos luz (noite) produziu MAIS
-distância que luz cheia (dia), não menos — e isso não está explicado. Hipótese
-candidata (não testada): resposta não-monotônica à luz, já que luz zero (F4) deu a
-MENOR distância das três condições. Só um teste de dose-resposta decide. Ver
-`docs/03-roadmap-fases.md`, F6, pra tabela completa e a ressalva de não inventar a
-explicação sem esse teste.
+**A direção veio invertida do esperado, e o teste de dose-resposta abaixo explicou
+por quê:** não é saturação nem ruído, é uma curva não-monotônica real, com pico em
+luz=0,25. Ver `docs/03-roadmap-fases.md`, F6, pra tabela completa.
+
+## Dose-resposta de luz (F6)
+
+`/flywirebee doseresponse [trials=20] [segundos=10] [x y z]` — pergunta em aberto deixada
+pelo experimento dia/noite: luz 0,25 (noite) deu MAIS distância que luz 1,0 (dia),
+o oposto do esperado, e luz 0 (F4) deu a MENOR distância das três condições já
+vistas — mas cada ponto veio de um experimento diferente, não comparáveis entre si
+de forma limpa. Este comando testa 4 níveis (0 / 0,25 / 0,5 / 1,0) sorteados trial a
+trial **na mesma rodada, mesma origem**.
+
+Usa `ControlLoop.setForcedLight(Double)` — generalização do mecanismo que já fazia
+`/flywirebee lesion` mandar `light=0` (agora `setLesioned` é um caso particular
+disso). Não depende de hora do mundo (`light` só assume os valores discretos que o
+motor de iluminação do Minecraft produz — não dá pra pedir exatamente 0,5 via
+`world.setTime()`), então funciona em qualquer lugar, sem checagem de skylight.
+
+**Não liga `goals off` sozinho** — F6 mostrou que sem isso a IA nativa pode mascarar
+o efeito (rode `/flywirebee goals off` antes, se for repetir o padrão que já deu
+resultado significativo no dia/noite).
+
+Analisar com (a partir de `sim/`, venv ativo):
+```
+python tools/doseresponse_analysis.py
+```
+Kruskal-Wallis (omnibus entre os 4 níveis) + Mann-Whitney de cada nível contra
+`light=1,0`.
+
+**✅ Rodado em servidor real, 17/09/2026 — curva não-monotônica confirmada.** 32
+trials, `goals off`, origem exata (129,58; 71,40; -116,01): luz 0,25 deu distância
+MAIOR que luz 1,0 (30,36 vs 30,12, p=0,005), luz 0,5 igual a luz 1,0 (p=0,48), luz 0
+menor que todos (28,75, p=0,0002). Kruskal-Wallis p=0,00003. Não é saturação — é um
+pico em luz baixa. Mecanismo não explicado, hipótese candidata em
+`docs/03-roadmap-fases.md` F6 (não testada — não citar como se fosse).
+
+**Achado de operação:** as duas primeiras tentativas derivaram 24–38 blocos do ponto
+pretendido, mesmo usando `/flywirebee goto` antes — o tempo de digitar o próximo
+comando já bastava pra IA nativa mover a abelha de novo. Corrigido fazendo
+`doseresponse`/`daynight` aceitarem `x y z` no próprio comando (teleporta no mesmo
+instante de execução, sem intervalo): `/flywirebee doseresponse 32 10 129.58 71.40
+-116.01`.
 
 ## Regra
 
