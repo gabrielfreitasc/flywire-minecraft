@@ -643,34 +643,135 @@ canto superior direito como esperado. Ver `plugin/README.md`.
 
 ---
 
+## F7 — Multi-sensor v2: chuva e toque (planejamento, 19/09/2026) 📋 não iniciada
+
+**Só planejamento nesta etapa — nenhuma extração de dado, nenhum código ainda.**
+Decisão do usuário (19/09/2026): registrar o plano completo antes de tocar em
+qualquer seed novo, dado que os dois sensores anteriores (F6, dia/noite) só
+saíram certos depois de descartar uma premissa errada e corrigir o desenho do
+experimento duas vezes. Objetivo desta fase: reduzir a chance de repetir isso
+descobrindo as incógnitas por escrito primeiro.
+
+**Princípio geral, herdado de RN-08/RN-09 e da seção "Armadilhas conhecidas" do
+`CONVENCOES.md`:** cada sensor novo é um **subcircuito independente**, extraído
+e validado por lesão própria antes de qualquer tentativa de combinar canais.
+Não misturar chuva/toque com `phototaxis` sem repetir o mesmo teste que já
+falhou 3 vezes por diluição (RN-09/F1, F4 primeiro experimento, RN-08/F6).
+
+### Decisão de arquitetura a registrar via ADR antes de extrair qualquer seed
+
+- [ ] **AD-17** — como múltiplos subcircuitos coexistem no simulador. Hoje
+      `select_seed` (`ingest.py`) e `SEED_PATTERN`/`HOPS`/`SYN_THRESHOLD`
+      (`config.py`) assumem **um** subcircuito hardcoded ("ocell"). Opções a
+      decidir, não a inventar durante a extração:
+      1. **Engines separados** — um `Engine` (RN-06) por subcircuito, rodando
+         em paralelo na mesma thread de simulação, cada um com seu próprio
+         `nodes`/`edges`/`manifest`. Mais simples de isolar (lesão de um não
+         toca no outro), mas replica overhead de bias/ruído (RN-09) e não
+         captura interação real entre circuitos se ela existir no conectoma.
+      2. **Grafo único maior** — uma extração com semente = ocelar ∪ novo(s)
+         sensor(es), um só `Engine`. Mais fiel à biologia (se os circuitos se
+         tocam no cérebro real, aparece), mas reabre RN-01a (neuromoduladores
+         deixam de ser inócuos fora da fronteira atual, já registrado como
+         risco) e exige recalibrar RN-09 (bias/ruído calibrados para 625
+         neurônios, não para o tamanho novo).
+      3. Naming/config: se for (1), `SEED_PATTERN` vira um mapa nome→padrão em
+         vez de constante única — mudança pequena em `config.py`, mas é
+         mudança de contrato de `ingest.py`, cabe em ADR mesmo assim.
+
+### Sub-trilha: chuva
+
+- [ ] Levantamento de literatura — existe circuito higro-sensorial rotulado no
+      FlyWire 783? Candidato conhecido em *Drosophila*: neurônios
+      higrosensoriais da arista, projetando para os glomérulos VP2/VP3 (via
+      antenal) no lobo antenal posterior (Enjin et al. 2016; Frank et al.
+      2017). **Não assumir que o rótulo existe** — precisa checar se
+      `cell_class`/`cell_sub_class`/`cell_type`/`supertype` em
+      `Supplemental_file1_neuron_annotations.tsv` tem algo utilizável como
+      semente (mesmo tipo de checagem que achou `ocell` pronto na F0).
+- [ ] Se existir rótulo usável: extração análoga à F0 (semente própria,
+      mesmo BFS com fronteira em `descending`, validação de totais contra o
+      que o dado descrever, `manifest.json` próprio, ADR de extração).
+- [ ] Se **não** existir rótulo direto (só cluster de conectividade, ou nada):
+      registrar resultado negativo explicitamente — mesma disciplina do
+      dia/noite na F6 (nulo é resultado, não é fracasso a esconder) — e mover
+      chuva de "v2" para "fora de escopo permanente" em vez de deixar em limbo.
+- [ ] Sensor no plugin — trivial, **já disponível**: `World#hasStorm()` /
+      `World#isThundering()` na API do Bukkit/Paper. Não precisa de circuito
+      novo pra isso funcionar tecnicamente; precisa de circuito novo pra ter
+      *significado biológico* na resposta (senão é só uma variável booleana
+      somada a um canal motor qualquer — mesma armadilha de diluição de novo).
+- [ ] Validação — mesmo desenho da lesão da F4: chuva real ligada/desligada
+      (`world.setStorm(true/false)`), sorteado trial a trial na mesma rodada,
+      mesma origem, teleporte dentro do mesmo comando (lição da F6 sobre
+      deriva de IA nativa entre comandos manuais).
+
+### Sub-trilha: toque
+
+- [ ] Levantamento de literatura — "toque" não é um circuito só, precisa
+      escolher **qual** mecanossensorial, com justificativa, não por
+      conveniência:
+      - **Cerdas mecanossensoriais (bristles)** — contato físico direto,
+        resposta mais parecida com "toque" no sentido comum.
+      - **Sensilas campaniformes (asa/perna)** — medem tensão mecânica/carga,
+        mais próximo de propriocepção de voo que de toque externo.
+      - **Órgão de Johnston (antena)** — sensível a vento/vibração do ar, não
+        a contato — provavelmente o candidato errado pro que "toque" sugere,
+        mas é o mais estudado em contexto de voo (halteres/antena).
+      A escolha decide o que a extração busca — registrar a decisão e o
+      porquê antes de rodar `select_seed`, não depois.
+- [ ] Checar rótulos disponíveis para o tipo escolhido nas anotações (mesmo
+      processo da chuva acima) — a conectividade dos 139k neurônios do cérebro
+      inteiro já está em `Connectivity_783.parquet`, só nunca fomos atrás
+      dela fora do ocelar.
+- [ ] Extração análoga (semente própria, BFS, validação, ADR).
+- [ ] Sensor no plugin — qual evento do Bukkit conta como "toque" precisa de
+      decisão própria, não é óbvio: `EntityDamageEvent` (só cobre dano, não
+      contato benigno), sobreposição de `BoundingBox` contra bloco/entidade
+      (arriscado — abelha voando roça terreno o tempo todo, viraria sensor
+      sempre ligado, falso positivo constante), ou colisão específica
+      (`Entity#getNearbyEntities` com raio pequeno). Definir o que conta como
+      evento antes de implementar, para não medir ruído de colisão trivial.
+- [ ] Validação — idem: lesão comparando estímulo de toque real vs.
+      mascarado, mesmo padrão estatístico (Welch + Mann-Whitney) já usado em
+      todos os experimentos desde a F4.
+
+### Riscos a herdar, não redescobrir
+
+Tudo isto já foi medido nesta sessão (F4/F6) e se aplica igual a qualquer
+sensor novo — ver `CONVENCOES.md`, "Armadilhas conhecidas":
+
+- Agregar canais de fontes diferentes sem checar se respondem ao mesmo
+  estímulo dilui/cancela o efeito (3 ocorrências já registradas).
+- IA nativa é a maior fonte de ruído não controlada — `goals off`
+  (`CompetingGoals.java`) é obrigatório em qualquer experimento novo.
+- Comparar rodadas de origens diferentes não é válido — sortear condição
+  trial a trial dentro da MESMA rodada, MESMA origem, teleporte no mesmo
+  comando que inicia a medição (não num comando manual anterior).
+- Direção do viés de ruído não é previsível de um experimento pro outro —
+  medir de novo em cada caso, não assumir.
+- `String.format`/`printf` com `%f` em CSV: sempre `Locale.ROOT`.
+
+**Critério de saída desta etapa (planejamento):** F7 registrada aqui com
+checklist e decisões pendentes explícitas — ✅ atingido com este commit.
+**Critério de saída da fase real (quando começar a implementação):** AD-17
+decidida, e para cada sensor: ou uma semente real encontrada nas anotações e
+extraída/validada como a F0, ou um resultado negativo registrado com a mesma
+transparência do dia/noite nulo da F6 — nenhum dos dois casos aceita inventar
+semente ou rótulo que o dado não sustenta.
+
+---
+
 ## Fora de escopo (candidatos a v2+)
 
 | Item | Fase provável |
 |---|---|
-| Posição anatômica real dos neurônios | v2 — exige coordenadas da Zenodo |
-| Agrupar/colorir por neurópilo | v2 — exige quebra por neurópilo |
+| Posição anatômica real dos neurônios | ✅ feita — ver AD-11/F6, "Anatomia real" |
+| Agrupar/colorir por neurópilo | ✅ feita — ver AD-11/F6, "Anatomia real" |
 | Circuito de 2 saltos (10.578 neurônios) | v2 |
 | Cérebro inteiro (139k) fora do loop | v3 |
 | Plasticidade / aprendizado | v3 — o conectoma é estático por natureza |
-| Multi-sensor: chuva, toque | v2 — ver nota abaixo (dia/noite saiu daqui, ver F6) |
-
-**Nota — multi-sensor (16/09/2026, atualizada na F6):** ideia do usuário, avaliada
-antes da F5. Dia/noite passou a ser trabalho da F6 (ver acima) depois que a premissa
-inicial ("quase de graça") se mostrou tecnicamente errada. Os outros dois sensores
-continuam fora de escopo:
-
-- **Chuva** — parcialmente de graça: chuva escurece o céu no Minecraft, já afeta luz
-  indiretamente. Um sensor de chuva independente exigiria achar (se existir) um circuito
-  higro-sensorial no conectoma e extraí-lo à parte — mesmo processo da F0, semente diferente.
-- **Toque** — exige um circuito mecanossensorial inteiro, sem relação com os 625 neurônios
-  ocelares atuais. A conectividade **já está** em `Connectivity_783.parquet` e nas
-  anotações da F0 (cobrem os 139k neurônios do cérebro inteiro) — nunca fomos atrás deles.
-
-**Importante: nada disso precisa do arquivo de 9,5GB da Zenodo** (`flywire_synapses_783.feather`).
-Esse arquivo traz precisão espacial (coordenada XYZ por sinapse, neurópilo, NT mais fino) —
-útil pra anatomia real (primeiras duas linhas da tabela acima), não pra acessar novos tipos
-de neurônio. Multi-sensor é sobre extrair um SUBCIRCUITO DIFERENTE do que já temos, não sobre
-precisar de mais dado.
+| Multi-sensor: chuva, toque | **F7 — planejada, ver acima** (dia/noite saiu daqui, ver F6) |
 
 ## Dívida técnica aberta
 
