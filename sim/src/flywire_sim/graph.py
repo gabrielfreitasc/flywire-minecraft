@@ -7,6 +7,7 @@ Os testes de `test_photoreceptor_override` e `test_sign_assignment` são obrigat
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -56,9 +57,13 @@ def apply_nt_overrides(nodes: pd.DataFrame, sign: np.ndarray) -> np.ndarray:
     return sign
 
 
-def load() -> Connectome:
-    nodes = pd.read_parquet(C.PROCESSED / "nodes.parquet").set_index("nid", drop=False)
-    edges = pd.read_parquet(C.PROCESSED / "edges.parquet")
+def load(out_dir: Path | None = None) -> Connectome:
+    """Carrega um subcircuito extraído por `ingest.build`. `out_dir` default é
+    `C.PROCESSED` (circuito ocelar, v1); outros circuitos (AD-17, F7) passam
+    o próprio diretório (ex.: `C.PROCESSED / "bristle"`)."""
+    out_dir = C.PROCESSED if out_dir is None else out_dir
+    nodes = pd.read_parquet(out_dir / "nodes.parquet").set_index("nid", drop=False)
+    edges = pd.read_parquet(out_dir / "edges.parquet")
 
     sign = apply_nt_overrides(nodes, assign_sign(nodes))
 

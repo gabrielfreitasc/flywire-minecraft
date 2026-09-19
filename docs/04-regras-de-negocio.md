@@ -531,6 +531,56 @@ Onde: `engine.py::Engine.step` (bias+ruído), constantes em `config.py`.
 Análise de topologia de sinal em `sim/tools/signal_topology.py`; validação
 estatística em `sim/tools/calibration_check.py` — reproduz os números acima.
 
+### RN-09 aplicada ao subcircuito `bristle` (F7/AD-17, 19/09/2026) — sem recalibrar
+
+**Achado: não precisou de nova varredura.** RN-09 existe porque a semente
+ocelar é 100% inibitória (RN-02) — impossibilidade matemática de disparar sem
+bias. A semente `bristle` é 90,8% colinérgica/dopaminérgica (excitatória, ver
+`01-camada-de-dados.md`), então essa impossibilidade nunca existiu ali. Testado
+antes de assumir isso: com os valores ATUAIS de `config.py`
+(`bias=0,045 · noise=0,05 · gain=0,01`, calibrados originalmente só pro
+ocelar), a rede `bristle` já dispara espontaneamente em repouso (11,7
+disparos/neurônio em 1000 ms sem estímulo) — nenhum ajuste foi necessário pra
+sair do silêncio.
+
+**Topologia de sinal (`topology.group_outputs_by_predicted_sign`,
+generalizada nesta sessão pra aceitar `out_dir`):** dos 110 descendentes,
+**109 têm caminho previsto excitatório e só 1 inibitório** — ao contrário do
+ocelar (29 excitatório × 63 inibitório, quase equilibrado, por isso a
+agregação simples cancelava o sinal). Aqui **não há risco de cancelamento por
+agregação** — o grupo excitatório já é essencialmente o layer de saída
+inteiro. Verificado, não assumido: a mesma pergunta de RN-08/RN-09 ("os dois
+grupos respondem no mesmo sentido?") foi feita antes de tratar como um só.
+
+**Validação (`sim/tools/bristle_calibration_check.py`, comparação pareada,
+mesma semente de ruído em baseline/estimulado, N=30, amplitude=2,0,
+50 passos):**
+
+| Grupo | N descendentes | Δ disparos (estím. − base) | t-test pareado | Wilcoxon pareado |
+|---|---|---|---|---|
+| Excitatório (previsto) | 109 | 1222,87 ± 11,58 | t=568,5, **p≈0** | W=0, **p≈0** |
+| Inibitório (previsto) | 1 | 1,80 ± 0,60 | t=16,2, **p≈0** | W=0, **p≈0** |
+
+Baseline usa 1,3% da capacidade teórica de disparo do grupo excitatório
+(109 neurônios × 50 passos), estimulado sobe pra 23,8% — efeito real de ~18×,
+não artefato de saturação (bem abaixo de 100%). Efeito **ordens de magnitude
+maior e mais limpo** que o do ocelar (RN-09 original: p=0,0028, N=30,
+diferença de poucas unidades por descendente) — consistente com a semente ser
+majoritariamente excitatória em vez de 100% inibitória: não há cancelamento
+interno a vencer.
+
+**O que isto estabelece:** o critério equivalente ao de saída da F1 para o
+subcircuito `bristle` está atingido — estimular a semente mecanossensorial
+produz efeito estatisticamente inequívoco sobre os descendentes, usando os
+MESMOS parâmetros globais já calibrados pro ocelar (nenhum valor de
+`config.py` mudou). **O que isto NÃO estabelece:** que o vetor motor desse
+circuito tem significado behavioral (RN-08 equivalente — quais descendentes
+correspondem a que comportamento — não foi feito, é curadoria de literatura
+específica pra esses tipos celulares, trabalho futuro) nem que o efeito se
+traduz em comportamento observável na abelha (isso exige lesão em servidor
+real, como a F4 fez pro ocelar — pendente, precisa do sensor de toque no
+plugin primeiro).
+
 ---
 
 ## Tabela de rastreio
@@ -538,7 +588,7 @@ estatística em `sim/tools/calibration_check.py` — reproduz os números acima.
 | Regra | Módulo | Teste | Risco se errada |
 |---|---|---|---|
 | RN-01 | `graph.py` | `test_sign_assignment` | Alto |
-| RN-01a | `graph.py` | — | Nulo na v1, **alto** na v2 |
+| RN-01a | `graph.py` | — | Nulo na v1, **alto** no subcircuito `hygro` (F7, reaberta — 373 neurônios, tratamento pendente) |
 | RN-02 | `graph.py` | `test_photoreceptor_override` | **Crítico** |
 | RN-03 | `ingest.py` | `test_threshold` | Médio |
 | RN-04 | `ingest.py` | `test_motor_boundary` | Médio |
@@ -546,4 +596,4 @@ estatística em `sim/tools/calibration_check.py` — reproduz os números acima.
 | RN-06 | `engine.py`, `server.py`, `ControlLoop.java` | `test_bridge_request_response_no_frame_loss`, `test_bridge_history_stays_bounded_by_window` (`test_server.py`); validado em produção — 1500 trocas/0 falhas em servidor real (F4) | Médio |
 | RN-07 | `neuron.py` | `test_refractory` | Alto |
 | RN-08 | `motor.py`, `MotorMapping.java` | `test_motor_groups_cover_all_descendants`, `test_motor_decode_range`, `test_published_behavior_groups_are_real_types`, `test_connectivity_cluster_groups_are_real_types`, `test_steering_bilateral_pairs_are_balanced` | **Crítico — 18/47 tipos com literatura real (AD-14+AD-15), 27/34 restantes com cluster de conectividade BANC (telemetria só, não behavior medido), 1 tipo (DNpe027) ambíguo, 1 tipo (DNp40) sem nenhum dado. Canal `yaw_steering` (AD-16) é telemetria, sentido não validado. `MotorMapping.java` continua só com `phototaxis`.** |
-| RN-09 | `engine.py` | `tools/calibration_check.py` (estatístico, manual — não roda no CI) | Alto — validado por teste estatístico, ver acima |
+| RN-09 | `engine.py` | `tools/calibration_check.py` (ocelar), `tools/bristle_calibration_check.py` (F7, subcircuito `bristle` — sem recalibrar, ver acima) — estatísticos, manuais, não rodam no CI | Alto — validado por teste estatístico, ver acima |

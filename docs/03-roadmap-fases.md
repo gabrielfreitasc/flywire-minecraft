@@ -643,7 +643,7 @@ canto superior direito como esperado. Ver `plugin/README.md`.
 
 ---
 
-## F7 — Multi-sensor v2: chuva e toque 🔶 em andamento — L0/L1 extraída, L2/L3 pendente
+## F7 — Multi-sensor v2: chuva e toque 🔶 em andamento — `bristle` em L2/L3 validado, `hygro` bloqueado em L2
 
 Começou como planejamento puro (19/09/2026): registrar o plano completo antes
 de tocar em qualquer seed novo, dado que os dois sensores anteriores (F6,
@@ -730,10 +730,22 @@ falhou 3 vezes por diluição (RN-09/F1, F4 primeiro experimento, RN-08/F6).
       sempre ligado, falso positivo constante), ou colisão específica
       (`Entity#getNearbyEntities` com raio pequeno). Definir o que conta como
       evento antes de implementar, para não medir ruído de colisão trivial.
-- [ ] **Próximo passo em L2/L3:** RN-01 (sinal) aplica direto, sem override
-      novo necessário; falta calibrar bias/ruído (RN-09) pro tamanho novo
-      (1.865 ≠ 625) antes de rodar em `engine.py` — subcircuito mais barato
-      dos dois pra desbloquear (sem a complicação de RN-01a do `hygro`).
+- [x] **L2/L3 — RN-09 aplicada, sem precisar recalibrar (19/09/2026).**
+      `graph.load`/`topology.group_outputs_by_predicted_sign` generalizados
+      pra aceitar `out_dir`. Testado com os valores ATUAIS de `config.py`
+      (calibrados só pro ocelar) — a rede `bristle` já dispara espontaneamente
+      sem ajuste (semente é 90,8% excitatória, não tem a impossibilidade
+      matemática que forçou RN-09 pro ocelar). Topologia: **109/110
+      descendentes com caminho previsto excitatório** (quase sem risco de
+      cancelamento por agregação, ao contrário do ocelar 29×63). Validação
+      pareada (`tools/bristle_calibration_check.py`, N=30): t=568,5 e
+      Wilcoxon, ambos **p≈0** — efeito ~18× baseline, sem saturação (23,8% da
+      capacidade teórica). Ver RN-09 em `04-regras-de-negocio.md`.
+- [ ] **Falta pra fechar a fase real:** RN-08 equivalente (curadoria de
+      literatura pra saber que descendente do `bristle` corresponde a que
+      comportamento — não feito, nem começado) e o sensor de toque no plugin
+      (decisão de evento Bukkit ainda em aberto, ver item acima) + validação
+      por lesão em servidor real, mesmo padrão da F4.
 - [ ] Validação — idem: lesão comparando estímulo de toque real vs.
       mascarado, mesmo padrão estatístico (Welch + Mann-Whitney) já usado em
       todos os experimentos desde a F4.
@@ -763,13 +775,21 @@ nas anotações pros dois (`hygro` e `bristle`, nenhuma inventada), extraída e
 validada com `python tools/build_f7_circuits.py`. Nenhum resultado negativo
 precisou ser registrado desta vez — os dois rótulos existiam.
 
-**Critério de saída da fase inteira (L2/L3 + validação por lesão, ainda não
-atingido):** por sensor, ou o circuito chega ao mesmo padrão do ocelar — sinal
-RN-01/RN-02 resolvido, bias/ruído RN-09 calibrado pro tamanho novo, lesão com
+**Critério de saída da fase inteira (validação por lesão em servidor real,
+ainda não atingido):** por sensor, ou o circuito chega ao mesmo padrão do
+ocelar — sinal RN-01/RN-02 resolvido, bias/ruído RN-09 calibrado, lesão com
 diferença estatisticamente mensurável — ou um resultado negativo é registrado
-com a mesma transparência do dia/noite nulo da F6. `bristle` está mais perto
-(sem bloqueio de RN-01a); `hygro` depende de decidir o tratamento dos 373
-neurônios serotoninérgicos antes de calibrar RN-09.
+com a mesma transparência do dia/noite nulo da F6.
+
+**`bristle` — L2/L3 já validado (19/09/2026), ver RN-09 em
+`04-regras-de-negocio.md`.** Efeito estatístico limpíssimo (p≈0, N=30), sem
+precisar recalibrar nada. Falta só: RN-08 equivalente (curadoria de
+comportamento por tipo de descendente — não iniciada), sensor de toque no
+plugin (decisão de evento Bukkit pendente) e a lesão em servidor real.
+
+**`hygro` segue bloqueado em L2** — depende de decidir o tratamento dos 373
+neurônios serotoninérgicos (RN-01a reaberta) antes de sequer tentar calibrar
+RN-09 pra esse subcircuito.
 
 ---
 

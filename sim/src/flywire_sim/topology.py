@@ -24,6 +24,7 @@ docs/04-regras-de-negocio.md.
 from __future__ import annotations
 
 from collections import deque
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -70,15 +71,21 @@ def build_adjacency(edges: pd.DataFrame) -> dict[int, list[int]]:
 
 def group_outputs_by_predicted_sign(
     cc: graph.Connectome | None = None,
+    out_dir: Path | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Separa os nids de saída (descendentes) em (excitatorios, inibitorios)
-    conforme o sinal do caminho mais curto a partir dos fotorreceptores.
+    conforme o sinal do caminho mais curto a partir da camada sensorial.
 
     Usado por `motor.py` (canal de fototaxia, runtime) e por
     `tools/calibration_check.py` (validação estatística de RN-09, manual).
+    `out_dir` default é o circuito ocelar (`C.PROCESSED`); outros circuitos
+    (AD-17, F7) passam o próprio diretório — mesmo mecanismo, generalizado
+    para qualquer distribuição de sinal na camada sensorial (não assume
+    sinal único como o ocelar, RN-02).
     """
-    cc = cc or graph.load()
-    edges = pd.read_parquet(C.PROCESSED / "edges.parquet")
+    out_dir = C.PROCESSED if out_dir is None else out_dir
+    cc = cc or graph.load(out_dir)
+    edges = pd.read_parquet(out_dir / "edges.parquet")
     sign = graph.apply_nt_overrides(cc.nodes, graph.assign_sign(cc.nodes))
     sign_by_nid = dict(zip(cc.nodes.nid, sign))
 
