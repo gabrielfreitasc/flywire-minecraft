@@ -361,6 +361,132 @@ comando já bastava pra IA nativa mover a abelha de novo. Corrigido fazendo
 instante de execução, sem intervalo): `/flywirebee doseresponse 32 10 129.58 71.40
 -116.01`.
 
+## Validação do canal yaw_steering (F6/AD-16)
+
+`/flywirebee validateyaw [trials=20] [segundos=10] [amplitude=5.0] [x y z]` —
+responde a pergunta que `yaw_steering` (RN-08/AD-16, ver
+`docs/04-regras-de-negocio.md`) deixou em aberto: o sinal do canal corresponde
+a virar pra um lado real do mundo, ou não significa nada direcional?
+
+**Mudanças pra isso funcionar:**
+- `server.py::_group_lookup` ganhou `steering_left`/`steering_right`
+  (nomeáveis por `stimulate`) — os 2 neurônios do par bilateral, separados.
+- `MotorMapping.java` ganhou guinada: `yaw_steering` rotaciona a direção de
+  avanço em torno do eixo Y (`Vector.rotateAroundY`, Bukkit), proporcional ao
+  valor do canal. `MAX_YAW_RADIANS_PER_TICK` é provisório, não calibrado —
+  diferente de `MAX_SPEED_BLOCKS_PER_TICK` (que veio do spike técnico da F4).
+
+**3 condições sorteadas trial a trial** (mesma origem embutida no comando,
+mesma correção de deriva de `daynight`/`doseresponse`): `stimulate
+steering_left <amplitude>`, `stimulate steering_right <amplitude>`, ou nada
+(`baseline`). Métrica **não é distância** — é ângulo de giro líquido
+acumulado (bearing do deslocamento a cada 0,5s, diferença angular sinalizada
+somada ao longo do trial, corrigindo wraparound).
+
+Analisar com (a partir de `sim/`, venv ativo):
+```
+python tools/steering_validation_analysis.py
+```
+Kruskal-Wallis (3 condições) + Mann-Whitney par a par. Se `left`/`right`
+girarem em sentidos opostos e diferentes de `baseline`, o canal controla
+direção de verdade, e o sinal de cada condição diz qual sentido real do
+mundo é qual — **não decidido a priori, é o que este experimento mede.**
+
+**Rodado em servidor real, 17/09/2026 — primeira tentativa achou um bug, não
+uma resposta.** `net_turn_rad` saiu quase sempre exatamente 0,0 (giro nunca
+acumulava). Mas `path_length` variou muito e de forma consistente entre
+condições (baseline ~30 blocos, `left` ~21, `right` ~15-16, desvio quase
+zero) — efeito real em magnitude, não em direção.
+
+**Causa:** `ControlLoop` recapturava `bee.getLocation().getDirection()` — a
+orientação REAL da abelha, controlada pela IA nativa — a cada troca com a
+ponte, em vez de reaproveitar a direção já rotacionada na troca anterior. A
+rotação de `yaw_steering` nunca compunha, só tremia e voltava.
+
+**Corrigido:** `ControlLoop` ganhou um campo `heading` (direção COMANDADA,
+não a orientação visual da abelha), persistente entre trocas.
+`MotorMapping.rotatedHeading()` rotaciona esse estado; `ControlLoop` guarda o
+resultado de volta. `resetHeading()` zera o estado a cada trial de
+`SteeringValidationExperiment` (senão o giro de um trial vazaria pro
+começo do próximo).
+
+**Segunda tentativa — falso-negativo idêntico, causa diferente:** servidor
+não tinha reiniciado desde antes do jar corrigido ser copiado, rodou o mesmo
+código velho, resultado idêntico ao primeiro (`net_turn_rad`≈0). Diagnóstico
+direto no simulador (sem Minecraft) confirmou nesse meio tempo que o canal em
+si estava saudável: `yaw_steering` satura em exatamente +1,0/−1,0 estimulando
+`steering_left`/`steering_right`, desvio zero — descartou "o circuito não
+responde" como explicação antes de gastar outra rodada. **Lição: conferir o
+timestamp de "Enabling FlywireBee" no log contra a hora da cópia do jar antes
+de confiar num resultado negativo.**
+
+**✅ Terceira rodada, jar certo finalmente carregado — VALIDADO:**
+
+| Condição | Giro líquido acumulado | n |
+|---|---|---|
+| `left` | −1,776 ± 0,028 rad (−101,8°) | 4 |
+| `right` | +1,795 ± 0,003 rad (+102,8°) | 7 |
+| `baseline` | −0,004 ± 0,043 rad (−0,3°) | 9 |
+
+Kruskal-Wallis p=0,00028; `left`×`right` p=0,006 (sentidos opostos); cada um
+contra `baseline` p=0,0028 e p=0,00017. Magnitude bate com o previsto
+(`yaw_steering` saturado por 10s inteiros × `MAX_YAW_RADIANS_PER_TICK` ≈ 2 rad
+teóricos, medido ~1,8 rad).
+
+**✅ Sentido real do mundo — confirmado visualmente, 18-19/09/2026.** Dedução
+geométrica (`bearing` crescente é horário visto de cima, horário voando pra
+frente é virar pra direita): `steering_right` vira a abelha pra direita,
+`steering_left` pra esquerda. **O nome do canal bate com o lado real que ele
+controla** — confirmado pelo usuário em servidor real: `steering_left` vira a
+abelha "pra esquerda dela mesma", exatamente como previsto.
+
+**Bug à parte, encontrado na checagem visual e corrigido:** `setVelocity()`
+move a abelha mas não gira o corpo visual dela — isso é papel da IA
+nativa/pathfinding nativo, que não reage a movimento comandado por código.
+Primeira tentativa de confirmação visual (antes da correção) descreveu a
+abelha "andando de ré" e virando "esporadicamente" — parecia contradizer o
+resultado estatístico limpo, mas o log mostrou a velocidade girando suave o
+tempo todo; só a aparência estava errada. Corrigido com
+`bee.setRotation(yaw, pitch)` a cada tick em `ControlLoop::onTick` (yaw
+calculado a partir de `latestVelocity` — fórmula padrão vetor→yaw do Bukkit).
+Depois da correção: "a abelha acompanha a curva corretamente e de forma
+leve" (usuário).
+
+**Achado tangencial, ainda não investigado a fundo:** estimular
+`steering_left`/`steering_right` (1 neurônio cada) reduz a velocidade de
+avanço de forma forte e reproduzível — `right` chegou a quase metade da
+distância normal — mesmo esses neurônios não alimentando `phototaxis`
+diretamente. Sugere efeito de rede recorrente (RN-09) que se propaga além do
+canal que se pretendia medir.
+
+**O que isso NÃO prova ainda:** que `MotorMapping.java` deveria usar
+`yaw_steering` fora de experimento controlado — `MAX_YAW_RADIANS_PER_TICK` é
+provisória, não calibrada, e o canal só cobre 4 dos 47 tipos de descendente.
+
+## Painel "Flywire Bee Live" (F6, pedido do usuário 17/09/2026)
+
+Sidebar do Bukkit, liga sozinho junto com `control start`, some com `control
+stop`. Mostra 3 linhas — só canais que existem de verdade no dado (pedido
+inicial incluía `LC4`/`TTMn`, tipos celulares reais de *Drosophila* mas do
+lobo óptico, não do nosso subcircuito ocelar — não incluídos, seria inventar):
+
+- `phototaxis` — validado, F4, p=0,0014
+- `yaw_steering` — validado nesta sessão (ver acima)
+- `active_dn` — quantos descendentes dispararam na janela
+
+**Aparece no canto superior DIREITO da tela** — sidebar padrão do Minecraft,
+não existe canto superior esquerdo nativo sem resource pack.
+
+Implementação (`LiveHud.java`): truque de "entry invisível + prefixo de
+time" — a identidade de cada linha (só usada pra ordenar) é uma string de
+código de cor sem texto visível, registrada uma vez; o texto que aparece vem
+do prefixo de um `Team`, atualizável a cada chamada sem recriar a linha
+(evita flicker). Atualiza a 5Hz. Números do placar em si ficam visíveis do
+lado — limitação conhecida da API de scoreboard vanilla.
+
+**✅ Confirmado visualmente em servidor real** — painel aparece no canto
+superior direito como esperado (usuário confirmou).
+
 ## Regra
 
 O plugin **nunca** altera a simulação. Se o comportamento não emerge, o problema

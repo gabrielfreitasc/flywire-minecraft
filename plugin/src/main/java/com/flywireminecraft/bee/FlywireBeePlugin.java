@@ -54,6 +54,11 @@ import java.util.logging.Level;
  *       teleporta a abelha marcada direto, sem depender de onde ela derivou
  *       até. Rodar logo depois de {@code goals off} (que já para a maior
  *       parte do vagar) pra minimizar a janela de deriva.</li>
+ *   <li>{@code validateyaw [trials] [segundos] [amplitude] [x y z]} — F6/AD-16,
+ *       valida o sentido do canal {@code yaw_steering} (ver
+ *       {@link SteeringValidationExperiment} e {@link MotorMapping}):
+ *       estimula {@code steering_left}/{@code steering_right} e mede ângulo
+ *       de giro líquido, não distância.</li>
  * </ul>
  *
  * <p>Regra dura (ver plugin/README.md e CONVENCOES.md): o plugin NUNCA altera
@@ -68,7 +73,9 @@ public final class FlywireBeePlugin extends JavaPlugin {
             // RN-08/AD-14+AD-15 — categorias de comportamento publicado (Namiki et al.
             // 2018 + BANC connectome). Ver docs/04-regras-de-negocio.md.
             "fast_locomotion", "broad_locomotion", "wing_abdomen_movements", "steering",
-            "escape_takeoff", "landing", "flight", "walking", "ocellar", "neuromodulatory"
+            "escape_takeoff", "landing", "flight", "walking", "ocellar", "neuromodulatory",
+            // RN-08/AD-16 — par bilateral dos tipos steering (F6), pra validar yaw_steering.
+            "steering_left", "steering_right"
     );
 
     private BridgeClient startupCheckBridge;
@@ -133,6 +140,7 @@ public final class FlywireBeePlugin extends JavaPlugin {
             case "lesion" -> handleLesion(player, args);
             case "daynight" -> handleDayNight(player, args);
             case "doseresponse" -> handleDoseResponse(player, args);
+            case "validateyaw" -> handleValidateYaw(player, args);
             case "visualize" -> handleVisualize(player, args);
             case "mute" -> handleMute(player, args);
             case "unmute" -> handleUnmute(player, args);
@@ -287,6 +295,43 @@ public final class FlywireBeePlugin extends JavaPlugin {
         new LightDoseResponseExperiment(this, controlLoop).run(bee.get(), trials, secondsPerTrial, origin, player);
     }
 
+    private void handleValidateYaw(Player player, String[] args) {
+        Optional<Bee> bee = player.getWorld().getEntitiesByClass(Bee.class).stream()
+                .filter(marker::isMarked)
+                .findFirst();
+        if (bee.isEmpty()) {
+            player.sendMessage("Nenhuma abelha do FlyWire encontrada neste mundo. Use /flywirebee give primeiro.");
+            return;
+        }
+        int trials = 20;
+        int secondsPerTrial = 10;
+        double amplitude = 5.0;
+        Location origin = null;
+        try {
+            if (args.length >= 2) {
+                trials = Integer.parseInt(args[1]);
+            }
+            if (args.length >= 3) {
+                secondsPerTrial = Integer.parseInt(args[2]);
+            }
+            int remaining = args.length - 3;
+            if (remaining == 1) {
+                amplitude = Double.parseDouble(args[3]);
+            } else if (remaining == 4) {
+                amplitude = Double.parseDouble(args[3]);
+                origin = parseXyz(player, args, 4);
+            } else if (remaining != 0) {
+                throw new NumberFormatException(String.join(" ", args));
+            }
+        } catch (NumberFormatException e) {
+            player.sendMessage("Uso: /flywirebee validateyaw [trials=20] [segundosPorTrial=10] "
+                    + "[amplitude=5.0] [x y z]");
+            return;
+        }
+        new SteeringValidationExperiment(this, controlLoop).run(bee.get(), trials, secondsPerTrial, amplitude,
+                origin, player);
+    }
+
     /** {@code x y z} a partir de {@code args[startIndex]} — mesmo mundo do jogador. */
     private Location parseXyz(Player player, String[] args, int startIndex) {
         double x = Double.parseDouble(args[startIndex]);
@@ -403,7 +448,9 @@ public final class FlywireBeePlugin extends JavaPlugin {
     private String usage() {
         return "Uso: /flywirebee give | kill | spike <modo> | control <start|stop> | "
                 + "lesion [trials] [segundos] [x y z] | daynight [trials] [segundos] [blind] | "
-                + "doseresponse [trials] [segundos] | visualize <on|off> | "
+                + "doseresponse [trials] [segundos] [x y z] | "
+                + "validateyaw [trials] [segundos] [amplitude] [x y z] | "
+                + "visualize <on|off> | "
                 + "mute <grupo> | unmute <grupo|all> | stimulate <grupo> <amplitude> | goals off | "
                 + "goto <x> <y> <z>";
     }

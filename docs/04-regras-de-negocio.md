@@ -362,6 +362,98 @@ direita" no mundo — isso é a próxima pergunta a responder, não a resposta.
 
 Ver `docs/adr/README.md` AD-16.
 
+**Validação em andamento (17/09/2026):** `MotorMapping.java` ganhou guinada
+(`yaw_steering` rotaciona a direção de avanço, `MAX_YAW_RADIANS_PER_TICK`
+provisório), `server.py` expõe `steering_left`/`steering_right` pra
+`stimulate`, e `/flywirebee validateyaw` mede ângulo de giro líquido (não
+distância) comparando estimular um lado, o outro, ou nenhum.
+
+**Primeira rodada (20 trials) — bug de encanamento, não resposta.**
+`net_turn_rad` saiu quase sempre exatamente 0,0 (giro nunca acumulava), mas
+`path_length` variou muito e de forma consistente entre condições (baseline
+~30 blocos, `left` ~21, `right` ~15-16, desvio quase zero dentro de cada
+grupo) — sinal de efeito real em MAGNITUDE, não em direção. Causa: o
+`ControlLoop` recapturava `bee.getLocation().getDirection()` (orientação real
+da abelha, controlada pela IA nativa) a cada troca, em vez de reaproveitar a
+direção já rotacionada da troca anterior — a rotação nunca compunha.
+**Corrigido:** direção comandada virou estado persistente
+(`ControlLoop::heading`), separado de `MotorMapping::rotatedHeading` /
+`toVelocity`, resetado a cada trial (`resetHeading()`) pra não vazar giro de
+um trial pro outro. Rodada de re-teste pendente.
+
+**✅ VALIDADO em servidor real, 18/09/2026 (terceira rodada, jar correto
+finalmente carregado) — `yaw_steering` controla direção de verdade, e o
+sentido bate com o nome do canal:**
+
+| Condição | Giro líquido acumulado | n |
+|---|---|---|
+| `left` | −1,776 ± 0,028 rad (−101,8°) | 4 |
+| `right` | +1,795 ± 0,003 rad (+102,8°) | 7 |
+| `baseline` | −0,004 ± 0,043 rad (−0,3°) | 9 |
+
+Kruskal-Wallis p=0,00028. `left`×`right`: sentidos opostos, p=0,006. Cada um
+contra `baseline`: p=0,0028 e p=0,00017. Desvio quase zero dentro de cada
+grupo — magnitude bate com o previsto (`yaw_steering` saturado em ±1,0 por
+10s inteiros, `MAX_YAW_RADIANS_PER_TICK`×200 trocas ≈ 2 rad teóricos, medido
+~1,8 rad).
+
+**Direção real do mundo — confirmada visualmente em servidor real, 18-19/09/2026.**
+`bearing = atan2(dz,dx)` crescente é sentido horário visto de cima; girar no
+sentido horário voando pra frente é virar pra **direita** na perspectiva da
+própria abelha. `right` deu giro positivo (horário) → `steering_right` vira a
+abelha pra a direita. `left` deu negativo (anti-horário) → `steering_left`
+vira pra a esquerda. **A dedução geométrica bateu com o observado**: usuário
+confirmou visualmente, com o corpo da abelha já corrigido pra acompanhar a
+direção real (ver achado de rotação visual abaixo), que `steering_left` vira
+a abelha pra a esquerda dela mesma. **O nome do canal corresponde ao lado
+real que ele controla** — não foi definido a priori, saiu da medição.
+
+**Achado à parte, também corrigido — corpo visual não acompanhava o
+movimento real.** Primeira observação visual (18/09/2026, antes da correção
+abaixo) descreveu a abelha "andando de ré" e virando "esporadicamente" — não
+era o giro medido estando errado, era o CORPO da abelha (controlado por IA
+nativa residual/física do Minecraft) não virar junto com a velocidade real
+que `setVelocity()` aplica (Bukkit não faz isso sozinho pra movimento
+comandado por código, só pra pathfinding nativo). O log confirmou, no mesmo
+período, que o vetor de velocidade girava suave e continuamente — o problema
+era só aparência. Corrigido com `bee.setRotation(yaw, pitch)` a cada tick em
+`ControlLoop`, calculando yaw a partir de `latestVelocity`. Depois da
+correção, confirmado visualmente: a abelha "acompanha a curva corretamente e
+de forma leve".
+
+**Duas tentativas anteriores deram falso-negativo, registradas por
+transparência (não apagar o processo):**
+1. Primeira rodada: bug real — `ControlLoop` recapturava a orientação real da
+   abelha a cada troca em vez de reaproveitar a direção já rotacionada, giro
+   nunca compunha (`net_turn_rad`≈0,0 quase sempre). Corrigido guardando a
+   direção comandada como estado persistente (`ControlLoop::heading`,
+   `MotorMapping::rotatedHeading`), resetado a cada trial.
+2. Segunda rodada: o jar corrigido nunca chegou a carregar — servidor não
+   tinha reiniciado desde antes da correção ser compilada. Resultado idêntico
+   à primeira rodada, por rodar o mesmo código velho. **Lição: sempre conferir
+   o timestamp de "Enabling FlywireBee" no log contra a hora da cópia do jar
+   antes de confiar num resultado negativo.**
+
+Diagnóstico direto no simulador (sem Minecraft, antes de gastar outra rodada)
+confirmou o canal saudável antes mesmo do teste real: `yaw_steering` satura
+em exatamente +1,0 estimulando `steering_left` e −1,0 estimulando
+`steering_right`, desvio zero — usado pra descartar "o circuito não responde"
+como explicação do primeiro resultado nulo.
+
+**Achado tangencial, ainda não investigado a fundo:** estimular
+`steering_left`/`steering_right` reduz a velocidade de avanço de forma forte
+e reproduzível (`right` chegou a quase metade da distância normal), mesmo
+esses neurônios não alimentando `phototaxis` diretamente — sugere efeito de
+rede recorrente (RN-09) que se propaga além do canal que se pretendia medir.
+
+**O que isso NÃO prova ainda:** que `MotorMapping.java` deveria usar
+`yaw_steering` de verdade no controle da abelha fora de experimento — a
+constante `MAX_YAW_RADIANS_PER_TICK` é provisória, não calibrada contra
+nada, e o canal só cobre 4 dos 47 tipos de descendente. É a primeira peça de
+RN-08 completa (direção), não a peça inteira.
+
+Ver `plugin/README.md`.
+
 ---
 
 ## RN-09 · Corrente tônica de base + ruído

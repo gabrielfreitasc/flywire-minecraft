@@ -6,9 +6,9 @@ import org.bukkit.util.Vector;
 /**
  * Traduz o vetor motor da ponte em velocidade aplicável à abelha.
  *
- * <p>Usa só {@code phototaxis} — direção real (sinal), vem da topologia de
- * sinal validada estatisticamente por RN-09 (F1) e confirmada pelo
- * experimento de lesão da F4 (Mann-Whitney p=0,0014). Ver
+ * <p>Magnitude de avanço usa {@code phototaxis} — direção real (sinal), vem
+ * da topologia de sinal validada estatisticamente por RN-09 (F1) e
+ * confirmada pelo experimento de lesão da F4 (Mann-Whitney p=0,0014). Ver
  * `docs/04-regras-de-negocio.md`.
  *
  * <p><b>Histórico (16/09/2026, revertido):</b> tentamos somar
@@ -29,9 +29,28 @@ import org.bukkit.util.Vector;
  * mute|stimulate`), só não entra mais aqui. Ver `docs/04-regras-de-negocio.md`
  * (RN-08) para o relato completo.
  *
- * <p>Ainda sem direção 3D própria do circuito (yaw/lift) — RN-08 completa
- * segue pendente. Por ora, `phototaxis` vira magnitude de avanço na direção
- * que a abelha já está olhando.
+ * <p><b>Guinada (F6/AD-16, 17/09/2026, EM VALIDAÇÃO):</b> {@code yaw_steering}
+ * rotaciona a direção de avanço em torno do eixo Y, proporcional ao valor do
+ * canal — {@code rotateAroundY} do Bukkit, ângulo em radianos.
+ * {@code MAX_YAW_RADIANS_PER_TICK} é um valor provisório, não calibrado
+ * contra nada (diferente de {@code MAX_SPEED_BLOCKS_PER_TICK}, que veio do
+ * spike técnico da F4). <b>O sentido do sinal (yaw positivo → gira pra qual
+ * lado do mundo) não está validado ainda</b> — é exatamente o que
+ * `SteeringValidationExperiment` testa. Não afirmar "esquerda" ou "direita"
+ * a partir do sinal do canal até esse experimento rodar. Ver
+ * `docs/04-regras-de-negocio.md` RN-08.
+ *
+ * <p><b>Bug encontrado e corrigido na primeira tentativa (17/09/2026):</b> a
+ * rotação não acumulava porque {@code ControlLoop} recapturava
+ * {@code bee.getLocation().getDirection()} — a orientação REAL da abelha,
+ * controlada pela IA nativa — a cada troca, em vez de reaproveitar a direção
+ * já rotacionada da troca anterior. `net_turn_rad` medido saiu quase sempre
+ * exatamente 0,0 (giro nunca compõe). Corrigido separando {@link
+ * #rotatedHeading}, que `ControlLoop` chama guardando o resultado como
+ * estado persistente (campo {@code heading}, não relido da abelha a cada
+ * tick).
+ *
+ * <p>Ainda sem controle de altura (lift) — RN-08 completa segue parcial.
  *
  * <p>Escala de velocidade (`MAX_SPEED_BLOCKS_PER_TICK`) usa o mesmo valor
  * validado no spike técnico da F4 (0,3 blocos/tick ≈ 96% de eficiência com
@@ -40,11 +59,27 @@ import org.bukkit.util.Vector;
 public final class MotorMapping {
 
     private static final double MAX_SPEED_BLOCKS_PER_TICK = 0.3;
+    // Provisório — ver docstring da classe. yaw_steering=1,0 sustentado por
+    // 10s (200 ticks) gira até ~2 rad (~115°) no total.
+    private static final double MAX_YAW_RADIANS_PER_TICK = 0.01;
 
     private MotorMapping() {
     }
 
-    public static Vector toVelocity(JsonObject bridgeResponse, Vector facing) {
+    /**
+     * Rotaciona a direção comandada por {@code yaw_steering}. Quem chama
+     * (`ControlLoop`) guarda o resultado e passa de volta na próxima troca —
+     * NUNCA derivar de {@code bee.getLocation().getDirection()} a cada vez,
+     * isso é o bug já corrigido (ver docstring da classe).
+     */
+    public static Vector rotatedHeading(JsonObject bridgeResponse, Vector previousHeading) {
+        JsonObject motor = bridgeResponse.getAsJsonObject("motor");
+        double yawSteering = (motor != null && motor.has("yaw_steering"))
+                ? motor.get("yaw_steering").getAsDouble() : 0.0;
+        return previousHeading.clone().rotateAroundY(yawSteering * MAX_YAW_RADIANS_PER_TICK).normalize();
+    }
+
+    public static Vector toVelocity(JsonObject bridgeResponse, Vector heading) {
         JsonObject motor = bridgeResponse.getAsJsonObject("motor");
         if (motor == null || !motor.has("phototaxis")) {
             return new Vector(0, 0, 0);
@@ -53,7 +88,7 @@ public final class MotorMapping {
         double phototaxis = motor.get("phototaxis").getAsDouble(); // em (-1, 1)
         double activity = clamp((phototaxis + 1.0) / 2.0, 0.0, 1.0); // reescala p/ [0,1]
 
-        return facing.clone().multiply(activity * MAX_SPEED_BLOCKS_PER_TICK);
+        return heading.clone().multiply(activity * MAX_SPEED_BLOCKS_PER_TICK);
     }
 
     private static double clamp(double value, double min, double max) {

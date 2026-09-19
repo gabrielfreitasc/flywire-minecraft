@@ -54,7 +54,7 @@ from . import config as C
 from . import graph
 from .engine import Engine
 from .graph import Connectome
-from .motor import MotorDecoder, group_by_published_behavior
+from .motor import MotorDecoder, group_by_published_behavior, group_steering_by_side
 
 
 class _Handler(socketserver.StreamRequestHandler):
@@ -113,6 +113,12 @@ class SimulationServer:
         self._group_lookup: dict[str, np.ndarray] = dict(self.motor.groups)
         self._group_lookup.update(group_by_published_behavior(connectome))
         self._group_lookup["sensory"] = connectome.sensory
+        # F6/AD-16 — "steering_left"/"steering_right" nomeáveis por stimulate,
+        # pra validar o sentido do canal yaw_steering (estimular só um lado
+        # do par bilateral e medir se a abelha vira de forma consistente).
+        steering_left, steering_right = group_steering_by_side(connectome)
+        self._group_lookup["steering_left"] = steering_left
+        self._group_lookup["steering_right"] = steering_right
 
         self._tcp = _TCPServer((host, port), _Handler)
         self._tcp.bridge = self  # type: ignore[attr-defined]

@@ -45,6 +45,7 @@ public final class ControlLoop {
 
     private static final int LOG_EVERY_TICKS = 20;   // 1x por segundo
     private static final int VISUALIZE_EVERY_TICKS = 5; // 4Hz — 20Hz de partículas seria spam visual
+    private static final int HUD_EVERY_TICKS = 4;    // 5Hz — F6, painel "Flywire Bee Live"
 
     private final ActivityVisualizer visualizer = new ActivityVisualizer();
 
@@ -54,11 +55,19 @@ public final class ControlLoop {
     private final AtomicBoolean exchangeInFlight = new AtomicBoolean(false);
     private volatile Vector latestVelocity = new Vector(0, 0, 0);
     private volatile JsonObject latestMotor = new JsonObject();
+    private volatile int latestActiveDn = 0;
     private volatile long exchangeCount = 0;
     private volatile long exchangeFailures = 0;
     private long tickCount = 0;
     private volatile Double forcedLight = null;
     private volatile boolean visualize = true;
+    // F6/AD-16 — direção COMANDADA, persiste entre trocas (não é a orientação
+    // visual da abelha, que a IA nativa continua controlando). null = precisa
+    // reinicializar a partir de bee.getLocation().getDirection() no próximo
+    // tick. Bug corrigido 17/09/2026: antes recapturava a orientação real da
+    // abelha a cada troca, então a rotação de yaw_steering nunca acumulava —
+    // ver MotorMapping.java.
+    private volatile Vector heading = null;
 
     // F5 — ferramenta de lesão por comando (server.py, campo "mute"). Nomes
     // válidos: os 8 grupos por prefixo de cell_type + "sensory" (fotorreceptores).
@@ -130,6 +139,17 @@ public final class ControlLoop {
         this.forcedLight = level;
     }
 
+    /**
+     * F6/AD-16 — reinicia a direção comandada a partir da orientação real da
+     * abelha no próximo tick. Chamar antes de cada trial de
+     * {@link SteeringValidationExperiment} — sem isso, o giro acumulado de um
+     * trial vazaria pro início do próximo, quebrando a independência entre
+     * trials.
+     */
+    public void resetHeading() {
+        this.heading = null;
+    }
+
     public ControlLoop(
             Plugin plugin,
             FlywireBeeMarker marker,
@@ -158,6 +178,7 @@ public final class ControlLoop {
             return t;
         });
         latestVelocity = new Vector(0, 0, 0);
+        heading = null; // F6/AD-16 — começa do zero, da orientação real da abelha
         tickTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::onTick, 0L, 1L);
     }
 
@@ -166,6 +187,7 @@ public final class ControlLoop {
             tickTask.cancel();
             tickTask = null;
         }
+        LiveHud.clear(plugin);
         if (bridgeExecutor != null) {
             bridgeExecutor.shutdownNow();
             bridgeExecutor = null;
@@ -190,8 +212,26 @@ public final class ControlLoop {
         // RN-06: aplica o último vetor já calculado, nunca espera a ponte.
         bee.setVelocity(latestVelocity);
 
+        // F6/AD-16 — achado do usuário (18/09/2026): setVelocity() move a
+        // abelha, mas NÃO gira o corpo visual dela — isso é responsabilidade
+        // da IA nativa (MoveControl), que só ajusta esporadicamente quando
+        // não está perseguindo objetivo nenhum (a maioria removida por
+        // `goals off`). Resultado: corpo aponta pra um lado, movimento real
+        // vai pra outro — parece "andar de ré" mesmo o giro medido
+        // (net_turn_rad) estando correto. Corrigido girando o corpo junto
+        // com `latestVelocity` a cada tick — conversão vetor->yaw padrão do
+        // Bukkit (yaw=0 look +Z/sul, cresce no sentido horário visto de cima).
+        if (latestVelocity.lengthSquared() > 1.0E-6) {
+            Vector dir = latestVelocity.clone().normalize();
+            float yaw = (float) Math.toDegrees(Math.atan2(-dir.getX(), dir.getZ()));
+            bee.setRotation(yaw, bee.getLocation().getPitch());
+        }
+
         if (visualize && tickCount % VISUALIZE_EVERY_TICKS == 0) {
             visualizer.render(bee, latestMotor);
+        }
+        if (tickCount % HUD_EVERY_TICKS == 0) {
+            LiveHud.update(plugin, latestMotor, latestActiveDn);
         }
 
         double realLight = bee.getLocation().getBlock().getLightLevel() / 15.0;
@@ -212,7 +252,10 @@ public final class ControlLoop {
         double dorsalLight = bee.getLocation().getBlock().getLightFromSky() / 15.0;
         boolean damage = damageTracker.consumeRecentDamage();
         long tMs = System.currentTimeMillis();
-        Vector facing = bee.getLocation().getDirection();
+        // F6/AD-16: heading é a direção COMANDADA da troca anterior, não a
+        // orientação real da abelha — só cai pra getDirection() se ainda não
+        // tem estado (início do controle ou depois de resetHeading()).
+        Vector currentHeading = heading != null ? heading : bee.getLocation().getDirection();
 
         // Só marca muteDirty=false DEPOIS do envio ter sucesso (dentro do try
         // abaixo) — se a troca falhar, a mudança de mute não pode se perder
@@ -235,10 +278,15 @@ public final class ControlLoop {
                 if (sendStimulateThisTime) {
                     stimulateDirty = false;
                 }
-                latestVelocity = MotorMapping.toVelocity(response, facing);
+                Vector newHeading = MotorMapping.rotatedHeading(response, currentHeading);
+                latestVelocity = MotorMapping.toVelocity(response, newHeading);
+                heading = newHeading;
                 JsonObject motor = response.getAsJsonObject("motor");
                 if (motor != null) {
                     latestMotor = motor;
+                }
+                if (response.has("active_dn")) {
+                    latestActiveDn = response.get("active_dn").getAsInt();
                 }
                 exchangeCount++;
             } catch (IOException e) {

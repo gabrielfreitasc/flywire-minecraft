@@ -117,6 +117,28 @@ não de teoria:
    não se confirmou, uma vez que a extração é filtrada pros 625 neurônios do
    subcircuito, não pro conectoma inteiro.
 
+9. **`yaw_steering` controla direção real da abelha, e o sentido bate com o
+   nome do canal** (F6/AD-16, 17-19/09/2026) — primeira peça de direção de
+   RN-08 desde que o projeto começou. Três falsos-negativos/confusões pelo
+   caminho, todos registrados: (1) bug real — `ControlLoop` recapturava a
+   orientação FÍSICA da abelha a cada troca em vez de reaproveitar a direção
+   já rotacionada, giro nunca compunha; corrigido com estado persistente
+   (`ControlLoop::heading`); (2) servidor rodando código velho porque não
+   tinha reiniciado desde antes da correção ser compilada — mesmo sintoma,
+   causa totalmente diferente (diagnóstico direto no simulador, sem
+   Minecraft, evitou queimar uma terceira rodada perseguindo a hipótese
+   errada); (3) depois do resultado estatístico validado, checagem visual
+   manual pareceu contradizer tudo ("andando de ré", giro "esporádico") — na
+   verdade era um bug À PARTE: `setVelocity()` move a abelha mas não gira o
+   corpo visual dela (isso é papel da IA nativa/pathfinding, que não atualiza
+   sozinho pra movimento comandado por código). O log mostrou a velocidade
+   girando suave o tempo todo — só a aparência estava errada. Corrigido com
+   `bee.setRotation()` a cada tick. Resultado final, com confirmação visual
+   do usuário: `left`/`right` giram em sentidos opostos (p=0,006), cada um
+   contra `baseline` p=0,0028/0,00017, magnitude bate quantitativamente com o
+   mecanismo desenhado, e `steering_left` vira a abelha pra esquerda dela
+   mesma — exatamente como a dedução geométrica previu.
+
 ## O que está validado (pode ser citado com confiança)
 
 - **Extração e integridade do subcircuito** (F0): 625 nós, 2.981 arestas, validado
@@ -145,6 +167,13 @@ não de teoria:
   neurópilo dominante, 625/625 cobertos, reproduzível via
   `sim/tools/extract_anatomy.py` (21s, streaming por batch — não precisa
   carregar o arquivo de 9,5GB inteiro).
+- **`yaw_steering` controla direção real, sentido confirmado visualmente**
+  (F6/AD-16, 17-19/09/2026): Kruskal-Wallis p=0,00028, `left`×`right` p=0,006
+  (sentidos opostos), reproduzível via `/flywirebee goals off` +
+  `control start` + `validateyaw` + `sim/tools/steering_validation_analysis.py`.
+  Dedução geométrica (`steering_left` → esquerda da própria abelha)
+  confirmada visualmente em servidor real, depois de corrigir um bug à parte
+  (corpo visual não acompanhava a velocidade real — ver `plugin/README.md`).
 
 ## O que NÃO está provado (não afirmar isso)
 
@@ -160,6 +189,12 @@ não de teoria:
   sem canais iônicos, dendritos ou neuromodulação real (ver `00-visao-geral.md`).
 - **Qualquer conclusão sobre *Drosophila* real.** O corpo é abelha do Minecraft, com
   física de jogo. O resultado é sobre o *acoplamento*, não sobre etologia de mosca.
+- **Que `MotorMapping.java` deveria usar `yaw_steering` fora de experimento
+  controlado.** `steering_left`/`steering_right` viram a abelha pra
+  esquerda/direita — confirmado, estatística e visualmente. Mas
+  `MAX_YAW_RADIANS_PER_TICK` é provisória (não calibrada contra nada) e o
+  canal só cobre 4 dos 47 tipos de descendente — validar o sentido não é o
+  mesmo que estar pronto pra produção.
 
 ## Dívida técnica e limitações conhecidas
 
@@ -172,15 +207,20 @@ não de teoria:
 | N pequeno | Experimentos de lesão e dia/noite validados com N=20; mais trials fortaleceriam a conclusão | `plugin/README.md` |
 | Ruído de IA nativa | **Não é só ruído simétrico — pode mascarar OU inflar efeito, dependendo do caso.** Dia/noite: mascarava (nulo com IA ligada, p=0,00184 sem — F6). Lesão: era o oposto — repetida com `goals off` (F6, 17/09/2026), o efeito ficou MENOR (4,4% vs. 12% da F4), não maior; a F4 tinha um outlier específico inflando a diferença. Ruído de IA nativa não tem direção previsível — sempre medir de novo, não assumir. | `plugin/README.md`, `docs/03-roadmap-fases.md` F6 |
 | Mecanismo da curva de luz não explicado | Resposta à luz tem pico em 0,25, não é monotônica (Kruskal-Wallis p=0,00003) — confirmado que existe, não confirmado por quê | `docs/03-roadmap-fases.md` F6 |
+| `yaw_steering` cobre só 4/47 tipos, constante de rotação não calibrada | Sentido esquerda/direita confirmado (estatística + visual, 19/09/2026), mas `MAX_YAW_RADIANS_PER_TICK` é provisória e não cobre os outros 43 tipos de descendente | `docs/04-regras-de-negocio.md` RN-08 |
+| Efeito de rede recorrente ao estimular `steering_left`/`steering_right` | Reduz velocidade de avanço bastante (`right` quase metade), mesmo sem alimentar `phototaxis` diretamente — não investigado | `docs/04-regras-de-negocio.md` RN-08 |
 
 ## Trabalho futuro (não iniciado)
 
-- **RN-08 completa (direção)** — pares agonista/antagonista publicados seguem
-  sem aparecer na pesquisa direto, mas achou-se um caminho indireto: canal
-  `yaw_steering` (AD-16, F6) via par bilateral (`side`) dos 4 tipos steering.
-  **Pendente:** validar o que o sinal significa no mundo — exigiria medir
-  mudança de direção da abelha (heading), infraestrutura que não existe ainda
-  no plugin. Ver `docs/03-roadmap-fases.md` F6.
+- **RN-08 completa (direção)** — canal `yaw_steering` (AD-16, F6) via par
+  bilateral (`side`) dos 4 tipos steering **validado, estatística e
+  visualmente** (Kruskal-Wallis p=0,00028; `steering_left` vira a abelha pra
+  esquerda dela mesma, confirmado em servidor real 19/09/2026). **Pendente:**
+  (1) investigar o efeito de rede recorrente que reduz velocidade ao
+  estimular qualquer lado; (2) estender pros outros 43 tipos de descendente
+  sem par bilateral com função medida; (3) calibrar
+  `MAX_YAW_RADIANS_PER_TICK` antes de considerar usar em `MotorMapping.java`
+  fora de experimento. Ver `docs/03-roadmap-fases.md` F6.
 - **Multi-sensor** (chuva, toque) — toque exige extrair um circuito mecanossensorial
   inteiro, diferente do ocelar. Ver `docs/03-roadmap-fases.md`, seção "Fora de escopo".
   **Dia/noite saiu desta lista:** feito na F6, com um giro de dois atos. Primeiro deu

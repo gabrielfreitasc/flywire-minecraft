@@ -124,6 +124,21 @@ Minecraft. Subcircuito ocelar: 625 neurônios, 2.981 conexões.
   confiável: Welch e Mann-Whitney concordaram, contra Welch só marginal na F4).
   **Não assumir a direção do viés a partir de outro experimento — medir de novo
   em cada caso.**
+- **`Entity#setVelocity()` move a abelha, mas NÃO gira o corpo visual dela.**
+  Medido (F6, 18-19/09/2026, achado do usuário): depois de implementar guinada
+  real (`yaw_steering` rotacionando a direção de avanço), o resultado
+  ESTATÍSTICO deu limpo (giro suave e contínuo, log confirma), mas a checagem
+  VISUAL pareceu contradizer tudo — abelha "andando de ré", virando
+  "esporadicamente". Causa: girar o corpo de um mob é responsabilidade da IA
+  nativa/pathfinding (que ajusta yaw enquanto persegue um objetivo próprio),
+  não do `setVelocity()`. Sobrescrever velocidade por código (a técnica que já
+  domina a decisão nativa, ver achado do `setAI(false)` acima) não faz o corpo
+  virar sozinho — os dois ficam dessincronizados. Corrigido com
+  `bee.setRotation(yaw, pitch)` a cada tick, calculando yaw a partir do vetor
+  de velocidade comandado. **Se o resultado medido bate com a estatística mas
+  parece visualmente errado, suspeitar de corpo/velocidade dessincronizados
+  antes de duvidar da estatística.** Ver `ControlLoop.java`,
+  `docs/04-regras-de-negocio.md` RN-08.
 
 ## Papéis no projeto
 
