@@ -121,6 +121,40 @@ tipo celular sem ETL intermediário — que é exatamente a análise que vamos q
 Sem servidor de banco: a carga é analítica, de escrita sequencial e leitura em lote.
 Postgres resolveria o mesmo problema cobrando um container e latência de rede.
 
+## Múltiplos subcircuitos (AD-17, F7, 19/09/2026)
+
+**Decisão:** cada sensor novo (chuva, toque) é um **subcircuito independente**,
+extraído e — quando chegar a hora de L2/L3 — simulado por um `Engine` próprio,
+não fundido no grafo ocelar de 625 neurônios. Escolhido em vez de um grafo
+único maior (ocelar ∪ hygro ∪ bristle) porque:
+
+- **Isola o risco.** Uma lesão/estimulação num circuito não pode vazar efeito
+  pro outro só por estarem no mesmo grafo — mesma disciplina que já levou a
+  separar `phototaxis` de `locomotion_drive` em RN-08 (misturar canais que não
+  respondem ao mesmo estímulo dilui o sinal, 3 ocorrências documentadas).
+- **Não reabre RN-09 para o ocelar.** `BIAS_CURRENT`/`NOISE_STD` foram
+  calibrados para 625 neurônios (RN-09); um grafo único de milhares de
+  neurônios precisaria recalibrar do zero, arriscando quebrar a validação já
+  feita (lesão p=0,0014, F4).
+- **Contido, não evitado — RN-01a ainda reabre por circuito.** Cada subcircuito
+  grande o bastante (2 saltos) continua expondo neuromoduladores em massa
+  (ver RN-01a em `04-regras-de-negocio.md`), só que o efeito fica isolado
+  dentro do subcircuito que precisa dele, não contamina o ocelar.
+
+**Consequência de implementação:** `ingest.select_seed`/`ingest.build`
+generalizados para aceitar `pattern`/`hops`/`out_dir`/`circuit` (antes,
+constantes fixas em `config.py`, um subcircuito só). Chamada sem argumentos
+continua produzindo exatamente o circuito ocelar em `data/processed/` —
+nada muda para quem já consome esse caminho. Circuitos novos escrevem em
+`data/processed/<circuito>/` (nunca no diretório raiz de `processed/`, pra
+não colidir com o ocelar). Ver `sim/tools/build_f7_circuits.py`.
+
+**O que isso NÃO decide ainda:** como `server.py`/`engine.py` vão rodar
+múltiplos `Engine`s ao mesmo tempo (hoje só existe um, RN-06), nem como o
+protocolo da ponte expõe sensores/canais motores de mais de um circuito pro
+plugin. Isso é trabalho de L3/L5 da fase real de F7, não decidido aqui — esta
+seção cobre só a extração (L0→L1).
+
 ## Docker
 
 Só o simulador é containerizado. O servidor Minecraft roda nativo no Windows, porque

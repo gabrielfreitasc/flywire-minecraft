@@ -643,14 +643,15 @@ canto superior direito como esperado. Ver `plugin/README.md`.
 
 ---
 
-## F7 — Multi-sensor v2: chuva e toque (planejamento, 19/09/2026) 📋 não iniciada
+## F7 — Multi-sensor v2: chuva e toque 🔶 em andamento — L0/L1 extraída, L2/L3 pendente
 
-**Só planejamento nesta etapa — nenhuma extração de dado, nenhum código ainda.**
-Decisão do usuário (19/09/2026): registrar o plano completo antes de tocar em
-qualquer seed novo, dado que os dois sensores anteriores (F6, dia/noite) só
-saíram certos depois de descartar uma premissa errada e corrigir o desenho do
-experimento duas vezes. Objetivo desta fase: reduzir a chance de repetir isso
-descobrindo as incógnitas por escrito primeiro.
+Começou como planejamento puro (19/09/2026): registrar o plano completo antes
+de tocar em qualquer seed novo, dado que os dois sensores anteriores (F6,
+dia/noite) só saíram certos depois de descartar uma premissa errada e corrigir
+o desenho do experimento duas vezes. Ainda no mesmo dia, o levantamento de
+literatura (primeiro item do checklist) achou rótulo real pros dois sensores
+nas anotações — motivou seguir direto pra extração L0→L1 (ver checklists
+abaixo), sem esperar uma sessão nova.
 
 **Princípio geral, herdado de RN-08/RN-09 e da seção "Armadilhas conhecidas" do
 `CONVENCOES.md`:** cada sensor novo é um **subcircuito independente**, extraído
@@ -679,52 +680,49 @@ falhou 3 vezes por diluição (RN-09/F1, F4 primeiro experimento, RN-08/F6).
          vez de constante única — mudança pequena em `config.py`, mas é
          mudança de contrato de `ingest.py`, cabe em ADR mesmo assim.
 
-### Sub-trilha: chuva
+### Sub-trilha: chuva ✅ L0→L1 extraída (19/09/2026), L2/L3 pendente
 
-- [ ] Levantamento de literatura — existe circuito higro-sensorial rotulado no
-      FlyWire 783? Candidato conhecido em *Drosophila*: neurônios
-      higrosensoriais da arista, projetando para os glomérulos VP2/VP3 (via
-      antenal) no lobo antenal posterior (Enjin et al. 2016; Frank et al.
-      2017). **Não assumir que o rótulo existe** — precisa checar se
-      `cell_class`/`cell_sub_class`/`cell_type`/`supertype` em
-      `Supplemental_file1_neuron_annotations.tsv` tem algo utilizável como
-      semente (mesmo tipo de checagem que achou `ocell` pronto na F0).
-- [ ] Se existir rótulo usável: extração análoga à F0 (semente própria,
-      mesmo BFS com fronteira em `descending`, validação de totais contra o
-      que o dado descrever, `manifest.json` próprio, ADR de extração).
-- [ ] Se **não** existir rótulo direto (só cluster de conectividade, ou nada):
-      registrar resultado negativo explicitamente — mesma disciplina do
-      dia/noite na F6 (nulo é resultado, não é fracasso a esconder) — e mover
-      chuva de "v2" para "fora de escopo permanente" em vez de deixar em limbo.
+- [x] Levantamento de literatura — **rótulo existe, achado real, não
+      inventado**: `cell_class == "hygrosensory"` (74 neurônios), `cell_type`
+      `HRN_VP4`/`VP1d`/`VP5`/`VP1l`, bate exatamente com a nomenclatura VP1-5
+      de Frank et al. 2017 / Enjin et al. 2016. Ver `04-regras-de-negocio.md`
+      e `01-camada-de-dados.md`.
+- [x] Extração — feita, `python tools/build_f7_circuits.py`. Varredura de
+      saltos: 1 salto só alcança **2 descendentes** (cadeia fraca demais);
+      **decisão do usuário (19/09/2026): usar 2 saltos** (5.638 nós, 107.226
+      arestas, 41 descendentes), aceitando reabrir RN-01a.
+- [x] RN-01a reaberta e quantificada — 373 neurônios `serotonin` (371 fora da
+      fronteira motora, confiança média 0,47). **Decisão de como tratar
+      pendente** (não resolvida — não inventar sinal sem base de literatura,
+      ver RN-01a).
 - [ ] Sensor no plugin — trivial, **já disponível**: `World#hasStorm()` /
       `World#isThundering()` na API do Bukkit/Paper. Não precisa de circuito
       novo pra isso funcionar tecnicamente; precisa de circuito novo pra ter
       *significado biológico* na resposta (senão é só uma variável booleana
       somada a um canal motor qualquer — mesma armadilha de diluição de novo).
+- [ ] **Bloqueado em L2/L3:** falta resolver RN-01a (sinal dos 373
+      neurônios serotoninérgicos) e calibrar bias/ruído (RN-09) pro tamanho
+      novo (5.638 ≠ 625) antes de rodar qualquer coisa em `engine.py`.
 - [ ] Validação — mesmo desenho da lesão da F4: chuva real ligada/desligada
       (`world.setStorm(true/false)`), sorteado trial a trial na mesma rodada,
       mesma origem, teleporte dentro do mesmo comando (lição da F6 sobre
       deriva de IA nativa entre comandos manuais).
 
-### Sub-trilha: toque
+### Sub-trilha: toque ✅ L0→L1 extraída (19/09/2026), L2/L3 pendente
 
-- [ ] Levantamento de literatura — "toque" não é um circuito só, precisa
-      escolher **qual** mecanossensorial, com justificativa, não por
-      conveniência:
-      - **Cerdas mecanossensoriais (bristles)** — contato físico direto,
-        resposta mais parecida com "toque" no sentido comum.
-      - **Sensilas campaniformes (asa/perna)** — medem tensão mecânica/carga,
-        mais próximo de propriocepção de voo que de toque externo.
-      - **Órgão de Johnston (antena)** — sensível a vento/vibração do ar, não
-        a contato — provavelmente o candidato errado pro que "toque" sugere,
-        mas é o mais estudado em contexto de voo (halteres/antena).
-      A escolha decide o que a extração busca — registrar a decisão e o
-      porquê antes de rodar `select_seed`, não depois.
-- [ ] Checar rótulos disponíveis para o tipo escolhido nas anotações (mesmo
-      processo da chuva acima) — a conectividade dos 139k neurônios do cérebro
-      inteiro já está em `Connectivity_783.parquet`, só nunca fomos atrás
-      dela fora do ocelar.
-- [ ] Extração análoga (semente própria, BFS, validação, ADR).
+- [x] Levantamento de literatura e decisão registrada — **cerdas
+      mecanossensoriais** (`cell_sub_class` em `{"eye bristle", "head
+      bristle"}`, 1.417 neurônios), não órgão de Johnston (`wind_gravity`/
+      `auditory`, 874 neurônios, mesmo `cell_class == "mechanosensory"`, mas
+      mede vento/som, não contato). Sensilas campaniformes de perna/asa não
+      encontradas rotuladas separadamente nesta base (neurônios sensoriais de
+      perna majoritariamente projetam pro cordão nervoso, fora do cérebro
+      capturado pelo FlyWire). Ver `01-camada-de-dados.md`.
+- [x] Extração — feita, `python tools/build_f7_circuits.py`. **1 salto**
+      (mesmo padrão do ocelar, AD-06): 1.865 nós, 16.856 arestas, **110
+      descendentes** — mais cobertura que os 92 do ocelar. Semente 90,8%
+      acetilcolina, sem artefato sistemático tipo RN-02; 36 neurônios (2,5%)
+      `serotonin` são ruído de classificador normal, não bloqueiam nada.
 - [ ] Sensor no plugin — qual evento do Bukkit conta como "toque" precisa de
       decisão própria, não é óbvio: `EntityDamageEvent` (só cobre dano, não
       contato benigno), sobreposição de `BoundingBox` contra bloco/entidade
@@ -732,6 +730,10 @@ falhou 3 vezes por diluição (RN-09/F1, F4 primeiro experimento, RN-08/F6).
       sempre ligado, falso positivo constante), ou colisão específica
       (`Entity#getNearbyEntities` com raio pequeno). Definir o que conta como
       evento antes de implementar, para não medir ruído de colisão trivial.
+- [ ] **Próximo passo em L2/L3:** RN-01 (sinal) aplica direto, sem override
+      novo necessário; falta calibrar bias/ruído (RN-09) pro tamanho novo
+      (1.865 ≠ 625) antes de rodar em `engine.py` — subcircuito mais barato
+      dos dois pra desbloquear (sem a complicação de RN-01a do `hygro`).
 - [ ] Validação — idem: lesão comparando estímulo de toque real vs.
       mascarado, mesmo padrão estatístico (Welch + Mann-Whitney) já usado em
       todos os experimentos desde a F4.
@@ -752,13 +754,22 @@ sensor novo — ver `CONVENCOES.md`, "Armadilhas conhecidas":
   medir de novo em cada caso, não assumir.
 - `String.format`/`printf` com `%f` em CSV: sempre `Locale.ROOT`.
 
-**Critério de saída desta etapa (planejamento):** F7 registrada aqui com
-checklist e decisões pendentes explícitas — ✅ atingido com este commit.
-**Critério de saída da fase real (quando começar a implementação):** AD-17
-decidida, e para cada sensor: ou uma semente real encontrada nas anotações e
-extraída/validada como a F0, ou um resultado negativo registrado com a mesma
-transparência do dia/noite nulo da F6 — nenhum dos dois casos aceita inventar
-semente ou rótulo que o dado não sustenta.
+**Critério de saída da etapa de planejamento:** ✅ atingido (19/09/2026) — F7
+registrada com checklist e decisões pendentes explícitas.
+
+**Critério de saída da etapa L0/L1 (extração):** ✅ atingido (19/09/2026) para
+os dois sensores — AD-17 decidida (engines separados), semente real encontrada
+nas anotações pros dois (`hygro` e `bristle`, nenhuma inventada), extraída e
+validada com `python tools/build_f7_circuits.py`. Nenhum resultado negativo
+precisou ser registrado desta vez — os dois rótulos existiam.
+
+**Critério de saída da fase inteira (L2/L3 + validação por lesão, ainda não
+atingido):** por sensor, ou o circuito chega ao mesmo padrão do ocelar — sinal
+RN-01/RN-02 resolvido, bias/ruído RN-09 calibrado pro tamanho novo, lesão com
+diferença estatisticamente mensurável — ou um resultado negativo é registrado
+com a mesma transparência do dia/noite nulo da F6. `bristle` está mais perto
+(sem bloqueio de RN-01a); `hygro` depende de decidir o tratamento dos 373
+neurônios serotoninérgicos antes de calibrar RN-09.
 
 ---
 
@@ -771,7 +782,7 @@ semente ou rótulo que o dado não sustenta.
 | Circuito de 2 saltos (10.578 neurônios) | v2 |
 | Cérebro inteiro (139k) fora do loop | v3 |
 | Plasticidade / aprendizado | v3 — o conectoma é estático por natureza |
-| Multi-sensor: chuva, toque | **F7 — planejada, ver acima** (dia/noite saiu daqui, ver F6) |
+| Multi-sensor: chuva, toque | **F7 — L0/L1 extraída, L2/L3 pendente, ver acima** (dia/noite saiu daqui, ver F6) |
 
 ## Dívida técnica aberta
 

@@ -168,3 +168,71 @@ resultado parcial, nunca acumula em memória.
 
 Disco no volume do usuário: **35 GB livres de 475 GB (93% em uso)** no momento da
 decisão. Margem suficiente, mas não sobra para uma segunda cópia do conjunto.
+
+---
+
+## F7 — Subcircuitos candidatos a sensor novo (AD-17, 19/09/2026)
+
+Mesmo processo da F0 (`ingest.select_seed` + BFS a jusante), semente diferente,
+generalizado para múltiplos circuitos nomeados (ver AD-17 em
+`02-arquitetura.md`). **Isto é só L0→L1** — extração e validação de contagem.
+L2 (sinal RN-01, override tipo RN-02 se necessário) e L3 (calibração RN-09) são
+o próximo passo, não feitos ainda, mesma sequência de fases que o ocelar seguiu
+(F0 antes de F1). Reproduzível via `python tools/build_f7_circuits.py`.
+
+### `hygro` — candidato a sensor de chuva/umidade
+
+Semente = 74 neurônios `cell_class == "hygrosensory"`, achados por busca literal
+nas anotações (não inventados): `HRN_VP4` (29, subclasse `dry`), `HRN_VP1d`
+(16, `evaporative_cooling`), `HRN_VP5` (16, `moist`), `HRN_VP1l` (13,
+`cooling`) — nomenclatura bate exatamente com a literatura de neurônios
+higrosensoriais da arista (VP1-VP5, Frank et al. 2017; Enjin et al. 2016).
+Todos no nervo antenal (`AN`). **Sem artefato de classificador tipo RN-02** —
+71/74 acetilcolina (confiança 0,81), 3 GABA — a semente em si não precisa de
+override.
+
+Varredura de saltos (limiar ≥5, RN-03):
+
+| Saltos | Nós | Arestas | Descendentes |
+|---|---|---|---|
+| 1 | 280 | 6.412 | **2** — cadeia sensório-motora fraca demais pra lesão |
+| **2** | **5.638** | **107.226** | **41** |
+
+**Escolhido 2 saltos** (decisão do usuário, 19/09/2026, ver `03-roadmap-fases.md`
+F7): 1 salto alcança só 2 descendentes, sinal insuficiente pra qualquer teste
+estatístico com poder razoável (compare aos 92 do ocelar em 1 salto). 2 saltos
+alcança 41, mas **reabre RN-01a de verdade** — ver seção própria em
+`04-regras-de-negocio.md`. Composição: 1.577 sensorial · 4.020 interneurônio ·
+41 saída (nota: 1.577 sensorial é bem maior que a semente de 74 — em 2 saltos,
+outros neurônios classificados como `sensory` aparecem como alvo de conexão,
+não só a semente; não investigado a fundo, registrado para não confundir com
+"a semente cresceu").
+
+### `bristle` — candidato a sensor de toque
+
+Semente = 1.417 neurônios `cell_sub_class` em `{"eye bristle", "head bristle"}`
+(`cell_class == "mechanosensory"`) — cerdas mecanossensoriais de contato
+direto. **Decisão registrada, não óbvia:** o dado também tem `wind_gravity`
+(484) e `auditory` (390) sob o mesmo `cell_class`, ambos originados no órgão
+de Johnston (tipos `JO-*`) — medem vento/vibração do ar e som, não contato
+físico, por isso ficaram de fora da semente de "toque".
+
+Varredura de saltos (limiar ≥5):
+
+| Saltos | Nós | Arestas | Descendentes |
+|---|---|---|---|
+| **1** | **1.865** | **16.856** | **110** |
+| 2 | 6.951 | 157.371 | 666 |
+
+**Escolhido 1 salto** — mesmo padrão do circuito ocelar (AD-06), 110
+descendentes já é mais cobertura que os 92 do ocelar, sem precisar da
+complicação de 2 saltos. Composição: 1.417 sensorial (= a semente inteira,
+nenhum outro sensorial extra entra por 1 salto) · 338 interneurônio · 110
+saída. Semente é 90,8% acetilcolina (1.287/1.417, excitatório) — **sem
+artefato sistemático tipo RN-02**; 36 neurônios (2,5%) rotulados serotonina
+são ruído de classificador comum (confiança média 0,36, baixa), não um padrão
+que justifique override novo.
+
+Arquivos em `data/processed/hygro/` e `data/processed/bristle/` (não
+versionados, mesma regra de `data/processed/` — ver `.gitignore`), formato
+idêntico ao ocelar (`nodes.parquet`, `edges.parquet`, `manifest.json`).

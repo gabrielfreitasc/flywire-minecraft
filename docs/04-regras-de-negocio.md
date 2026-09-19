@@ -44,6 +44,26 @@ Deixar como está na v1. **Reabrir obrigatoriamente** ao ampliar o escopo (2 sal
 cérebro inteiro), onde neuromoduladores aparecem em massa no meio do circuito e silenciá-los
 deixa de ser inócuo.
 
+**Reaberta de fato — subcircuito `hygro`, F7/AD-17 (19/09/2026).** Extração do
+candidato a sensor de chuva (`docs/01-camada-de-dados.md`) exigiu 2 saltos
+(1 salto só alcançava 2 descendentes — sinal insuficiente). Medido:
+**373 neurônios rotulados `serotonin`** em 5.638 nós (318 sensorial, 53
+interneurônio, 2 saída), confiança média 0,47. **371 estão fora da fronteira
+motora** — ao contrário do ocelar (4 afetados, todos folhas, impacto nulo),
+aqui a maioria fica no MEIO do circuito, silenciando conexões reais de
+propagação, não só saídas mortas.
+
+**Decisão pendente, não resolvida ainda:** manter sinal 0 (comportamento
+default de RN-01a) silencia de verdade uma fração não-trivial (6,6%) do
+subcircuito hygro — atenua o sinal que se quer medir, mas não é o mesmo erro
+de "somar canais que não respondem ao mesmo estímulo" (RN-08/RN-09) porque
+aqui não há dois canais a somar, é incerteza genuína sobre o papel funcional
+da serotonina nesse trecho do circuito. Registrado como bloqueio conhecido
+para a fase real de F7 (L2/L3 do subcircuito `hygro`) — não inventar um sinal
+para esses neurônios sem base de literatura, mesma disciplina de RN-02 (que só
+teve override porque havia motivo biológico concreto — histamina fora das 6
+classes do classificador — não porque "0 não serve").
+
 **Achado (17/09/2026) — `DNp27` provavelmente é erro de classificador, não
 neurônio serotonérgico de verdade.** Cruzando nossos 168 tipos celulares contra
 `gt_data.csv` (flyconnectome/drosophila_neurotransmitters — dado de literatura,

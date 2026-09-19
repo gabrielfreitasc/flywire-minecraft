@@ -64,35 +64,53 @@ def load_connectivity() -> pd.DataFrame:
     return edges
 
 
-def select_seed(ann: pd.DataFrame) -> set[int]:
-    """Semente = tudo anotado como ocelar (RN-04 define a fronteira, não a semente)."""
+def select_seed(ann: pd.DataFrame, pattern: str | None = None) -> set[int]:
+    """Semente = tudo cujo rótulo casa com `pattern` (RN-04 define a fronteira,
+    não a semente). `pattern` default é o circuito ocelar (AD-06); outros
+    circuitos (AD-17) passam seu próprio padrão — mesma mecânica, semente
+    diferente."""
+    pattern = C.SEED_PATTERN if pattern is None else pattern
     cols = ["super_class", "cell_class", "cell_sub_class", "supertype", "cell_type"]
     hit = ann[cols].apply(
-        lambda c: c.str.lower().str.contains(C.SEED_PATTERN), axis=0
+        lambda c: c.str.lower().str.contains(pattern), axis=0
     ).any(axis=1)
     return set(ann.loc[hit, "root_id"])
 
 
-def expand(edges: pd.DataFrame, seed: set[int], descending: set[int]) -> set[int]:
+def expand(
+    edges: pd.DataFrame, seed: set[int], descending: set[int], hops: int | None = None
+) -> set[int]:
     """BFS a jusante. Não atravessa neurônios descendentes — RN-04."""
+    hops = C.HOPS if hops is None else hops
     keep, frontier = set(seed), set(seed)
-    for _ in range(C.HOPS):
+    for _ in range(hops):
         nxt = set(edges.loc[edges.pre.isin(frontier - descending), "post"]) - keep
         keep |= nxt
         frontier = nxt
     return keep
 
 
-def build() -> dict:
-    C.PROCESSED.mkdir(parents=True, exist_ok=True)
+def build(
+    *,
+    pattern: str | None = None,
+    hops: int | None = None,
+    out_dir: Path | None = None,
+    circuit: str = "ocellar",
+) -> dict:
+    """Constrói um subcircuito e grava nodes/edges/manifest em `out_dir`
+    (default: `data/processed/`, o circuito ocelar da v1 — AD-06). Outros
+    circuitos (AD-17, F7) passam `out_dir` próprio para não colidir com o
+    ocelar; nunca compartilham arquivo."""
+    out_dir = C.PROCESSED if out_dir is None else out_dir
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     ann = load_annotations()
     edges = load_connectivity()
     edges = edges[edges.syn >= C.SYN_THRESHOLD]  # RN-03
 
-    seed = select_seed(ann)
+    seed = select_seed(ann, pattern)
     descending = set(ann.loc[ann.super_class == "descending", "root_id"])
-    keep = expand(edges, seed, descending)
+    keep = expand(edges, seed, descending, hops)
 
     sub = edges[edges.pre.isin(keep) & edges.post.isin(keep)].copy()
 
@@ -113,15 +131,17 @@ def build() -> dict:
     sub["pre_nid"] = sub.pre.map(idx).astype("int32")
     sub["post_nid"] = sub.post.map(idx).astype("int32")
 
-    nodes.to_parquet(C.PROCESSED / "nodes.parquet", index=False)
+    nodes.to_parquet(out_dir / "nodes.parquet", index=False)
     sub[["pre_nid", "post_nid", "syn", "sign_source"]].to_parquet(
-        C.PROCESSED / "edges.parquet", index=False
+        out_dir / "edges.parquet", index=False
     )
 
     manifest = {
+        "circuit": circuit,
+        "seed_pattern": C.SEED_PATTERN if pattern is None else pattern,
         "materialization": C.MATERIALIZATION,
         "syn_threshold": C.SYN_THRESHOLD,
-        "hops": C.HOPS,
+        "hops": C.HOPS if hops is None else hops,
         "seed_neurons": len(seed),
         "nodes": len(nodes),
         "edges": len(sub),
@@ -138,7 +158,7 @@ def build() -> dict:
             "Shiu et al. 2024",
         ],
     }
-    (C.PROCESSED / "manifest.json").write_text(json.dumps(manifest, indent=2))
+    (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
     return manifest
 
 
