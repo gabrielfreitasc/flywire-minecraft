@@ -65,6 +65,18 @@ public final class ControlLoop {
     // F7/AD-17 — telemetria do subcircuito bristle (vazio se server.py não
     // tiver bristle_connectome carregado).
     private volatile JsonObject latestBristleMotor = new JsonObject();
+    // F7/AD-17 — achado em servidor real (20/09/2026): pausar TouchSensor só
+    // ENQUANTO grooming está ativo não bastava. Toda vez que grooming CRUZA
+    // o limiar (subindo OU descendo), a velocidade comandada muda de direção
+    // abruptamente (voo horizontal <-> descida vertical) — a abelha tem
+    // inércia física, não troca de direção instantaneamente, e esse
+    // descompasso momentâneo parecia "toque" de novo, prolongando a
+    // oscilação. Folga curta em torno de QUALQUER troca de estado (não só
+    // entrando) resolve. GROOMING_TRANSITION_GRACE_TICKS é provisório, não
+    // calibrado.
+    private static final int GROOMING_TRANSITION_GRACE_TICKS = 10; // 0,5s a 20Hz
+    private boolean wasGroomingActive = false;
+    private int groomingGraceTicksLeft = 0;
     private volatile long exchangeCount = 0;
     private volatile long exchangeFailures = 0;
     private long tickCount = 0;
@@ -190,6 +202,8 @@ public final class ControlLoop {
         lastAppliedVelocity = new Vector(0, 0, 0);
         heading = null; // F6/AD-16 — começa do zero, da orientação real da abelha
         touchSensor.reset(); // F7/AD-17 — sem posição anterior pra comparar ainda
+        wasGroomingActive = false;
+        groomingGraceTicksLeft = 0;
         tickTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::onTick, 0L, 1L);
     }
 
@@ -227,8 +241,19 @@ public final class ControlLoop {
         // micro-mover, conta como touch_contact, realimenta grooming, nunca
         // solta). touchSensor.reset() garante que, quando grooming soltar,
         // a comparação recomeça do zero, sem posição antiga arrastada.
-        if (MotorMapping.isGroomingActive(latestBristleMotor)) {
+        boolean groomingActive = MotorMapping.isGroomingActive(latestBristleMotor);
+        if (groomingActive != wasGroomingActive) {
+            // Acabou de cruzar o limiar (subindo ou descendo) — folga, ver
+            // docstring do campo acima.
+            groomingGraceTicksLeft = GROOMING_TRANSITION_GRACE_TICKS;
+        }
+        wasGroomingActive = groomingActive;
+
+        if (groomingActive || groomingGraceTicksLeft > 0) {
             touchSensor.reset();
+            if (groomingGraceTicksLeft > 0) {
+                groomingGraceTicksLeft--;
+            }
         } else {
             // grava ANTES de aplicar a velocidade nova: compara a posição
             // atual (resultado de lastAppliedVelocity, aplicada no tick

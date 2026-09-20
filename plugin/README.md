@@ -546,9 +546,24 @@ mais decolou — `grooming` saturado em 0,998-0,999 por minutos,
 **Corrigido:** `ControlLoop` pausa `TouchSensor` (reset em vez de gravar)
 sempre que `MotorMapping.isGroomingActive` já está no controle;
 `touch_proximity`/`damage` continuam ativos (sinais externos genuínos, não
-autorreferentes). Jar novo compilado e copiado — **precisa reiniciar o
-servidor**, ainda sem re-teste visual confirmando a correção. Ver
-`docs/02-arquitetura.md`, `docs/03-roadmap-fases.md` F7,
+autorreferentes).
+
+**✅ Reteste em servidor real confirmou o loop principal resolvido — e
+achou um segundo efeito mais sutil, também corrigido (20/09/2026).**
+Com `proximity` genuíno (usuário por perto) ela ficou parada certo, e
+decolou sozinha assim que ele se afastou — sem nenhum `touch_contact`
+espúrio. Mas numa área bem aberta, sem obstáculo nenhum, ela ficou
+**oscilando** — pousando e decolando em ciclo, sem se estabilizar. Causa:
+toda vez que `grooming` cruza o limiar (subindo ou descendo), a velocidade
+comandada troca de direção bruscamente (voo horizontal ↔ descida
+vertical) — a inércia física da abelha não acompanha instantaneamente, e
+esse descompasso de um tick parecia "toque" de novo bem na hora da
+transição. **Segunda correção:** folga de
+`GROOMING_TRANSITION_GRACE_TICKS=10` (0,5s, provisório) pausando
+`TouchSensor` por um tempo depois de QUALQUER troca de estado do
+`grooming`, não só enquanto ele está ativo. Jar novo compilado e copiado —
+**precisa reiniciar o servidor de novo, ainda sem reteste desta correção
+específica**. Ver `docs/02-arquitetura.md`, `docs/03-roadmap-fases.md` F7,
 `MotorMapping.isGroomingActive`, `ControlLoop.onTick`.
 
 ## Regra

@@ -782,12 +782,30 @@ falhou 3 vezes por diluição (RN-09/F1, F4 primeiro experimento, RN-08/F6).
       (mesma lição já registrada: trocar o jar no disco não afeta o
       processo rodando). Achado registrado com transparência, não
       escondido — ver `MotorMapping.isGroomingActive`, `ControlLoop.onTick`.
-- [ ] **Falta: re-testar em servidor real com a correção**, confirmar que
-      ela agora decola normal depois de pousar (mesmo cuidado já registrado
-      pro `yaw_steering`: resultado pode bater no papel e ainda parecer
-      errado visualmente por outro motivo). Só depois faz sentido a lesão
-      (comparar toque real vs. mascarado, medindo se ela pousa mais/menos,
-      mesmo padrão da F4).
+- [x] **Reteste em servidor real (20/09/2026) — correção funcionou pro
+      loop principal, achou um segundo efeito mais sutil.** Depois de
+      reiniciar com o jar corrigido: nenhum `touch_contact` disparou
+      enquanto ela ficou parada só por `proximity` genuíno (usuário por
+      perto) — assim que ele se afastou, `grooming` caiu e ela decolou
+      sozinha. **Mas** numa área bem aberta (sem galho nenhum), ela ficou
+      OSCILANDO — pousando e decolando em ciclo, sem se estabilizar em voo
+      livre. Causa: toda vez que `grooming` cruza o limiar (subindo OU
+      descendo), a velocidade comandada troca de direção bruscamente
+      (voo horizontal ↔ descida vertical) — a abelha tem inércia física,
+      não troca instantaneamente, e esse descompasso de UM tick parecia
+      "toque" de novo, bem na hora da transição, empurrando `grooming` pra
+      cima de novo antes de decair de verdade.
+- [x] **Segunda correção (20/09/2026):** folga de
+      `GROOMING_TRANSITION_GRACE_TICKS=10` (0,5s, provisório) pausando
+      `TouchSensor` não só enquanto `grooming` está ativo, mas por um
+      tempinho depois de QUALQUER troca de estado (entrando ou saindo).
+      `ControlLoop` ganhou `wasGroomingActive`/`groomingGraceTicksLeft`.
+      Compila limpo, jar copiado — **precisa reiniciar o servidor de
+      novo, ainda sem reteste desta correção específica**.
+- [ ] **Falta: reteste da segunda correção** — confirmar que ela se
+      estabiliza em voo livre numa área aberta, sem ficar oscilando.
+      Só depois faz sentido a lesão (comparar toque real vs. mascarado,
+      medindo se ela pousa mais/menos, mesmo padrão da F4).
 - [x] **L2/L3 — RN-09 aplicada, sem precisar recalibrar (19/09/2026).**
       `graph.load`/`topology.group_outputs_by_predicted_sign` generalizados
       pra aceitar `out_dir`. Testado com os valores ATUAIS de `config.py`
