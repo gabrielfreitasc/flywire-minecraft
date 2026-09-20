@@ -525,10 +525,23 @@ sem encostar = true).
 `touch_contact`/`touch_proximity` combinam em OR e estimulam a semente do
 bristle; a resposta ganha `bristle_motor`/`bristle_active_dn` — testado
 contra o container Docker real, `grooming` saturou perto de 1,0 sob toque
-sustentado. **`MotorMapping.java` continua sem usar nada disso** — é
-telemetria, não vira comportamento da abelha ainda (falta lesão validando
-em servidor real). Ver `docs/02-arquitetura.md`, `docs/03-roadmap-fases.md`
-F7, `sim/src/flywire_sim/server.py`.
+sustentado.
+
+**✅ `grooming` vira comportamento real (20/09/2026), decisão do usuário:
+abelha pousa numa superfície próxima e fica parada "se limpando".**
+`MotorMapping.toVelocity` agora recebe `bee.isOnGround()` além da resposta
+da ponte — quando `grooming` (`bristle_motor`) passa de
+`GROOMING_THRESHOLD=0,5`, ignora `phototaxis` por completo: desce a
+`LANDING_DESCENT_BLOCKS_PER_TICK` (só vertical, zero horizontal) até tocar
+o chão, e fica com velocidade zero enquanto `grooming` continuar ativo.
+`LiveHud` ganhou uma 4ª linha (`grooming`) e o log periódico do
+`ControlLoop` ganhou `grooming=`/`onGround=` — dá pra acompanhar ao vivo.
+**Nenhuma das constantes foi calibrada, e o comportamento ainda não foi
+visto rodando em servidor real** (compilou limpo, `./gradlew build`, mas
+sem teste visual ainda — mesma cautela que já valeu pro `yaw_steering`:
+resultado pode bater no papel e ainda assim parecer estranho no jogo até
+confirmar visualmente). Ver `docs/02-arquitetura.md`,
+`docs/03-roadmap-fases.md` F7, `MotorMapping.java`.
 
 ## Regra
 

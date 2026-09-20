@@ -643,7 +643,7 @@ canto superior direito como esperado. Ver `plugin/README.md`.
 
 ---
 
-## F7 — Multi-sensor v2: chuva e toque 🔶 em andamento — `bristle` integrado ponta a ponta (plugin+simulador), falta lesão em servidor real; `hygro` bloqueado em L2
+## F7 — Multi-sensor v2: chuva e toque 🔶 em andamento — `bristle` controla a abelha (pouso via `grooming`), falta checagem visual + lesão; `hygro` bloqueado em L2
 
 Começou como planejamento puro (19/09/2026): registrar o plano completo antes
 de tocar em qualquer seed novo, dado que os dois sensores anteriores (F6,
@@ -754,8 +754,22 @@ falhou 3 vezes por diluição (RN-09/F1, F4 primeiro experimento, RN-08/F6).
       leria o `edges.parquet` errado (nids de cada circuito são espaços
       independentes, AD-17). Testado contra o container Docker real (não só
       testes automatizados): `grooming` saturou perto de 1,0 sob
-      `touch_contact` sustentado. **`MotorMapping.java` não usa nada
-      disso** — telemetria, não controle, falta lesão em servidor real.
+      `touch_contact` sustentado.
+- [x] **`grooming` passa a controlar a abelha (20/09/2026), decisão do
+      usuário.** `MotorMapping.java` ganhou lógica de pouso: `grooming` >
+      `GROOMING_THRESHOLD=0,5` faz a abelha ignorar `phototaxis`, descer
+      (`LANDING_DESCENT_BLOCKS_PER_TICK`, vertical, zero horizontal) até
+      tocar o chão, e ficar parada — "pousa e se limpa". Constantes
+      provisórias, sem calibração. `LiveHud`/log periódico do
+      `ControlLoop` mostram `grooming`/`onGround` pra acompanhar em
+      servidor real. Compila limpo (`./gradlew build`). **Ainda sem teste
+      em servidor real** — próximo passo antes da lesão.
+- [ ] **Falta: validar visualmente em servidor real** que a abelha
+      realmente pousa quando `grooming` ativa (mesmo cuidado já registrado
+      pro `yaw_steering`: resultado pode bater estatisticamente mas parecer
+      errado visualmente por algum motivo não previsto). Só depois faz
+      sentido a lesão (comparar toque real vs. mascarado, medindo se ela
+      pousa mais/menos, mesmo padrão da F4).
 - [x] **L2/L3 — RN-09 aplicada, sem precisar recalibrar (19/09/2026).**
       `graph.load`/`topology.group_outputs_by_predicted_sign` generalizados
       pra aceitar `out_dir`. Testado com os valores ATUAIS de `config.py`
@@ -831,8 +845,11 @@ cluster de conectividade. `TouchSensor.java` envia `touch_contact`/
 `touch_proximity` — testado em servidor real (cubículo fechado vs. área
 aberta). `SimulationServer` roda um segundo `Engine` pro `bristle`, testado
 de ponta a ponta contra o container Docker real (`grooming` satura perto de
-1,0 sob toque sustentado). **Falta só:** a lesão em servidor real, com
-jogador — critério de saída de verdade da fase, mesmo padrão da F4.
+1,0 sob toque sustentado). **`grooming` já controla a abelha de verdade**
+(pousa/fica parada, `MotorMapping.java`, ainda sem checagem visual em
+servidor real). **Falta:** confirmar visualmente que o pouso funciona como
+esperado, depois a lesão em servidor real com jogador — critério de saída
+de verdade da fase, mesmo padrão da F4.
 
 **`hygro` segue bloqueado em L2** — depende de decidir o tratamento dos 373
 neurônios serotoninérgicos (RN-01a reaberta) antes de sequer tentar calibrar

@@ -55,6 +55,25 @@ import org.bukkit.util.Vector;
  * <p>Escala de velocidade (`MAX_SPEED_BLOCKS_PER_TICK`) usa o mesmo valor
  * validado no spike técnico da F4 (0,3 blocos/tick ≈ 96% de eficiência com
  * IA ligada — ver plugin/README.md).
+ *
+ * <p><b>Grooming (F7/AD-17, 20/09/2026, PRIMEIRA VEZ QUE O BRISTLE CONTROLA A
+ * ABELHA — decisão do usuário).</b> Quando {@code bristle_motor.grooming}
+ * (único canal do subcircuito `bristle` com comportamento PUBLICADO, RN-08 —
+ * ver `bristle_motor.py`) passa de {@link #GROOMING_THRESHOLD}, a abelha
+ * PARA de responder a {@code phototaxis} e desce (velocidade vertical
+ * negativa fixa, zero horizontal) até tocar o chão; uma vez no chão, fica
+ * parada — "pousa numa superfície próxima e fica se limpando". Sem esse
+ * canal ativo, comportamento idêntico a antes desta mudança.
+ *
+ * <p><b>Nada disto foi validado por lesão em servidor real ainda</b> — é a
+ * PRIMEIRA vez que qualquer canal do `bristle` produz efeito observável na
+ * abelha (antes era só telemetria, RN-09/RN-08 validaram o circuito
+ * isoladamente). {@code GROOMING_THRESHOLD} e
+ * {@code LANDING_DESCENT_BLOCKS_PER_TICK} são estimativas de engenharia,
+ * não calibradas — mesma disciplina de {@code MAX_YAW_RADIANS_PER_TICK}
+ * quando foi introduzido. O experimento de lesão real (comparar abelha com
+ * toque real vs. mascarado, medindo se ela realmente pousa mais/menos) é o
+ * próximo passo, não feito aqui.
  */
 public final class MotorMapping {
 
@@ -62,6 +81,15 @@ public final class MotorMapping {
     // Provisório — ver docstring da classe. yaw_steering=1,0 sustentado por
     // 10s (200 ticks) gira até ~2 rad (~115°) no total.
     private static final double MAX_YAW_RADIANS_PER_TICK = 0.01;
+
+    // F7/AD-17 — grooming satura perto de 1,0 sob estímulo sustentado
+    // (medido via TCP direto contra o simulador, ver docs/03-roadmap-fases.md
+    // F7); 0,5 é o meio da faixa, PROVISÓRIO, não calibrado contra
+    // comportamento real da abelha.
+    private static final double GROOMING_THRESHOLD = 0.5;
+    // Descida vertical enquanto GROOMING_THRESHOLD é ultrapassado, até
+    // tocar o chão. PROVISÓRIO — nunca testado em servidor real.
+    private static final double LANDING_DESCENT_BLOCKS_PER_TICK = 0.1;
 
     private MotorMapping() {
     }
@@ -79,7 +107,18 @@ public final class MotorMapping {
         return previousHeading.clone().rotateAroundY(yawSteering * MAX_YAW_RADIANS_PER_TICK).normalize();
     }
 
-    public static Vector toVelocity(JsonObject bridgeResponse, Vector heading) {
+    /**
+     * @param onGround estado FÍSICO atual da abelha ({@code bee.isOnGround()}
+     *     — {@code MotorMapping} não toca na API do Bukkit diretamente, quem
+     *     chama (`ControlLoop`) fornece o estado do mundo).
+     */
+    public static Vector toVelocity(JsonObject bridgeResponse, Vector heading, boolean onGround) {
+        if (readGrooming(bridgeResponse) > GROOMING_THRESHOLD) {
+            // F7/AD-17 — grooming vence phototaxis: para de avançar, desce até
+            // pousar, fica parada uma vez no chão.
+            return onGround ? new Vector(0, 0, 0) : new Vector(0, -LANDING_DESCENT_BLOCKS_PER_TICK, 0);
+        }
+
         JsonObject motor = bridgeResponse.getAsJsonObject("motor");
         if (motor == null || !motor.has("phototaxis")) {
             return new Vector(0, 0, 0);
@@ -89,6 +128,14 @@ public final class MotorMapping {
         double activity = clamp((phototaxis + 1.0) / 2.0, 0.0, 1.0); // reescala p/ [0,1]
 
         return heading.clone().multiply(activity * MAX_SPEED_BLOCKS_PER_TICK);
+    }
+
+    private static double readGrooming(JsonObject bridgeResponse) {
+        JsonObject bristleMotor = bridgeResponse.getAsJsonObject("bristle_motor");
+        if (bristleMotor == null || !bristleMotor.has("grooming")) {
+            return 0.0; // sem Engine do bristle rodando (server.py sem bristle_connectome) — sem efeito, comportamento antigo
+        }
+        return bristleMotor.get("grooming").getAsDouble();
     }
 
     private static double clamp(double value, double min, double max) {

@@ -62,6 +62,9 @@ public final class ControlLoop {
     private volatile Vector lastAppliedVelocity = new Vector(0, 0, 0);
     private volatile JsonObject latestMotor = new JsonObject();
     private volatile int latestActiveDn = 0;
+    // F7/AD-17 — telemetria do subcircuito bristle (vazio se server.py não
+    // tiver bristle_connectome carregado).
+    private volatile JsonObject latestBristleMotor = new JsonObject();
     private volatile long exchangeCount = 0;
     private volatile long exchangeFailures = 0;
     private long tickCount = 0;
@@ -245,7 +248,7 @@ public final class ControlLoop {
             visualizer.render(bee, latestMotor);
         }
         if (tickCount % HUD_EVERY_TICKS == 0) {
-            LiveHud.update(plugin, latestMotor, latestActiveDn);
+            LiveHud.update(plugin, latestMotor, latestActiveDn, latestBristleMotor);
         }
 
         double realLight = bee.getLocation().getBlock().getLightLevel() / 15.0;
@@ -253,11 +256,14 @@ public final class ControlLoop {
         double light = forced != null ? forced : realLight;
 
         if (tickCount % LOG_EVERY_TICKS == 0) {
+            String grooming = latestBristleMotor.has("grooming")
+                    ? String.format(Locale.ROOT, "%.3f", latestBristleMotor.get("grooming").getAsDouble())
+                    : "-";
             plugin.getLogger().info(String.format(Locale.ROOT,
                     "[ControlLoop] light=%.2f (real=%.2f, forçado=%s) vel=%s trocas=%d falhas=%d "
-                            + "proximity=%s",
+                            + "proximity=%s grooming=%s onGround=%s",
                     light, realLight, forced, latestVelocity, exchangeCount, exchangeFailures,
-                    touchSensor.isNearSomething(bee)));
+                    touchSensor.isNearSomething(bee), grooming, bee.isOnGround()));
         }
         tickCount++;
 
@@ -307,7 +313,7 @@ public final class ControlLoop {
                     stimulateDirty = false;
                 }
                 Vector newHeading = MotorMapping.rotatedHeading(response, currentHeading);
-                latestVelocity = MotorMapping.toVelocity(response, newHeading);
+                latestVelocity = MotorMapping.toVelocity(response, newHeading, bee.isOnGround());
                 heading = newHeading;
                 JsonObject motor = response.getAsJsonObject("motor");
                 if (motor != null) {
@@ -315,6 +321,10 @@ public final class ControlLoop {
                 }
                 if (response.has("active_dn")) {
                     latestActiveDn = response.get("active_dn").getAsInt();
+                }
+                JsonObject bristleMotor = response.getAsJsonObject("bristle_motor");
+                if (bristleMotor != null) {
+                    latestBristleMotor = bristleMotor;
                 }
                 exchangeCount++;
             } catch (IOException e) {

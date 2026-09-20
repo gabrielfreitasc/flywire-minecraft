@@ -129,9 +129,15 @@ equivalente ainda sem lesão validando em servidor real) e
 `bristle_active_dn`. Testado de ponta a ponta contra o container Docker
 real (não só nos testes automatizados): `grooming` saturou perto de 1,0
 sob `touch_contact` sustentado, consistente com o efeito ~18× já medido.
-`MotorMapping.java` continua sem usar nenhum canal do `bristle` — é
-telemetria, não controle. Ver `docs/03-roadmap-fases.md` F7,
-`sim/src/flywire_sim/server.py`, `sim/src/flywire_sim/bristle_motor.py`.
+
+**✅ `grooming` virou controle real (20/09/2026), decisão do usuário.**
+`MotorMapping.java` faz a abelha ignorar `phototaxis` e pousar/ficar parada
+quando `grooming` passa de `GROOMING_THRESHOLD` — primeira vez que um canal
+do `bristle` sai de telemetria pura pra efeito observável. Constantes
+provisórias, sem validação visual em servidor real ainda. Ver
+`docs/03-roadmap-fases.md` F7, `sim/src/flywire_sim/server.py`,
+`sim/src/flywire_sim/bristle_motor.py`,
+`plugin/.../MotorMapping.java`.
 
 ### Protocolo da ponte
 - TCP em `localhost:8765`, JSON-lines (`\n`), UTF-8.

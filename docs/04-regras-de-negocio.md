@@ -513,11 +513,20 @@ Cobertura total: 6+52+2 = 60/60, nenhum tipo perdido.
 **O que isto estabelece:** a mesma metodologia de RN-08 (medido > putativo,
 não fabricar semântica, registrar cobertura parcial com transparência)
 generaliza pra um segundo subcircuito sem mudar de regra — só de fonte de
-dado. **O que isto NÃO faz:** não há decodificador de motor rodando pro
-`bristle` — isto é curadoria (pesquisa), não integração; `MotorMapping.java`
-não foi tocado. Ver `docs/03-roadmap-fases.md` F7,
-`sim/src/flywire_sim/bristle_motor.py`,
-`tests/test_bristle_motor.py`.
+dado. Ver `sim/src/flywire_sim/bristle_motor.py`, `tests/test_bristle_motor.py`.
+
+**Atualização — `grooming` passa a controlar a abelha de verdade (F7/AD-17,
+20/09/2026), decisão do usuário.** Primeira vez que um canal do `bristle`
+sai de telemetria pura pra efeito observável: quando `grooming` (o único
+canal com comportamento PUBLICADO, não cluster de conectividade) passa de
+`GROOMING_THRESHOLD=0,5`, `MotorMapping.java` ignora `phototaxis` e faz a
+abelha descer/pousar/ficar parada ("se limpando") até o canal cair de novo.
+Mesma disciplina de `phototaxis`/`yaw_steering`: constantes provisórias
+(`GROOMING_THRESHOLD`, `LANDING_DESCENT_BLOCKS_PER_TICK`), sem calibração,
+sem validação por lesão em servidor real ainda — isso é o próximo passo
+(comparar abelha com toque real vs. mascarado, medindo se ela realmente
+pousa diferente). Ver `plugin/src/main/java/.../MotorMapping.java`,
+`docs/03-roadmap-fases.md` F7.
 
 ---
 
