@@ -536,12 +536,20 @@ da ponte — quando `grooming` (`bristle_motor`) passa de
 o chão, e fica com velocidade zero enquanto `grooming` continuar ativo.
 `LiveHud` ganhou uma 4ª linha (`grooming`) e o log periódico do
 `ControlLoop` ganhou `grooming=`/`onGround=` — dá pra acompanhar ao vivo.
-**Nenhuma das constantes foi calibrada, e o comportamento ainda não foi
-visto rodando em servidor real** (compilou limpo, `./gradlew build`, mas
-sem teste visual ainda — mesma cautela que já valeu pro `yaw_steering`:
-resultado pode bater no papel e ainda assim parecer estranho no jogo até
-confirmar visualmente). Ver `docs/02-arquitetura.md`,
-`docs/03-roadmap-fases.md` F7, `MotorMapping.java`.
+**❌→✅ Bug real encontrado no primeiro teste em servidor real e corrigido
+(20/09/2026): loop auto-sustentado.** Abelha pousou numa árvore e nunca
+mais decolou — `grooming` saturado em 0,998-0,999 por minutos,
+`touch_contact` disparando sem parar. Causa: o PRÓPRIO pouso contava como
+"toque" — parada em cima de um bloco, qualquer tentativa de micro-mover
+(inclusive a descida do próprio pouso) esbarra na física, dispara
+`touch_contact`, realimenta `grooming`, que a mantém parada — loop fechado.
+**Corrigido:** `ControlLoop` pausa `TouchSensor` (reset em vez de gravar)
+sempre que `MotorMapping.isGroomingActive` já está no controle;
+`touch_proximity`/`damage` continuam ativos (sinais externos genuínos, não
+autorreferentes). Jar novo compilado e copiado — **precisa reiniciar o
+servidor**, ainda sem re-teste visual confirmando a correção. Ver
+`docs/02-arquitetura.md`, `docs/03-roadmap-fases.md` F7,
+`MotorMapping.isGroomingActive`, `ControlLoop.onTick`.
 
 ## Regra
 

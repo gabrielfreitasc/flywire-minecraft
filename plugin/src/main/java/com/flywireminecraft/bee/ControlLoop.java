@@ -220,10 +220,21 @@ public final class ControlLoop {
             return;
         }
 
-        // F7/AD-17 — grava ANTES de aplicar a velocidade nova: compara a
-        // posição atual (resultado de lastAppliedVelocity, aplicada no tick
-        // anterior) contra a posição gravada na chamada anterior.
-        touchSensor.recordTick(bee, lastAppliedVelocity);
+        // F7/AD-17 — bug encontrado em servidor real (20/09/2026): enquanto o
+        // grooming já está no controle (ver MotorMapping.isGroomingActive),
+        // NÃO grava contato — senão o próprio pouso vira um loop
+        // auto-sustentado (parar em cima de bloco esbarra ao tentar
+        // micro-mover, conta como touch_contact, realimenta grooming, nunca
+        // solta). touchSensor.reset() garante que, quando grooming soltar,
+        // a comparação recomeça do zero, sem posição antiga arrastada.
+        if (MotorMapping.isGroomingActive(latestBristleMotor)) {
+            touchSensor.reset();
+        } else {
+            // grava ANTES de aplicar a velocidade nova: compara a posição
+            // atual (resultado de lastAppliedVelocity, aplicada no tick
+            // anterior) contra a posição gravada na chamada anterior.
+            touchSensor.recordTick(bee, lastAppliedVelocity);
+        }
 
         // RN-06: aplica o último vetor já calculado, nunca espera a ponte.
         bee.setVelocity(latestVelocity);

@@ -764,12 +764,30 @@ falhou 3 vezes por diluição (RN-09/F1, F4 primeiro experimento, RN-08/F6).
       `ControlLoop` mostram `grooming`/`onGround` pra acompanhar em
       servidor real. Compila limpo (`./gradlew build`). **Ainda sem teste
       em servidor real** — próximo passo antes da lesão.
-- [ ] **Falta: validar visualmente em servidor real** que a abelha
-      realmente pousa quando `grooming` ativa (mesmo cuidado já registrado
-      pro `yaw_steering`: resultado pode bater estatisticamente mas parecer
-      errado visualmente por algum motivo não previsto). Só depois faz
-      sentido a lesão (comparar toque real vs. mascarado, medindo se ela
-      pousa mais/menos, mesmo padrão da F4).
+- [x] **Bug real encontrado e corrigido no primeiro teste em servidor real
+      (20/09/2026) — loop auto-sustentado.** Abelha pousou numa árvore e
+      **nunca mais decolou**: `grooming` saturado em 0,998-0,999 por
+      minutos seguidos, `touch_contact` disparando sem parar. Causa: o
+      PRÓPRIO pouso virava "toque" — parada em cima de um bloco, qualquer
+      tentativa de micro-mover (inclusive a descida do próprio pouso)
+      esbarra na física, `touch_contact` dispara, realimenta `grooming`,
+      que a mantém parada, que mantém o "toque" — loop fechado, sem saída.
+      **Corrigido:** `ControlLoop` agora pausa `TouchSensor` inteiro
+      (`touchSensor.reset()` em vez de `recordTick()`) sempre que
+      `MotorMapping.isGroomingActive` já está no controle — só volta a
+      detectar colisão depois que `grooming` soltar. `touch_proximity`/
+      `damage` continuam ativos (são sinais externos genuínos, não
+      autorreferentes — não precisavam da mesma pausa). Compila limpo,
+      jar novo copiado — **precisa reiniciar o servidor pra valer**
+      (mesma lição já registrada: trocar o jar no disco não afeta o
+      processo rodando). Achado registrado com transparência, não
+      escondido — ver `MotorMapping.isGroomingActive`, `ControlLoop.onTick`.
+- [ ] **Falta: re-testar em servidor real com a correção**, confirmar que
+      ela agora decola normal depois de pousar (mesmo cuidado já registrado
+      pro `yaw_steering`: resultado pode bater no papel e ainda parecer
+      errado visualmente por outro motivo). Só depois faz sentido a lesão
+      (comparar toque real vs. mascarado, medindo se ela pousa mais/menos,
+      mesmo padrão da F4).
 - [x] **L2/L3 — RN-09 aplicada, sem precisar recalibrar (19/09/2026).**
       `graph.load`/`topology.group_outputs_by_predicted_sign` generalizados
       pra aceitar `out_dir`. Testado com os valores ATUAIS de `config.py`

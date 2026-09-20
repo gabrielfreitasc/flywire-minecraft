@@ -113,7 +113,7 @@ public final class MotorMapping {
      *     chama (`ControlLoop`) fornece o estado do mundo).
      */
     public static Vector toVelocity(JsonObject bridgeResponse, Vector heading, boolean onGround) {
-        if (readGrooming(bridgeResponse) > GROOMING_THRESHOLD) {
+        if (isGroomingActive(bridgeResponse.getAsJsonObject("bristle_motor"))) {
             // F7/AD-17 — grooming vence phototaxis: para de avançar, desce até
             // pousar, fica parada uma vez no chão.
             return onGround ? new Vector(0, 0, 0) : new Vector(0, -LANDING_DESCENT_BLOCKS_PER_TICK, 0);
@@ -130,12 +130,23 @@ public final class MotorMapping {
         return heading.clone().multiply(activity * MAX_SPEED_BLOCKS_PER_TICK);
     }
 
-    private static double readGrooming(JsonObject bridgeResponse) {
-        JsonObject bristleMotor = bridgeResponse.getAsJsonObject("bristle_motor");
+    /**
+     * F7/AD-17 — bug encontrado em servidor real (20/09/2026): {@link ControlLoop}
+     * usa isto pra decidir se pausa a detecção de colisão ({@code TouchSensor}).
+     * Sem essa pausa, o PRÓPRIO pouso vira um loop auto-sustentado: parar em
+     * cima de um bloco esbarra na física ao tentar micro-mover, isso conta
+     * como {@code touch_contact}, que realimenta {@code grooming}, que a
+     * mantém parada — ela nunca mais decola (confirmado: abelha presa na copa
+     * de uma árvore por minutos, `grooming` saturado em 0,998-0,999 o tempo
+     * todo). Exposto público (não `private`) porque tanto {@code toVelocity}
+     * quanto {@code ControlLoop} (com o `bristle_motor` já em mãos de uma
+     * troca anterior) precisam da mesma resposta, mesmo limiar.
+     */
+    public static boolean isGroomingActive(JsonObject bristleMotor) {
         if (bristleMotor == null || !bristleMotor.has("grooming")) {
-            return 0.0; // sem Engine do bristle rodando (server.py sem bristle_connectome) — sem efeito, comportamento antigo
+            return false; // sem Engine do bristle rodando — sem efeito, comportamento antigo
         }
-        return bristleMotor.get("grooming").getAsDouble();
+        return bristleMotor.get("grooming").getAsDouble() > GROOMING_THRESHOLD;
     }
 
     private static double clamp(double value, double min, double max) {
