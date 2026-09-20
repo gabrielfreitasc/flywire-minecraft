@@ -4,9 +4,25 @@ L5 — ponte TCP com o plugin Minecraft.
 Protocolo: JSON-lines sobre TCP em BRIDGE_PORT. Ver docs/02-arquitetura.md.
 
   plugin -> sim : {"t_ms":.., "light":.., "dorsal_light":.., "damage":false,
+                    "touch_contact":false, "touch_proximity":false,       # F7/AD-17
                     "mute": ["DNp", "sensory"],               # opcional
                     "stimulate": {"group": "DNg", "amplitude": 3.0}}  # opcional
-  sim -> plugin : {"t_ms":.., "motor": {<canal>: valor, ...}, "active_dn":..}
+  sim -> plugin : {"t_ms":.., "motor": {<canal>: valor, ...}, "active_dn":..,
+                    "bristle_motor": {<canal>: valor, ...}, "bristle_active_dn":..}  # se bristle_connectome foi passado
+
+F7/AD-17 — segundo `Engine` opcional pro subcircuito `bristle` (toque),
+independente do ocelar (AD-17: "engines separados", não grafo único — ver
+docs/02-arquitetura.md). `damage`/`touch_contact`/`touch_proximity` (a
+família de sensores de toque decidida pelo usuário, ver `plugin/README.md`)
+combinam em OR simples — qualquer um presente estimula a semente do
+`bristle` com `SENSOR_TOUCH_AMPLITUDE`; ausência de todos = sem estímulo,
+só a dinâmica basal (RN-09) roda. Campos `bristle_*` na resposta só
+aparecem se `SimulationServer` foi construído com `bristle_connectome`
+(default `None` — sem isso, comportamento idêntico a antes desta mudança,
+compatível com `main()` chamado só com o ocelar e com os testes
+existentes). `bristle_motor` é TELEMETRIA — nenhum canal do bristle entra
+em `MotorMapping.java` ainda (RN-08 equivalente: só `grooming` tem
+comportamento publicado, sem lesão validando em servidor real).
 
 Campo `mute` (F5, ferramenta de lesão por comando): lista de nomes de grupo a
 silenciar (os 8 grupos de `motor.groups` + "sensory" = os 273 fotorreceptores).
@@ -52,6 +68,7 @@ import numpy as np
 
 from . import config as C
 from . import graph
+from .bristle_motor import BristleMotorDecoder
 from .engine import Engine
 from .graph import Connectome
 from .motor import MotorDecoder, group_by_published_behavior, group_steering_by_side
@@ -87,11 +104,17 @@ class SimulationServer:
         cc = graph.load()
         with SimulationServer(cc) as srv:
             ...  # srv.port, roda até sair do bloco
+
+    F7/AD-17 — `bristle_connectome` opcional liga um segundo `Engine`
+    independente (toque), rodando no mesmo laço/mesmo dt, sem misturar
+    estado com o ocelar. `None` (default) preserva o comportamento de antes
+    desta mudança — nenhum teste existente ou chamada antiga precisa mudar.
     """
 
     def __init__(
         self,
         connectome: Connectome,
+        bristle_connectome: Connectome | None = None,
         host: str = C.BRIDGE_HOST,
         port: int = C.BRIDGE_PORT,
     ) -> None:
@@ -99,8 +122,18 @@ class SimulationServer:
         self.engine = Engine(connectome)
         self.motor = MotorDecoder(connectome)
 
+        # F7/AD-17 — segundo Engine, só existe se bristle_connectome foi dado.
+        self.bristle_connectome = bristle_connectome
+        if bristle_connectome is not None:
+            self.bristle_engine: Engine | None = Engine(bristle_connectome)
+            self.bristle_motor: BristleMotorDecoder | None = BristleMotorDecoder(bristle_connectome)
+        else:
+            self.bristle_engine = None
+            self.bristle_motor = None
+
         self._lock = threading.Lock()
         self._light = 0.0
+        self._touch = False  # F7/AD-17 — OR de damage/touch_contact/touch_proximity
         self._pending_mute: list[str] | None = None
         self._pending_stimulate: dict[str, Any] | None = None
         self._latest: dict[str, Any] = {"t_ms": 0, "motor": {}, "active_dn": 0}
@@ -150,10 +183,16 @@ class SimulationServer:
         espera a thread de simulação (RN-06).
         """
         light = float(sensor.get("light", 0.0))
+        # F7/AD-17 — família de sensores de toque (damage já existia, os
+        # outros dois são novos, ver docs/02-arquitetura.md). OR simples:
+        # qualquer um presente conta como "toque aconteceu" pro bristle.
+        touch = bool(sensor.get("damage", False)) or bool(sensor.get("touch_contact", False)) \
+            or bool(sensor.get("touch_proximity", False))
         mute = sensor.get("mute")
         stimulate = sensor.get("stimulate")
         with self._lock:
             self._light = light
+            self._touch = touch
             if mute is not None:
                 self._pending_mute = list(mute)
             if stimulate is not None:
@@ -192,6 +231,7 @@ class SimulationServer:
         while not self._stop.is_set():
             with self._lock:
                 light = self._light
+                touch = self._touch
                 mute = self._pending_mute
                 self._pending_mute = None
                 stimulate = self._pending_stimulate
@@ -205,13 +245,25 @@ class SimulationServer:
             frame = self.engine.step()
             self.motor.push(frame.t_ms, frame.spikes)
 
+            # F7/AD-17 — segundo Engine, passo próprio, mesmo dt/tempo real
+            # do laço principal, estado nunca compartilhado com o ocelar.
+            if self.bristle_engine is not None and self.bristle_motor is not None:
+                amplitude = C.SENSOR_TOUCH_AMPLITUDE if touch else 0.0
+                self.bristle_engine.stimulate(self.bristle_connectome.sensory, amplitude)
+                bristle_frame = self.bristle_engine.step()
+                self.bristle_motor.push(bristle_frame.t_ms, bristle_frame.spikes)
+
             if frame.t_ms % window_steps == 0:
                 with self._lock:
-                    self._latest = {
+                    latest: dict[str, Any] = {
                         "t_ms": frame.t_ms,
                         "motor": self.motor.decode(),
                         "active_dn": self.motor.active_output_count(),
                     }
+                    if self.bristle_motor is not None:
+                        latest["bristle_motor"] = self.bristle_motor.decode()
+                        latest["bristle_active_dn"] = self.bristle_motor.active_output_count()
+                    self._latest = latest
 
             next_tick += period_s
             sleep_for = next_tick - time.monotonic()
@@ -230,7 +282,20 @@ class SimulationServer:
 
 def main() -> None:
     cc = graph.load()
-    with SimulationServer(cc) as srv:
+    # F7/AD-17 — carrega o bristle se já foi extraído
+    # (`python tools/build_f7_circuits.py`); degrada de volta pro
+    # comportamento anterior (só ocelar) se ainda não foi, em vez de falhar.
+    bristle_cc: Connectome | None = None
+    try:
+        bristle_cc = graph.load(C.PROCESSED / "bristle")
+        print("bristle: subcircuito de toque carregado (F7/AD-17)", flush=True)
+    except FileNotFoundError:
+        print(
+            "bristle: data/processed/bristle/ não encontrado — rodando só o circuito "
+            "ocelar (python tools/build_f7_circuits.py pra gerar)",
+            flush=True,
+        )
+    with SimulationServer(cc, bristle_cc) as srv:
         print(f"flywire-sim escutando em {C.BRIDGE_HOST}:{srv.port}", flush=True)
         try:
             while True:

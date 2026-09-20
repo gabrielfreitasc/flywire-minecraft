@@ -643,7 +643,7 @@ canto superior direito como esperado. Ver `plugin/README.md`.
 
 ---
 
-## F7 — Multi-sensor v2: chuva e toque 🔶 em andamento — `bristle` validado ponta a ponta no plugin, falta 2º Engine no simulador; `hygro` bloqueado em L2
+## F7 — Multi-sensor v2: chuva e toque 🔶 em andamento — `bristle` integrado ponta a ponta (plugin+simulador), falta lesão em servidor real; `hygro` bloqueado em L2
 
 Começou como planejamento puro (19/09/2026): registrar o plano completo antes
 de tocar em qualquer seed novo, dado que os dois sensores anteriores (F6,
@@ -741,12 +741,21 @@ falhou 3 vezes por diluição (RN-09/F1, F4 primeiro experimento, RN-08/F6).
       aproximar sem encostar=true). Limiares (`CONTACT_RATIO_THRESHOLD=0.5`,
       `PROXIMITY_RADIUS=3.0`) seguem sem calibração fina, mas o mecanismo
       funciona. Ver `plugin/README.md`, `docs/02-arquitetura.md`.
-- [ ] **Pendente: o simulador ainda não consome os campos novos.**
-      `SimulationServer` (`server.py`) só roda UM `Engine` (ocelar) — falta
-      integrar um segundo `Engine` pro `bristle` dentro do loop da ponte
-      antes de `touch_contact`/`touch_proximity` significarem alguma coisa
-      pra simulação (hoje chegam e são ignorados, mesmo estado em que
-      `damage` já vivia). Próximo passo natural da fase real.
+- [x] **Simulador integrado (20/09/2026).** `SimulationServer` ganhou um
+      segundo `Engine` opcional (`bristle_connectome`, default `None` —
+      compatível com quem só usa o ocelar, 26/26 testes passam).
+      `damage`/`touch_contact`/`touch_proximity` combinam em OR e
+      estimulam a semente do `bristle` com `SENSOR_TOUCH_AMPLITUDE` (mesmo
+      valor de `tools/bristle_calibration_check.py`, já validado em RN-09).
+      Resposta ganha `bristle_motor` (`grooming` + `conn_DN_*`,
+      telemetria) e `bristle_active_dn`. `BristleMotorDecoder` é uma classe
+      dedicada, não o `MotorDecoder` do ocelar reaproveitado — esse
+      chamaria `topology.group_outputs_by_predicted_sign` sem `out_dir` e
+      leria o `edges.parquet` errado (nids de cada circuito são espaços
+      independentes, AD-17). Testado contra o container Docker real (não só
+      testes automatizados): `grooming` saturou perto de 1,0 sob
+      `touch_contact` sustentado. **`MotorMapping.java` não usa nada
+      disso** — telemetria, não controle, falta lesão em servidor real.
 - [x] **L2/L3 — RN-09 aplicada, sem precisar recalibrar (19/09/2026).**
       `graph.load`/`topology.group_outputs_by_predicted_sign` generalizados
       pra aceitar `out_dir`. Testado com os valores ATUAIS de `config.py`
@@ -813,16 +822,17 @@ ocelar — sinal RN-01/RN-02 resolvido, bias/ruído RN-09 calibrado, lesão com
 diferença estatisticamente mensurável — ou um resultado negativo é registrado
 com a mesma transparência do dia/noite nulo da F6.
 
-**`bristle` — L2/L3, curadoria RN-08 equivalente e sensor no plugin prontos E
-validados (19-20/09/2026), ver RN-09/RN-08 em `04-regras-de-negocio.md`.**
-Efeito estatístico limpíssimo (p≈0, N=30), sem precisar recalibrar nada.
-Curadoria de comportamento achou 6/60 tipos publicados (todos `grooming`,
-coerente com a semente de contato) e 52/60 com cluster de conectividade.
-`TouchSensor.java` envia `touch_contact`/`touch_proximity` — testado em
-servidor real (cubículo fechado vs. área aberta), os dois se comportam como
-esperado. **Falta:** integrar um segundo `Engine` pro `bristle` em
-`SimulationServer` (o simulador ainda não consome os campos novos) e a
-lesão em servidor real.
+**`bristle` — L2/L3, curadoria RN-08 equivalente, sensor no plugin E
+integração no simulador prontos e validados (19-20/09/2026), ver RN-09/RN-08
+em `04-regras-de-negocio.md`.** Efeito estatístico limpíssimo (p≈0, N=30),
+sem precisar recalibrar nada. Curadoria de comportamento achou 6/60 tipos
+publicados (todos `grooming`, coerente com a semente de contato) e 52/60 com
+cluster de conectividade. `TouchSensor.java` envia `touch_contact`/
+`touch_proximity` — testado em servidor real (cubículo fechado vs. área
+aberta). `SimulationServer` roda um segundo `Engine` pro `bristle`, testado
+de ponta a ponta contra o container Docker real (`grooming` satura perto de
+1,0 sob toque sustentado). **Falta só:** a lesão em servidor real, com
+jogador — critério de saída de verdade da fase, mesmo padrão da F4.
 
 **`hygro` segue bloqueado em L2** — depende de decidir o tratamento dos 373
 neurônios serotoninérgicos (RN-01a reaberta) antes de sequer tentar calibrar

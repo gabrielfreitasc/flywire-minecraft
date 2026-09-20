@@ -85,6 +85,18 @@ MOTOR_WINDOW_MS = 50.0     # janela para converter disparos em taxa
 # calibrada contra dinâmica de luz real do Minecraft. Revisitar na F4.
 SENSOR_LIGHT_GAIN = 2.0
 
+# F7/AD-17 — amplitude de estímulo na semente do subcircuito `bristle`
+# quando `damage`/`touch_contact`/`touch_proximity` indicam toque (ligado/
+# desligado, não um nível contínuo como `light` — daí ser uma amplitude
+# fixa, não um ganho multiplicado por um valor [0,1]). MESMO valor usado em
+# `tools/bristle_calibration_check.py`, onde já foi validado (RN-09: efeito
+# ~18x o baseline, p≈0, N=30) — não é um número novo/arbitrário, é o mesmo
+# que produziu o resultado documentado em RN-09. Não recalibrado contra
+# dinâmica real de toque no Minecraft (só o SENSOR de toque foi validado em
+# servidor real — ver plugin/README.md; a amplitude de estímulo resultante
+# no circuito ainda não).
+SENSOR_TOUCH_AMPLITUDE = 2.0
+
 # ------------------------------------------------------------------ RN-08
 # Escala usada para normalizar taxa de disparo (Hz) em (-1, 1) via tanh.
 # Ordem de grandeza da taxa basal observada no subcircuito v1 (RN-09) com

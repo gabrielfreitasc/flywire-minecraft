@@ -520,14 +520,15 @@ confirmado: dispara sustentado em contato real, fica quieto em voo livre.
 `touch_proximity` também confirmado pelo usuário (longe = false, aproximar
 sem encostar = true).
 
-**O simulador ainda não usa nenhum dos dois campos.** `SimulationServer`
-(`server.py`) carrega só UM `Connectome` hoje (o ocelar) — não existe
-`Engine` rodando o subcircuito `bristle` dentro do loop da ponte. RN-09
-(rede responde ao estímulo) e a curadoria RN-08 equivalente (6/60 tipos =
-`grooming`) já foram validadas separadamente, fora do loop da ponte, via
-scripts manuais (`tools/bristle_calibration_check.py`). Integrar um segundo
-`Engine` em `SimulationServer` é o próximo passo, não feito aqui — ver
-`docs/03-roadmap-fases.md` F7.
+**✅ Simulador integrado (20/09/2026).** `SimulationServer` ganhou um segundo
+`Engine` pro `bristle`, opcional (`bristle_connectome`). `damage`/
+`touch_contact`/`touch_proximity` combinam em OR e estimulam a semente do
+bristle; a resposta ganha `bristle_motor`/`bristle_active_dn` — testado
+contra o container Docker real, `grooming` saturou perto de 1,0 sob toque
+sustentado. **`MotorMapping.java` continua sem usar nada disso** — é
+telemetria, não vira comportamento da abelha ainda (falta lesão validando
+em servidor real). Ver `docs/02-arquitetura.md`, `docs/03-roadmap-fases.md`
+F7, `sim/src/flywire_sim/server.py`.
 
 ## Regra
 

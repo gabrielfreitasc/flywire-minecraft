@@ -118,15 +118,20 @@ NOVOS, sinais de natureza diferente:**
   fixo. **✅ Validado** (usuário confirmou: longe = false, aproximar sem
   encostar = true).
 
-**Estado atual (20/09/2026): o plugin já envia os dois campos, validados em
-servidor real — o simulador ainda não os consome.** Não existe um segundo `Engine` rodando o subcircuito
-`bristle` em `server.py` — RN-09/RN-08 validaram o circuito isoladamente
-(scripts manuais, fora do loop da ponte), mas a integração em
-`SimulationServer` (que hoje só carrega UM `Connectome`, o ocelar) é
-trabalho pendente. Mesmo estado em que `damage` já vivia antes desta
-mudança — registrado explicitamente aqui para não ficar a impressão de que
-"enviar o campo" é o mesmo que "o circuito reage a ele". Ver
-`docs/03-roadmap-fases.md` F7.
+**✅ Consumido pelo simulador (20/09/2026).** `SimulationServer` ganhou um
+segundo `Engine` opcional pro `bristle` (`bristle_connectome`, default
+`None` — sem quebrar quem só usa o ocelar). `damage`/`touch_contact`/
+`touch_proximity` combinam em OR simples: qualquer um presente estimula a
+semente do `bristle` com `SENSOR_TOUCH_AMPLITUDE` (mesmo valor já validado
+em `tools/bristle_calibration_check.py`, RN-09). A resposta ganha
+`bristle_motor` (canais `grooming` + `conn_DN_*`, telemetria — RN-08
+equivalente ainda sem lesão validando em servidor real) e
+`bristle_active_dn`. Testado de ponta a ponta contra o container Docker
+real (não só nos testes automatizados): `grooming` saturou perto de 1,0
+sob `touch_contact` sustentado, consistente com o efeito ~18× já medido.
+`MotorMapping.java` continua sem usar nenhum canal do `bristle` — é
+telemetria, não controle. Ver `docs/03-roadmap-fases.md` F7,
+`sim/src/flywire_sim/server.py`, `sim/src/flywire_sim/bristle_motor.py`.
 
 ### Protocolo da ponte
 - TCP em `localhost:8765`, JSON-lines (`\n`), UTF-8.

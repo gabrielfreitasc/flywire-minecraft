@@ -60,9 +60,12 @@ Isto é só a curadoria (pesquisa), reaproveitando a mecânica genérica de
 """
 from __future__ import annotations
 
+from collections import deque
+
 import numpy as np
 from numpy.typing import NDArray
 
+from . import config as C
 from .graph import Connectome
 from .motor import group_by_connectivity_cluster as _group_by_connectivity_cluster
 from .motor import group_by_published_behavior as _group_by_published_behavior
@@ -156,3 +159,64 @@ def group_by_connectivity_cluster(connectome: Connectome) -> dict[str, NDArray[n
     """Wrapper de `motor.group_by_connectivity_cluster` com o dicionário do
     `bristle`. Ver docstring do módulo."""
     return _group_by_connectivity_cluster(connectome, BRISTLE_CONNECTIVITY_CLUSTER)
+
+
+class BristleMotorDecoder:
+    """L4 equivalente pro subcircuito `bristle` (F7/AD-17) — só os canais
+    reais (curadoria acima: `grooming` + clusters de conectividade
+    `conn_*`). **Não** é `motor.MotorDecoder` com o `Connectome` trocado:
+    `MotorDecoder` chama `topology.group_outputs_by_predicted_sign` sem
+    `out_dir`, que leria `edges.parquet` do circuito OCELAR mesmo estando
+    calculando sobre nids do `bristle` — os dois circuitos têm espaços de
+    `nid` independentes (cada um numerado 0..N-1 do zero, AD-17), então
+    misturar seria calcular sobre o grafo errado silenciosamente. Também não
+    existem aqui os conceitos `phototaxis`/`yaw_steering`/`locomotion_drive`
+    — são específicos da topologia/curadoria do ocelar, fabricá-los pro
+    `bristle` seria inventar semântica que RN-08 proíbe.
+
+    Mesma mecânica de janela deslizante/normalização tanh de
+    `motor.MotorDecoder`, duplicada aqui de propósito (código pequeno,
+    mais seguro que forçar reuso incorreto) — ver docstring do módulo.
+    """
+
+    def __init__(self, connectome: Connectome, window_ms: float = C.MOTOR_WINDOW_MS) -> None:
+        self.connectome = connectome
+        self.window_ms = window_ms
+        self._published_groups = group_by_published_behavior(connectome)
+        self._connectivity_groups = group_by_connectivity_cluster(connectome)
+        self._history: deque[tuple[int, NDArray[np.bool_]]] = deque()
+
+    def push(self, t_ms: int, spikes: NDArray[np.bool_]) -> None:
+        """Registra um frame de disparo e descarta o que saiu da janela."""
+        self._history.append((t_ms, spikes))
+        cutoff = t_ms - self.window_ms
+        while self._history and self._history[0][0] < cutoff:
+            self._history.popleft()
+
+    def _rate_hz(self, nids: NDArray[np.int64]) -> float:
+        if not self._history or len(nids) == 0:
+            return 0.0
+        window_s = self.window_ms / 1000.0
+        count = sum(int(spikes[nids].sum()) for _, spikes in self._history)
+        return (count / len(nids)) / window_s
+
+    def decode(self) -> dict[str, float]:
+        """Taxa de disparo por grupo na janela atual, normalizada via tanh.
+        `grooming` (comportamento publicado) + `conn_*` (cluster de
+        conectividade, evidência mais fraca — mesmo prefixo que AD-15 usa
+        pro ocelar, pra deixar óbvio que é inferência, não medido)."""
+        vec = {name: float(np.tanh(self._rate_hz(nids) / C.MOTOR_RATE_SCALE))
+               for name, nids in self._published_groups.items()}
+        for name, nids in self._connectivity_groups.items():
+            vec[f"conn_{name}"] = float(np.tanh(self._rate_hz(nids) / C.MOTOR_RATE_SCALE))
+        return vec
+
+    def active_output_count(self) -> int:
+        """Quantos descendentes do bristle dispararam ao menos uma vez na
+        janela atual."""
+        if not self._history:
+            return 0
+        active = np.zeros(self.connectome.n, dtype=bool)
+        for _, spikes in self._history:
+            active |= spikes
+        return int(active[self.connectome.output].sum())
