@@ -566,16 +566,27 @@ transição. **Segunda correção:** folga de
 **✅ Confirmado em servidor real, 20/09/2026 — "voando normal" (usuário).**
 Depois de reiniciar com a segunda correção: voo livre estável em área
 aberta, `grooming` oscilando numa faixa saudável (~0,2-0,5) sem travar,
-`touch_contact` raro e isolado, pouso só com toque genuíno. **Achado à
-parte, sem relação com toque/grooming:** se a direção de voo (`heading`)
-apontar pra dentro de bloco/tronco de árvore, ela fica emperrada ali —
-`MotorMapping` não tem desvio de obstáculo. Limitação preexistente
-(RN-08 parcial, já documentada), não bug novo desta sessão. Ver
-`docs/02-arquitetura.md`, `docs/03-roadmap-fases.md` F7,
-`MotorMapping.isGroomingActive`, `ControlLoop.onTick`.
+`touch_contact` raro e isolado, pouso só com toque genuíno.
+
+**Terceiro bug, também em servidor real (20/09/2026) — obstáculo lateral
+(morro/degrau).** Usuário reportou visualmente: abelha "voando de forma
+inercial" contra um bloco, claramente diferente do pouso. Log confirmou —
+`light` travado no mesmo valor por 40s (sem deslocar nada de verdade),
+`touch_contact` quase não disparava (a folga de transição da segunda
+correção estava, sem querer, quase sempre pausando a detecção, porque
+`grooming` ficava cruzando o limiar repetidamente perto do obstáculo).
+**Causa raiz mais funda:** mesmo quando `grooming` reage, nem voar nem
+descer na vertical afastam a abelha de um obstáculo do LADO. **Corrigido
+com recuperação MECÂNICA, independente do circuito:** `ControlLoop` mede
+deslocamento real a cada 2s; se ficou muito baixo e não é pouso
+intencional, empurra pra cima por 1s tentando escalar. Todas as
+constantes são estimativas, não calibradas. Compilou, jar copiado —
+**precisa reiniciar o servidor, ainda sem reteste**.
 
 **Próximo passo: experimento de lesão** comparando toque real vs.
-mascarado, mesmo padrão da F4 — ainda não implementado.
+mascarado, mesmo padrão da F4 — ainda não implementado, só depois que a
+recuperação mecânica for confirmada. Ver `docs/02-arquitetura.md`,
+`docs/03-roadmap-fases.md` F7, `ControlLoop.onTick`.
 
 ## Regra
 

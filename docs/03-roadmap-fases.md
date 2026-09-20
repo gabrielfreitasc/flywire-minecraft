@@ -807,18 +807,36 @@ falhou 3 vezes por diluição (RN-09/F1, F4 primeiro experimento, RN-08/F6).
       oscilando numa faixa saudável (~0,2-0,5) sem prender, `touch_contact`
       raro e isolado (não sustentado), e pouso correto só quando há toque
       genuíno (`proximity` real). **Confirmado visualmente pelo usuário**
-      — "voando normal". Achado à parte, sem relação com toque/grooming:
-      se a direção de voo (`heading`) apontar pra dentro de um bloco/tronco
-      de árvore, ela fica emperrada ali (luz do bloco não muda apesar de
-      `vel` não-zero) — limitação conhecida, já documentada
-      (`MotorMapping` não tem desvio de obstáculo nem controle de altura
-      próprio). Não é bug novo desta sessão, só ficou visível por ela ter
-      pousado perto de uma árvore uma vez.
-- [ ] **Próximo passo: lesão em servidor real** — comparar toque real vs.
-      mascarado (mesmo padrão da F4), medindo se ela pousa
-      mais/permanece parada mais tempo com o sensor de toque ativo do que
-      com ele artificialmente desligado. Só agora que pouso/decolagem estão
-      estáveis isso faz sentido medir.
+      — "voando normal".
+- [x] **Terceiro bug encontrado e corrigido (20/09/2026) — obstáculo
+      lateral (morro/degrau de bloco).** Usuário reportou visualmente:
+      abelha "voando de forma inercial" contra um bloco, claramente
+      diferente do movimento de pouso. Log confirmou: `light` travado no
+      mesmo valor por 40s seguidos (não deslocava nada de verdade) apesar
+      de `vel` variando e `onGround` alternando; só 1 `touch_contact` nesse
+      tempo todo — a folga de transição (segunda correção) estava,
+      sem querer, quase sempre pausando a detecção, porque `grooming`
+      cruzava o limiar repetidamente (rearmando a folga toda hora).
+      **Causa raiz mais funda:** mesmo quando `grooming` reage, nem "voar"
+      (phototaxis) nem "descer na vertical" (pouso) afastam a abelha de um
+      obstáculo do LADO — nenhum dos dois movimentos resolve isso.
+      **Corrigido com recuperação MECÂNICA, independente da decisão do
+      circuito:** `ControlLoop` mede deslocamento real a cada
+      `STUCK_CHECK_TICKS=40` (2s); se ficou abaixo de
+      `STUCK_DISPLACEMENT_THRESHOLD_BLOCKS=0,3` e não é pouso intencional
+      (`onGround` + `grooming` ativo ao mesmo tempo), aplica um empurrão
+      pra cima (`RECOVERY_BOOST_BLOCKS_PER_TICK=0,15` por
+      `RECOVERY_BOOST_TICKS=20`, 1s) tentando escalar o obstáculo. Log
+      imediato quando dispara. Todas as constantes são estimativas de
+      engenharia, não calibradas. Compila limpo, jar copiado — **precisa
+      reiniciar o servidor, ainda sem reteste**.
+- [ ] **Falta: reteste da recuperação mecânica** — confirmar que ela
+      escala obstáculos (morro/degrau) em vez de ficar presa. Só depois
+      faz sentido a lesão (comparar toque real vs. mascarado, medindo se
+      ela pousa mais/permanece parada mais tempo com o sensor de toque
+      ativo do que com ele artificialmente desligado — mesmo padrão da
+      F4). Só agora que pouso/decolagem/recuperação estão estáveis isso
+      faz sentido medir.
 - [x] **L2/L3 — RN-09 aplicada, sem precisar recalibrar (19/09/2026).**
       `graph.load`/`topology.group_outputs_by_predicted_sign` generalizados
       pra aceitar `out_dir`. Testado com os valores ATUAIS de `config.py`

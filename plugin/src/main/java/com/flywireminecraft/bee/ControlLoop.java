@@ -1,6 +1,7 @@
 package com.flywireminecraft.bee;
 
 import com.google.gson.JsonObject;
+import org.bukkit.Location;
 import org.bukkit.entity.Bee;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
@@ -77,6 +78,30 @@ public final class ControlLoop {
     private static final int GROOMING_TRANSITION_GRACE_TICKS = 10; // 0,5s a 20Hz
     private boolean wasGroomingActive = false;
     private int groomingGraceTicksLeft = 0;
+
+    // F7/AD-17 — achado em servidor real (20/09/2026), SEPARADO do problema
+    // acima: mesmo com grooming reagindo, nem "voar" (phototaxis) nem
+    // "descer na vertical" (pouso) tiram a abelha de um obstáculo do LADO
+    // (morro, degrau de bloco) — nenhum dos dois movimentos a afasta.
+    // Também piora porque grooming oscilando perto do limiar rearma a folga
+    // de transição o tempo todo, quase sempre pausando TouchSensor — o
+    // sinal de toque nem chega a se sustentar direito. Recuperação MECÂNICA,
+    // independente da decisão do circuito: mede deslocamento real a cada
+    // STUCK_CHECK_TICKS; se ficou abaixo de STUCK_DISPLACEMENT_THRESHOLD_BLOCKS
+    // e não é um pouso intencional (onGround + grooming ativo), aplica um
+    // empurrão pra cima por RECOVERY_BOOST_TICKS — tenta escalar o
+    // obstáculo. Constantes provisórias, não calibradas, primeira tentativa
+    // de engenharia. Não fabrica sinal nenhum do circuito — é só robustez
+    // de física de embodiment, mesma categoria do achado de `setVelocity()`
+    // vencendo a IA nativa (ver "Risco investigado" no plugin/README.md).
+    private static final int STUCK_CHECK_TICKS = 40; // 2s a 20Hz
+    private static final double STUCK_DISPLACEMENT_THRESHOLD_BLOCKS = 0.3;
+    private static final double RECOVERY_BOOST_BLOCKS_PER_TICK = 0.15;
+    private static final int RECOVERY_BOOST_TICKS = 20; // 1s de empurrão
+    private Location stuckCheckAnchor = null;
+    private int stuckCheckTicksLeft = STUCK_CHECK_TICKS;
+    private int recoveryBoostTicksLeft = 0;
+
     private volatile long exchangeCount = 0;
     private volatile long exchangeFailures = 0;
     private long tickCount = 0;
@@ -204,6 +229,9 @@ public final class ControlLoop {
         touchSensor.reset(); // F7/AD-17 — sem posição anterior pra comparar ainda
         wasGroomingActive = false;
         groomingGraceTicksLeft = 0;
+        stuckCheckAnchor = null;
+        stuckCheckTicksLeft = STUCK_CHECK_TICKS;
+        recoveryBoostTicksLeft = 0;
         tickTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::onTick, 0L, 1L);
     }
 
@@ -261,9 +289,40 @@ public final class ControlLoop {
             touchSensor.recordTick(bee, lastAppliedVelocity);
         }
 
-        // RN-06: aplica o último vetor já calculado, nunca espera a ponte.
-        bee.setVelocity(latestVelocity);
-        lastAppliedVelocity = latestVelocity;
+        // F7/AD-17 — recuperação mecânica de obstáculo lateral, independente
+        // da decisão do circuito (ver docstring do campo). Mede a cada
+        // STUCK_CHECK_TICKS; não reseta o relógio durante um empurrão em
+        // andamento (senão nunca teria chance de medir se ele funcionou).
+        if (stuckCheckAnchor == null) {
+            stuckCheckAnchor = bee.getLocation();
+        } else if (recoveryBoostTicksLeft == 0) {
+            stuckCheckTicksLeft--;
+            if (stuckCheckTicksLeft <= 0) {
+                double moved = bee.getLocation().distance(stuckCheckAnchor);
+                boolean intentionalLanding = bee.isOnGround() && groomingActive;
+                if (moved < STUCK_DISPLACEMENT_THRESHOLD_BLOCKS && !intentionalLanding) {
+                    recoveryBoostTicksLeft = RECOVERY_BOOST_TICKS;
+                    plugin.getLogger().info(String.format(Locale.ROOT,
+                            "[ControlLoop] recuperação: só %.2f blocos em %d ticks — empurrão pra cima",
+                            moved, STUCK_CHECK_TICKS));
+                }
+                stuckCheckAnchor = bee.getLocation();
+                stuckCheckTicksLeft = STUCK_CHECK_TICKS;
+            }
+        }
+
+        // RN-06: aplica o último vetor já calculado, nunca espera a ponte —
+        // exceto durante um empurrão de recuperação em andamento, que
+        // sobrescreve por cima (ver acima).
+        Vector velocityToApply;
+        if (recoveryBoostTicksLeft > 0) {
+            velocityToApply = new Vector(0, RECOVERY_BOOST_BLOCKS_PER_TICK, 0);
+            recoveryBoostTicksLeft--;
+        } else {
+            velocityToApply = latestVelocity;
+        }
+        bee.setVelocity(velocityToApply);
+        lastAppliedVelocity = velocityToApply;
 
         // F6/AD-16 — achado do usuário (18/09/2026): setVelocity() move a
         // abelha, mas NÃO gira o corpo visual dela — isso é responsabilidade
