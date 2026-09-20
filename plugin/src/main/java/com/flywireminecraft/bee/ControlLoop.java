@@ -271,6 +271,13 @@ public final class ControlLoop {
         // é borda (consumido), proximity é nível (lido de novo a cada troca).
         boolean touchContact = touchSensor.consumeContact();
         boolean touchProximity = touchSensor.isNearSomething(bee);
+        if (touchContact) {
+            // F7/AD-17 — log imediato, não espera o resumo periódico (LOG_EVERY_TICKS):
+            // é o único jeito de confirmar visualmente que o teste manual (voar contra
+            // parede) disparou o sensor. Ver "Sensor de toque" em plugin/README.md.
+            plugin.getLogger().info("[TouchSensor] touch_contact = true "
+                    + "(deslocamento real bem abaixo do esperado pela velocidade comandada)");
+        }
         long tMs = System.currentTimeMillis();
         // F6/AD-16: heading é a direção COMANDADA da troca anterior, não a
         // orientação real da abelha — só cai pra getDirection() se ainda não
