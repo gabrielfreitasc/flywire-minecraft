@@ -474,6 +474,51 @@ RN-08 completa (direção), não a peça inteira.
 
 Ver `plugin/README.md`.
 
+**Atualização — RN-08 equivalente pro subcircuito `bristle` (F7/AD-17,
+20/09/2026), primeira curadoria de comportamento fora do ocelar.**
+`bristle_motor.py` (novo módulo, não `motor.py` — circuitos separados, AD-17)
+cruza os 60 tipos de descendente do `bristle` (candidato a sensor de toque)
+contra a mesma fonte do BANC connectome usada em AD-15, com um ajuste de
+acesso: a tabela (`banc_neck_functional_classes.csv`, materialização v888)
+foi obtida do **repositório público do projeto BANC no GitHub**
+(`htem/BANC-project`), não do zip do Harvard Dataverse — o Dataverse
+apresenta um desafio anti-bot (WAF) que bloqueia acesso automatizado neste
+ambiente, mesma classe de restrição já documentada pra Zenodo (AD-11). O
+GitHub não tem essa restrição (já usado desde a F0 pro espelho da
+conectividade), e o script que gera a tabela (`R/figures/panels_an_dn_umap.R`)
+grava o resultado direto no repositório — mesmo produto de dado, caminho de
+acesso diferente.
+
+**Namiki/Cande et al. 2018 checado primeiro, sem achado — não por falta de
+tentativa.** Os tipos legíveis na Figura 6 do paper e o PDF suplementar de
+50 MB (`elife-34275-fig2-data1-v2.zip`) foram checados de novo: nenhum dos 60
+tipos do `bristle` bate com a nomenclatura da era pré-conectoma completo do
+Namiki (DNa01/02/05/07 etc.), e o PDF continua não confiável de interpretar
+(gráfico de rastreamento bruto por linha, não tabela) — confirma o mesmo
+limite já registrado acima pro ocelar, agora também pro `bristle`.
+
+**Achado real: 6 dos 60 tipos têm comportamento publicado (`cell_function`
+do BANC), e os 6 são `grooming`** — `DNg12_e`, `DNge011`, `DNge012`,
+`DNge025`, `DNge028`, `DNge078` (9 neurônios). Biologicamente coerente com a
+semente: cerdas mecanossensoriais de contato disparando reflexo de limpeza é
+via bem documentada em *Drosophila* (contexto geral de literatura, não
+citação por neurônio individual — o BANC não expõe referência por linha).
+Mais **52 tipos (97 neurônios)** têm só cluster de conectividade (evidência
+mais fraca, mesmo nível de `CONNECTIVITY_CLUSTER_BANC`) — **sem nome
+descritivo disponível na fonte pra estes códigos** (`DN_01`...`DN_17`),
+diferente do que foi possível pro ocelar; exposto como código bruto, não
+inventado. **2 tipos (4 neurônios) sem dado nenhum** (`DNge008`, `DNge021`).
+Cobertura total: 6+52+2 = 60/60, nenhum tipo perdido.
+
+**O que isto estabelece:** a mesma metodologia de RN-08 (medido > putativo,
+não fabricar semântica, registrar cobertura parcial com transparência)
+generaliza pra um segundo subcircuito sem mudar de regra — só de fonte de
+dado. **O que isto NÃO faz:** não há decodificador de motor rodando pro
+`bristle` — isto é curadoria (pesquisa), não integração; `MotorMapping.java`
+não foi tocado. Ver `docs/03-roadmap-fases.md` F7,
+`sim/src/flywire_sim/bristle_motor.py`,
+`tests/test_bristle_motor.py`.
+
 ---
 
 ## RN-09 · Corrente tônica de base + ruído
@@ -596,4 +641,5 @@ plugin primeiro).
 | RN-06 | `engine.py`, `server.py`, `ControlLoop.java` | `test_bridge_request_response_no_frame_loss`, `test_bridge_history_stays_bounded_by_window` (`test_server.py`); validado em produção — 1500 trocas/0 falhas em servidor real (F4) | Médio |
 | RN-07 | `neuron.py` | `test_refractory` | Alto |
 | RN-08 | `motor.py`, `MotorMapping.java` | `test_motor_groups_cover_all_descendants`, `test_motor_decode_range`, `test_published_behavior_groups_are_real_types`, `test_connectivity_cluster_groups_are_real_types`, `test_steering_bilateral_pairs_are_balanced` | **Crítico — 18/47 tipos com literatura real (AD-14+AD-15), 27/34 restantes com cluster de conectividade BANC (telemetria só, não behavior medido), 1 tipo (DNpe027) ambíguo, 1 tipo (DNp40) sem nenhum dado. Canal `yaw_steering` (AD-16) é telemetria, sentido não validado. `MotorMapping.java` continua só com `phototaxis`.** |
+| RN-08 (`bristle`) | `bristle_motor.py` | `tests/test_bristle_motor.py` | Curadoria só — 6/60 tipos com comportamento publicado (todos `grooming`), 52/60 com cluster BANC (código bruto, sem nome), 2/60 sem dado. Nada disto entra em cálculo de velocidade ainda. |
 | RN-09 | `engine.py` | `tools/calibration_check.py` (ocelar), `tools/bristle_calibration_check.py` (F7, subcircuito `bristle` — sem recalibrar, ver acima) — estatísticos, manuais, não rodam no CI | Alto — validado por teste estatístico, ver acima |

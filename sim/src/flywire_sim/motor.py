@@ -189,28 +189,38 @@ CONNECTIVITY_CLUSTER_BANC: dict[str, str] = {
 }
 
 
-def group_by_published_behavior(connectome: Connectome) -> dict[str, NDArray[np.int64]]:
+def group_by_published_behavior(
+    connectome: Connectome, behavior: dict[str, str] | None = None
+) -> dict[str, NDArray[np.int64]]:
     """RN-08 — agrupa os nids de saída pela categoria comportamental publicada
-    (Namiki et al. 2018 + BANC/AD-15), só para os 18 tipos com dado real. Ver
-    docstring do módulo."""
+    (Namiki et al. 2018 + BANC/AD-15), só para os tipos com dado real. `behavior`
+    default é `PUBLISHED_DN_BEHAVIOR` (circuito ocelar); outros circuitos (F7,
+    ver `bristle_motor.py`) passam seu próprio dicionário — mesma mecânica,
+    fonte diferente. Ver docstring do módulo."""
+    behavior = PUBLISHED_DN_BEHAVIOR if behavior is None else behavior
     groups: dict[str, list[int]] = {}
     out_nodes = connectome.nodes.loc[connectome.output]
     for nid, cell_type in zip(out_nodes.index, out_nodes.cell_type):
-        category = PUBLISHED_DN_BEHAVIOR.get(cell_type)
+        category = behavior.get(cell_type)
         if category is not None:
             groups.setdefault(category, []).append(nid)
     return {name: np.array(sorted(nids), dtype=np.int64) for name, nids in groups.items()}
 
 
-def group_by_connectivity_cluster(connectome: Connectome) -> dict[str, NDArray[np.int64]]:
+def group_by_connectivity_cluster(
+    connectome: Connectome, clusters: dict[str, str] | None = None
+) -> dict[str, NDArray[np.int64]]:
     """RN-08/AD-15 — agrupa os nids de saída pelo cluster de conectividade
-    BANC, só para os 27 tipos sem comportamento medido mas com cluster
+    BANC, só para os tipos sem comportamento medido mas com cluster
     consistente. Evidência mais fraca que `group_by_published_behavior` — ver
-    docstring do módulo. Não usar pra cálculo de velocidade sem validar."""
+    docstring do módulo. Não usar pra cálculo de velocidade sem validar.
+    `clusters` default é `CONNECTIVITY_CLUSTER_BANC` (circuito ocelar); outros
+    circuitos (F7, ver `bristle_motor.py`) passam seu próprio dicionário."""
+    clusters = CONNECTIVITY_CLUSTER_BANC if clusters is None else clusters
     groups: dict[str, list[int]] = {}
     out_nodes = connectome.nodes.loc[connectome.output]
     for nid, cell_type in zip(out_nodes.index, out_nodes.cell_type):
-        cluster = CONNECTIVITY_CLUSTER_BANC.get(cell_type)
+        cluster = clusters.get(cell_type)
         if cluster is not None:
             groups.setdefault(cluster, []).append(nid)
     return {name: np.array(sorted(nids), dtype=np.int64) for name, nids in groups.items()}

@@ -643,7 +643,7 @@ canto superior direito como esperado. Ver `plugin/README.md`.
 
 ---
 
-## F7 — Multi-sensor v2: chuva e toque 🔶 em andamento — `bristle` em L2/L3 validado, `hygro` bloqueado em L2
+## F7 — Multi-sensor v2: chuva e toque 🔶 em andamento — `bristle` com L2/L3+curadoria prontos, falta sensor no plugin; `hygro` bloqueado em L2
 
 Começou como planejamento puro (19/09/2026): registrar o plano completo antes
 de tocar em qualquer seed novo, dado que os dois sensores anteriores (F6,
@@ -723,13 +723,18 @@ falhou 3 vezes por diluição (RN-09/F1, F4 primeiro experimento, RN-08/F6).
       descendentes** — mais cobertura que os 92 do ocelar. Semente 90,8%
       acetilcolina, sem artefato sistemático tipo RN-02; 36 neurônios (2,5%)
       `serotonin` são ruído de classificador normal, não bloqueiam nada.
-- [ ] Sensor no plugin — qual evento do Bukkit conta como "toque" precisa de
-      decisão própria, não é óbvio: `EntityDamageEvent` (só cobre dano, não
-      contato benigno), sobreposição de `BoundingBox` contra bloco/entidade
-      (arriscado — abelha voando roça terreno o tempo todo, viraria sensor
-      sempre ligado, falso positivo constante), ou colisão específica
-      (`Entity#getNearbyEntities` com raio pequeno). Definir o que conta como
-      evento antes de implementar, para não medir ruído de colisão trivial.
+- [x] **Decisão do escopo de "toque" registrada (20/09/2026, usuário):**
+      amplo — engloba contato com bloco, dano, e aproximação de mob, jogador
+      ou objeto do jogo. Não é um evento Bukkit só, é uma FAMÍLIA de
+      gatilhos.
+- [ ] Sensor no plugin — ainda pendente **como implementar essa família sem
+      virar ruído constante**: `EntityDamageEvent` (dano — evento discreto,
+      barato), sobreposição de `BoundingBox` contra bloco (abelha voando roça
+      terreno o tempo todo — precisa de um limiar/debounce, não disparar a
+      cada tick), proximidade de mob/jogador/objeto (`getNearbyEntities` com
+      raio, mesma cautela de debounce). Provavelmente vira **múltiplos
+      campos** no sensor (não um booleano só), cada um com sua lógica de
+      debounce — desenho ainda não feito, só o escopo foi decidido.
 - [x] **L2/L3 — RN-09 aplicada, sem precisar recalibrar (19/09/2026).**
       `graph.load`/`topology.group_outputs_by_predicted_sign` generalizados
       pra aceitar `out_dir`. Testado com os valores ATUAIS de `config.py`
@@ -741,11 +746,26 @@ falhou 3 vezes por diluição (RN-09/F1, F4 primeiro experimento, RN-08/F6).
       pareada (`tools/bristle_calibration_check.py`, N=30): t=568,5 e
       Wilcoxon, ambos **p≈0** — efeito ~18× baseline, sem saturação (23,8% da
       capacidade teórica). Ver RN-09 em `04-regras-de-negocio.md`.
-- [ ] **Falta pra fechar a fase real:** RN-08 equivalente (curadoria de
-      literatura pra saber que descendente do `bristle` corresponde a que
-      comportamento — não feito, nem começado) e o sensor de toque no plugin
-      (decisão de evento Bukkit ainda em aberto, ver item acima) + validação
-      por lesão em servidor real, mesmo padrão da F4.
+- [x] **RN-08 equivalente — curadoria feita (20/09/2026).** Fonte: mesma
+      tabela do BANC connectome de AD-15 (`banc_neck_functional_classes.csv`),
+      obtida do repositório GitHub público do projeto BANC (Harvard Dataverse
+      apresenta desafio anti-bot, mesma classe de bloqueio de AD-11).
+      **6/60 tipos (9 neurônios) com comportamento publicado — todos
+      `grooming`** (biologicamente coerente: cerdas de contato → reflexo de
+      limpeza). 52/60 (97 neurônios) só com cluster de conectividade BANC
+      (código bruto `DN_01`...`DN_17`, sem nome descritivo disponível na
+      fonte — não inventado). 2/60 (4 neurônios) sem dado. Namiki/Cande 2018
+      checado de novo, zero overlap com os tipos do bristle (nomenclatura de
+      driver line, não bate com estes tipos; PDF suplementar confirmado de
+      novo não confiável de interpretar). Ver RN-08 em
+      `04-regras-de-negocio.md`, `sim/src/flywire_sim/bristle_motor.py`,
+      `sim/tests/test_bristle_motor.py` (24/24 testes passam).
+- [ ] **Falta pra fechar a fase real:** sensor de toque no plugin — usuário
+      decidiu (20/09/2026) que "toque" engloba contato com bloco, dano,
+      aproximação de mob/jogador/objeto (visão ampla, não só um evento
+      Bukkit); precisa desenhar como isso vira sinal no simulador sem virar
+      ruído constante — e validação por lesão em servidor real, mesmo padrão
+      da F4.
 - [ ] Validação — idem: lesão comparando estímulo de toque real vs.
       mascarado, mesmo padrão estatístico (Welch + Mann-Whitney) já usado em
       todos os experimentos desde a F4.
@@ -781,11 +801,13 @@ ocelar — sinal RN-01/RN-02 resolvido, bias/ruído RN-09 calibrado, lesão com
 diferença estatisticamente mensurável — ou um resultado negativo é registrado
 com a mesma transparência do dia/noite nulo da F6.
 
-**`bristle` — L2/L3 já validado (19/09/2026), ver RN-09 em
-`04-regras-de-negocio.md`.** Efeito estatístico limpíssimo (p≈0, N=30), sem
-precisar recalibrar nada. Falta só: RN-08 equivalente (curadoria de
-comportamento por tipo de descendente — não iniciada), sensor de toque no
-plugin (decisão de evento Bukkit pendente) e a lesão em servidor real.
+**`bristle` — L2/L3 e curadoria RN-08 equivalente prontas (19-20/09/2026),
+ver RN-09/RN-08 em `04-regras-de-negocio.md`.** Efeito estatístico limpíssimo
+(p≈0, N=30), sem precisar recalibrar nada. Curadoria de comportamento achou
+6/60 tipos publicados (todos `grooming`, coerente com a semente de contato) e
+52/60 com cluster de conectividade. Falta só: desenho do sensor de toque no
+plugin (escopo amplo já decidido pelo usuário — bloco, dano, proximidade —
+falta o "como" sem gerar ruído constante) e a lesão em servidor real.
 
 **`hygro` segue bloqueado em L2** — depende de decidir o tratamento dos 373
 neurônios serotoninérgicos (RN-01a reaberta) antes de sequer tentar calibrar
