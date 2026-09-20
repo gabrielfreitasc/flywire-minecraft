@@ -643,7 +643,7 @@ canto superior direito como esperado. Ver `plugin/README.md`.
 
 ---
 
-## F7 — Multi-sensor v2: chuva e toque 🔶 em andamento — `bristle` pronto até o sensor no plugin, falta 2º Engine no simulador; `hygro` bloqueado em L2
+## F7 — Multi-sensor v2: chuva e toque 🔶 em andamento — `bristle` validado ponta a ponta no plugin, falta 2º Engine no simulador; `hygro` bloqueado em L2
 
 Começou como planejamento puro (19/09/2026): registrar o plano completo antes
 de tocar em qualquer seed novo, dado que os dois sensores anteriores (F6,
@@ -727,16 +727,20 @@ falhou 3 vezes por diluição (RN-09/F1, F4 primeiro experimento, RN-08/F6).
       amplo — engloba contato com bloco, dano, e aproximação de mob, jogador
       ou objeto do jogo. Não é um evento Bukkit só, é uma FAMÍLIA de
       gatilhos.
-- [x] **Sensor no plugin — implementado (20/09/2026), `TouchSensor.java`.**
-      Dois campos novos no protocolo (`touch_contact` borda, `touch_proximity`
-      nível), mais `damage` que já existia — três sinais, não um booleano só.
-      `touch_contact` usa heurística de deslocamento real vs. esperado
-      (Bukkit não tem evento de colisão pra entidade comandada por código);
-      `touch_proximity` usa `getNearbyEntities` num raio fixo. **Os dois
-      limiares são provisórios, não validados em servidor real** — mesma
-      disciplina de `MAX_YAW_RADIANS_PER_TICK`. Compila limpo
-      (`./gradlew compileJava`). Ver `plugin/README.md`,
-      `docs/02-arquitetura.md` (protocolo L6→L5).
+- [x] **Sensor no plugin — implementado E validado (20/09/2026),
+      `TouchSensor.java`.** Dois campos novos no protocolo (`touch_contact`
+      borda, `touch_proximity` nível), mais `damage` que já existia — três
+      sinais, não um booleano só. `touch_contact` usa heurística de
+      deslocamento real vs. esperado (Bukkit não tem evento de colisão pra
+      entidade comandada por código); `touch_proximity` usa
+      `getNearbyEntities` num raio fixo. **✅ Testado em servidor real:**
+      teste controlado (abelha presa num cubículo 4×4, paredes de 4 blocos)
+      deu `touch_contact` quase contínuo por 2+ minutos; teleportada pra área
+      aberta, 81s seguidos sem nenhum disparo — distingue contato real de
+      voo livre. `touch_proximity` confirmado pelo usuário (longe=false,
+      aproximar sem encostar=true). Limiares (`CONTACT_RATIO_THRESHOLD=0.5`,
+      `PROXIMITY_RADIUS=3.0`) seguem sem calibração fina, mas o mecanismo
+      funciona. Ver `plugin/README.md`, `docs/02-arquitetura.md`.
 - [ ] **Pendente: o simulador ainda não consome os campos novos.**
       `SimulationServer` (`server.py`) só roda UM `Engine` (ocelar) — falta
       integrar um segundo `Engine` pro `bristle` dentro do loop da ponte
@@ -809,13 +813,14 @@ ocelar — sinal RN-01/RN-02 resolvido, bias/ruído RN-09 calibrado, lesão com
 diferença estatisticamente mensurável — ou um resultado negativo é registrado
 com a mesma transparência do dia/noite nulo da F6.
 
-**`bristle` — L2/L3, curadoria RN-08 equivalente e sensor no plugin prontos
-(19-20/09/2026), ver RN-09/RN-08 em `04-regras-de-negocio.md`.** Efeito
-estatístico limpíssimo (p≈0, N=30), sem precisar recalibrar nada. Curadoria
-de comportamento achou 6/60 tipos publicados (todos `grooming`, coerente com
-a semente de contato) e 52/60 com cluster de conectividade. `TouchSensor.java`
-envia `touch_contact`/`touch_proximity` (provisórios, não validados) desde
-já. **Falta:** integrar um segundo `Engine` pro `bristle` em
+**`bristle` — L2/L3, curadoria RN-08 equivalente e sensor no plugin prontos E
+validados (19-20/09/2026), ver RN-09/RN-08 em `04-regras-de-negocio.md`.**
+Efeito estatístico limpíssimo (p≈0, N=30), sem precisar recalibrar nada.
+Curadoria de comportamento achou 6/60 tipos publicados (todos `grooming`,
+coerente com a semente de contato) e 52/60 com cluster de conectividade.
+`TouchSensor.java` envia `touch_contact`/`touch_proximity` — testado em
+servidor real (cubículo fechado vs. área aberta), os dois se comportam como
+esperado. **Falta:** integrar um segundo `Engine` pro `bristle` em
 `SimulationServer` (o simulador ainda não consome os campos novos) e a
 lesão em servidor real.
 

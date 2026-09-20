@@ -504,11 +504,21 @@ objeto. `TouchSensor.java` implementa os dois gatilhos novos:
   `getNearbyEntities` num raio fixo (`PROXIMITY_RADIUS = 3.0` blocos,
   **também provisório**), filtrando jogador/mob/item.
 
-**Nenhum dos dois limiares foi validado em servidor real ainda** — mesma
-disciplina de `MAX_YAW_RADIANS_PER_TICK` quando foi introduzido: primeira
-estimativa de engenharia, não número calibrado. Antes de confiar em
-`touch_contact`, testar voando a abelha de propósito contra uma parede
-(log deveria acender) e em voo livre normal (log NÃO deveria acender).
+**✅ `touch_contact` validado em servidor real, 20/09/2026.** Primeiro teste
+(voo livre em área aberta, sem controle de posição) deu rajadas
+intermitentes de disparo — ambíguo, não dava pra distinguir colisão real de
+falso positivo sem saber a posição real da abelha. **Teste controlado**
+resolveu: abelha teleportada (`/flywirebee goto`) pra dentro de um cubículo
+4×4 com paredes de 4 blocos — `touch_contact` disparou **quase contínuo por
+mais de 2 minutos seguidos** (praticamente todo tick, 18-20/20 por segundo),
+consistente com ela presa contra uma parede o tempo todo. Teleportada de
+volta pra área aberta, **81 segundos consecutivos sem um único disparo**
+(luz variando normalmente 0,73→0,27, velocidade oscilando normal — voo livre
+de verdade). `CONTACT_RATIO_THRESHOLD = 0.5` segue sem calibração fina (não
+se sabe o limiar exato onde começa a falsear), mas o mecanismo está
+confirmado: dispara sustentado em contato real, fica quieto em voo livre.
+`touch_proximity` também confirmado pelo usuário (longe = false, aproximar
+sem encostar = true).
 
 **O simulador ainda não usa nenhum dos dois campos.** `SimulationServer`
 (`server.py`) carrega só UM `Connectome` hoje (o ocelar) — não existe

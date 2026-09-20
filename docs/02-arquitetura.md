@@ -108,14 +108,18 @@ NOVOS, sinais de natureza diferente:**
 - `touch_contact` — **borda** (consumido a cada leitura, mesmo padrão de
   `damage`): heurística de deslocamento real vs. esperado pela velocidade
   comandada (Bukkit não tem evento de "colidiu com bloco" pra entidade
-  controlada por código). **Provisório, não validado em servidor real** —
-  ver `TouchSensor.java`.
+  controlada por código). **✅ Validado em servidor real (20/09/2026)** —
+  teste controlado (abelha presa num cubículo 4×4) deu disparo quase
+  contínuo por 2+ minutos; teleportada pra área aberta, 81s seguidos sem
+  nenhum disparo. Limiar (`CONTACT_RATIO_THRESHOLD = 0.5`) segue sem
+  calibração fina, mas o mecanismo funciona. Ver `plugin/README.md`.
 - `touch_proximity` — **nível** (verdadeiro enquanto algo estiver perto,
   não só no instante em que chegou): mob, jogador ou item dentro de um raio
-  fixo (também não calibrado).
+  fixo. **✅ Validado** (usuário confirmou: longe = false, aproximar sem
+  encostar = true).
 
-**Estado atual (20/09/2026): o plugin já envia os dois campos, o simulador
-ainda não os consome.** Não existe um segundo `Engine` rodando o subcircuito
+**Estado atual (20/09/2026): o plugin já envia os dois campos, validados em
+servidor real — o simulador ainda não os consome.** Não existe um segundo `Engine` rodando o subcircuito
 `bristle` em `server.py` — RN-09/RN-08 validaram o circuito isoladamente
 (scripts manuais, fora do loop da ponte), mas a integração em
 `SimulationServer` (que hoje só carrega UM `Connectome`, o ocelar) é
