@@ -830,13 +830,21 @@ falhou 3 vezes por diluição (RN-09/F1, F4 primeiro experimento, RN-08/F6).
       imediato quando dispara. Todas as constantes são estimativas de
       engenharia, não calibradas. Compila limpo, jar copiado — **precisa
       reiniciar o servidor, ainda sem reteste**.
-- [ ] **Falta: reteste da recuperação mecânica** — confirmar que ela
-      escala obstáculos (morro/degrau) em vez de ficar presa. Só depois
-      faz sentido a lesão (comparar toque real vs. mascarado, medindo se
-      ela pousa mais/permanece parada mais tempo com o sensor de toque
-      ativo do que com ele artificialmente desligado — mesmo padrão da
-      F4). Só agora que pouso/decolagem/recuperação estão estáveis isso
-      faz sentido medir.
+- [x] **Reteste confirmado (20/09/2026) — funciona, visual rústico.**
+      Log mostrou `recuperação: só 0.09 blocos em 40 ticks` disparando, e
+      luz voltou a variar de forma contínua depois (0,60→0,53→0,47) —
+      ela realmente se deslocou. **Usuário confirmou visualmente:** "esbarra
+      e tenta se livrar, de maneira estranha mas consegue se livrar e sair
+      voando". Funcional (não fica mais presa pra sempre), mas o empurrão é
+      só vertical puro, sem ajustar rotação do corpo nem misturar
+      componente horizontal pra longe do obstáculo — por isso o escape
+      parece um solavanco, não um movimento suave. **Decisão do usuário:
+      deixar como está por agora, registrado como pendência de polimento**
+      (não bloqueia a lesão).
+- [ ] **Pendência (não bloqueante): suavizar a recuperação mecânica** —
+      considerar girar o corpo junto (`bee.setRotation`, mesmo padrão do
+      achado de yaw/AD-16) e/ou somar um componente horizontal pra longe
+      do obstáculo detectado, em vez de só vertical puro.
 - [x] **L2/L3 — RN-09 aplicada, sem precisar recalibrar (19/09/2026).**
       `graph.load`/`topology.group_outputs_by_predicted_sign` generalizados
       pra aceitar `out_dir`. Testado com os valores ATUAIS de `config.py`
