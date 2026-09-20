@@ -845,6 +845,26 @@ falhou 3 vezes por diluição (RN-09/F1, F4 primeiro experimento, RN-08/F6).
       considerar girar o corpo junto (`bee.setRotation`, mesmo padrão do
       achado de yaw/AD-16) e/ou somar um componente horizontal pra longe
       do obstáculo detectado, em vez de só vertical puro.
+- [x] **Experimento de lesão implementado (20/09/2026),
+      `TouchLesionExperiment.java` + `/flywirebee touchlesion [trials]
+      [segundos] [x y z]`.** Mesmo desenho estatístico e mesmo formato de
+      CSV do `LesionExperiment` da F4 — `sim/tools/lesion_analysis.py`
+      reaproveitado sem mudar nada, só apontando pro
+      `touch_lesion_experiment.csv` novo. `ControlLoop.setTouchLesioned`
+      mascara `damage`/`touch_contact`/`touch_proximity` (sempre `false`
+      quando lesionado) do mesmo jeito que `setLesioned` já mascarava
+      `light` — sensores continuam rodando de verdade, só a LEITURA
+      enviada pra ponte é mascarada. **Diferença de desenho importante em
+      relação à luz:** toque é orientado a evento, não ambiente — a origem
+      do experimento PRECISA ficar perto de um obstáculo ou do jogador,
+      senão nem o grupo normal nem o mascarado têm estímulo real pra
+      medir (documentado no comando e na classe). Compila limpo, jar
+      copiado — **ainda não rodado em servidor real**.
+- [ ] **Falta: rodar `/flywirebee touchlesion` de verdade e analisar** —
+      critério de saída real da fase, mesmo padrão da F4 (Welch +
+      Mann-Whitney, p<0,05 em algum teste). Direção esperada é OPOSTA à
+      da F4: aqui o grupo NORMAL deveria ter `path_length`/`avg_speed`
+      MENORES (ela para pra `grooming`), o MASCARADO maiores (nunca para).
 - [x] **L2/L3 — RN-09 aplicada, sem precisar recalibrar (19/09/2026).**
       `graph.load`/`topology.group_outputs_by_predicted_sign` generalizados
       pra aceitar `out_dir`. Testado com os valores ATUAIS de `config.py`

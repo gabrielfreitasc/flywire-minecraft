@@ -26,6 +26,11 @@ import java.util.logging.Level;
  *       sensor→ponte→motor→velocidade a 20 Hz (ver {@link ControlLoop});</li>
  *   <li>{@code lesion [trials] [segundos] [x y z]} — experimento de lesão,
  *       critério de saída da F4 (ver {@link LesionExperiment});</li>
+ *   <li>{@code touchlesion [trials] [segundos] [x y z]} — experimento de
+ *       lesão do subcircuito `bristle` (toque), F7/AD-17 (ver
+ *       {@link TouchLesionExperiment}). Escolher x/y/z perto de um
+ *       obstáculo ou do jogador — toque é orientado a evento, sem estímulo
+ *       real nos dois grupos o experimento não testa nada;</li>
  *   <li>{@code daynight [trials] [segundos]} — experimento dia/noite, F6
  *       (ver {@link DayNightExperiment}). Exige abelha ao ar livre —
  *       {@code light} (não {@code dorsal_light}) é quem varia com a hora do
@@ -138,6 +143,7 @@ public final class FlywireBeePlugin extends JavaPlugin {
             case "spike" -> handleSpike(player, args);
             case "control" -> handleControl(player, args);
             case "lesion" -> handleLesion(player, args);
+            case "touchlesion" -> handleTouchLesion(player, args);
             case "daynight" -> handleDayNight(player, args);
             case "doseresponse" -> handleDoseResponse(player, args);
             case "validateyaw" -> handleValidateYaw(player, args);
@@ -223,6 +229,46 @@ public final class FlywireBeePlugin extends JavaPlugin {
             return;
         }
         new LesionExperiment(this, controlLoop).run(bee.get(), trials, secondsPerTrial, origin, player);
+    }
+
+    /**
+     * F7/AD-17 — mesmo desenho de {@link #handleLesion}, mas mascarando
+     * damage/touch_contact/touch_proximity em vez de light. Diferente da
+     * luz (ambiente, qualquer origem serve), toque é orientado a evento —
+     * ver docstring de {@link TouchLesionExperiment}: passar x/y/z perto de
+     * um obstáculo ou do jogador é importante pra ter estímulo real pra
+     * medir, senão as duas condições ficam iguais por falta de toque nos
+     * dois grupos.
+     */
+    private void handleTouchLesion(Player player, String[] args) {
+        Optional<Bee> bee = player.getWorld().getEntitiesByClass(Bee.class).stream()
+                .filter(marker::isMarked)
+                .findFirst();
+        if (bee.isEmpty()) {
+            player.sendMessage("Nenhuma abelha do FlyWire encontrada neste mundo. Use /flywirebee give primeiro.");
+            return;
+        }
+        int trials = 20;
+        int secondsPerTrial = 10;
+        Location origin = null;
+        try {
+            if (args.length >= 2) {
+                trials = Integer.parseInt(args[1]);
+            }
+            if (args.length >= 3) {
+                secondsPerTrial = Integer.parseInt(args[2]);
+            }
+            if (args.length == 6) {
+                origin = parseXyz(player, args, 3);
+            } else if (args.length != 3 && args.length != 2 && args.length != 1) {
+                throw new NumberFormatException(String.join(" ", args));
+            }
+        } catch (NumberFormatException e) {
+            player.sendMessage("Uso: /flywirebee touchlesion [trials=20] [segundosPorTrial=10] [x y z]"
+                    + " — escolha x/y/z perto de um obstáculo ou do jogador, senão não há toque pra medir.");
+            return;
+        }
+        new TouchLesionExperiment(this, controlLoop).run(bee.get(), trials, secondsPerTrial, origin, player);
     }
 
     private void handleDayNight(Player player, String[] args) {
@@ -447,7 +493,8 @@ public final class FlywireBeePlugin extends JavaPlugin {
 
     private String usage() {
         return "Uso: /flywirebee give | kill | spike <modo> | control <start|stop> | "
-                + "lesion [trials] [segundos] [x y z] | daynight [trials] [segundos] [blind] | "
+                + "lesion [trials] [segundos] [x y z] | touchlesion [trials] [segundos] [x y z] | "
+                + "daynight [trials] [segundos] [blind] | "
                 + "doseresponse [trials] [segundos] [x y z] | "
                 + "validateyaw [trials] [segundos] [amplitude] [x y z] | "
                 + "visualize <on|off> | "

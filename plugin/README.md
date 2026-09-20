@@ -583,10 +583,45 @@ intencional, empurra pra cima por 1s tentando escalar. Todas as
 constantes são estimativas, não calibradas. Compilou, jar copiado —
 **precisa reiniciar o servidor, ainda sem reteste**.
 
-**Próximo passo: experimento de lesão** comparando toque real vs.
-mascarado, mesmo padrão da F4 — ainda não implementado, só depois que a
-recuperação mecânica for confirmada. Ver `docs/02-arquitetura.md`,
-`docs/03-roadmap-fases.md` F7, `ControlLoop.onTick`.
+**✅ Recuperação mecânica confirmada em servidor real, 20/09/2026** — log
+mostrou o empurrão disparando e a luz voltou a variar depois (ela se
+deslocou de verdade). Usuário confirmou visualmente: funciona (não fica
+mais presa), mas o escape "de maneira estranha" — empurrão só vertical,
+sem girar o corpo nem componente horizontal. **Decisão: deixar como está,
+registrado como pendência de polimento não-bloqueante.**
+
+## Experimento de lesão do toque (F7/AD-17, 20/09/2026)
+
+`TouchLesionExperiment.java` + `/flywirebee touchlesion [trials=20]
+[segundos=10] [x y z]` — mesmo desenho estatístico e mesmo formato de CSV
+do `LesionExperiment` da F4 (que validou o circuito ocelar, p=0,0014).
+`sim/tools/lesion_analysis.py` reaproveitado sem mudar nada, só apontando
+pro `touch_lesion_experiment.csv` novo:
+
+```
+python tools/lesion_analysis.py ../mc-server/plugins/FlywireBee/touch_lesion_experiment.csv
+```
+
+`ControlLoop.setTouchLesioned(boolean)` mascara `damage`/`touch_contact`/
+`touch_proximity` (sempre `false` quando lesionado) do mesmo jeito que
+`setLesioned` já mascarava `light` — os sensores continuam rodando de
+verdade, só a leitura enviada pra ponte é mascarada.
+
+**Diferença de desenho importante em relação à luz:** `light` é ambiente
+e varia com a posição, qualquer origem serve. Toque é orientado a EVENTO
+— se o trial rodar em área aberta sem nada pra tocar ou esbarrar, nem o
+grupo normal nem o mascarado têm estímulo real, e o experimento mede
+ruído, não sinal. **Escolher x/y/z perto de um obstáculo ou do jogador**
+ao rodar o comando.
+
+**Direção esperada é OPOSTA à da F4:** lá, lesionado tinha rastro MENOR
+(luz motiva avanço). Aqui, se `grooming` funciona, o grupo NORMAL deveria
+ter `path_length`/`avg_speed` MENORES (ela para pra se limpar), o
+MASCARADO maiores (nunca para, sempre voando via `phototaxis`).
+
+Compila limpo, jar copiado — **ainda não rodado em servidor real**. Ver
+`docs/02-arquitetura.md`, `docs/03-roadmap-fases.md` F7,
+`TouchLesionExperiment.java`, `ControlLoop.setTouchLesioned`.
 
 ## Regra
 

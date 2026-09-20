@@ -106,6 +106,7 @@ public final class ControlLoop {
     private volatile long exchangeFailures = 0;
     private long tickCount = 0;
     private volatile Double forcedLight = null;
+    private volatile boolean touchLesioned = false; // F7/AD-17 — ver setTouchLesioned
     private volatile boolean visualize = true;
     // F6/AD-16 — direção COMANDADA, persiste entre trocas (não é a orientação
     // visual da abelha, que a IA nativa continua controlando). null = precisa
@@ -172,6 +173,20 @@ public final class ControlLoop {
      */
     public void setLesioned(boolean lesioned) {
         this.forcedLight = lesioned ? 0.0 : null;
+    }
+
+    /**
+     * F7/AD-17 — experimento de lesão pro `bristle` (toque): quando true,
+     * {@code damage}/{@code touch_contact}/{@code touch_proximity} sempre
+     * chegam `false` na ponte, não importa o que os sensores reais
+     * detectem — mesma filosofia de {@link #setLesioned}, aplicada aqui
+     * (plugin) em vez do simulador, sem mudar o protocolo. Os sensores
+     * continuam rodando de verdade (não pausa `TouchSensor`/`DamageTracker`)
+     * — só a LEITURA que chega no circuito é mascarada, igual `light=0` não
+     * desliga o bloco, só ignora o valor real dele.
+     */
+    public void setTouchLesioned(boolean lesioned) {
+        this.touchLesioned = lesioned;
     }
 
     /**
@@ -393,13 +408,22 @@ public final class ControlLoop {
         boolean sendStimulateThisTime = stimulateDirty;
         BridgeClient.StimulateSpec stimulateToSend = sendStimulateThisTime ? directedStimulus : null;
 
+        // F7/AD-17 — experimento de lesão do bristle: mascara o que é
+        // ENVIADO, não o que é detectado (mesma lógica de setLesioned/light,
+        // ver docstring de setTouchLesioned). consumeContact() já rodou
+        // acima — mascarar depois não perde nem acumula o estado real.
+        boolean touchLesionedNow = touchLesioned;
+        boolean damageToSend = touchLesionedNow ? false : damage;
+        boolean touchContactToSend = touchLesionedNow ? false : touchContact;
+        boolean touchProximityToSend = touchLesionedNow ? false : touchProximity;
+
         bridgeExecutor.submit(() -> {
             try {
                 if (bridge == null) {
                     bridge = new BridgeClient(bridgeHost, bridgePort);
                 }
                 JsonObject response = bridge.sendSensorAndReceiveMotor(
-                        light, dorsalLight, damage, touchContact, touchProximity, tMs,
+                        light, dorsalLight, damageToSend, touchContactToSend, touchProximityToSend, tMs,
                         muteToSend, stimulateToSend);
                 if (sendMuteThisTime) {
                     muteDirty = false;
