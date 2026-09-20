@@ -860,11 +860,29 @@ falhou 3 vezes por diluição (RN-09/F1, F4 primeiro experimento, RN-08/F6).
       senão nem o grupo normal nem o mascarado têm estímulo real pra
       medir (documentado no comando e na classe). Compila limpo, jar
       copiado — **ainda não rodado em servidor real**.
-- [ ] **Falta: rodar `/flywirebee touchlesion` de verdade e analisar** —
-      critério de saída real da fase, mesmo padrão da F4 (Welch +
-      Mann-Whitney, p<0,05 em algum teste). Direção esperada é OPOSTA à
-      da F4: aqui o grupo NORMAL deveria ter `path_length`/`avg_speed`
-      MENORES (ela para pra `grooming`), o MASCARADO maiores (nunca para).
+- [x] **Primeira rodada real (20/09/2026) — nulo, causa diagnosticada,
+      não é falta de efeito.** 20 trials (`115,64,-282`, perto de
+      obstáculo), 10s cada: `path_length` normal=11,55±0,51,
+      mascarado=11,86±0,82 — direção certa (mascarado maior), mas Welch
+      p=0,33 e Mann-Whitney p=0,39, bem longe de significativo.
+      **Diagnóstico:** contei `grooming` acima de 0,5 por condição no log
+      — mascarado já cruzava em **24% das amostras**, normal só um pouco
+      mais (34,3%). Confirmado isolado (sem Minecraft, `Engine` direto,
+      5 sementes): **sem estímulo nenhum**, `grooming` já fica em média
+      0,41-0,44 e passa de 0,5 em 25-27% das amostras só de ruído/
+      atividade espontânea (RN-09) — bate com o 24% do log real. **Com**
+      estímulo sustentado, satura em ~0,998 (100% das amostras). O
+      limiar de 0,5 estava perto demais do ruído de fundo, diluindo a
+      comparação — não é evidência de que o circuito não responde a
+      toque.
+- [x] **Recalibrado `GROOMING_THRESHOLD` de 0,5 pra 0,8 (20/09/2026)** —
+      bem acima do pico de ruído medido (0,71), bem abaixo da saturação
+      real (0,998). Compila limpo, jar copiado.
+- [ ] **Falta: repetir `/flywirebee touchlesion` com o limiar novo e
+      reanalisar** — critério de saída real da fase, mesmo padrão da F4
+      (Welch + Mann-Whitney, p<0,05 em algum teste). Direção esperada
+      continua OPOSTA à da F4: grupo NORMAL com `path_length`/`avg_speed`
+      MENORES (para pra `grooming`), MASCARADO maiores (nunca para).
 - [x] **L2/L3 — RN-09 aplicada, sem precisar recalibrar (19/09/2026).**
       `graph.load`/`topology.group_outputs_by_predicted_sign` generalizados
       pra aceitar `out_dir`. Testado com os valores ATUAIS de `config.py`

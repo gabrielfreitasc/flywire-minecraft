@@ -82,11 +82,18 @@ public final class MotorMapping {
     // 10s (200 ticks) gira até ~2 rad (~115°) no total.
     private static final double MAX_YAW_RADIANS_PER_TICK = 0.01;
 
-    // F7/AD-17 — grooming satura perto de 1,0 sob estímulo sustentado
-    // (medido via TCP direto contra o simulador, ver docs/03-roadmap-fases.md
-    // F7); 0,5 é o meio da faixa, PROVISÓRIO, não calibrado contra
-    // comportamento real da abelha.
-    private static final double GROOMING_THRESHOLD = 0.5;
+    // F7/AD-17 — recalibrado (20/09/2026) depois do primeiro
+    // /flywirebee touchlesion dar nulo (p=0,33). Medido isolado (sem
+    // Minecraft, tools/grooming_baseline_check.py-style, Engine direto):
+    // SEM estímulo nenhum, grooming já fica em média 0,41-0,44 e passa de
+    // 0,5 em ~25-27% das amostras só de ruído/atividade espontânea (RN-09)
+    // — bate com o 24% medido no log real durante trials mascarados do
+    // experimento de lesão. COM estímulo sustentado, satura em ~0,998,
+    // 100% das amostras acima de 0,5. 0,5 era baixo demais pra separar
+    // ruído de sinal; 0,8 fica bem acima do pico de ruído medido (0,71) e
+    // bem abaixo da saturação real (0,998). Ainda não validado com um novo
+    // /flywirebee touchlesion depois da mudança.
+    private static final double GROOMING_THRESHOLD = 0.8;
     // Descida vertical enquanto GROOMING_THRESHOLD é ultrapassado, até
     // tocar o chão. PROVISÓRIO — nunca testado em servidor real.
     private static final double LANDING_DESCENT_BLOCKS_PER_TICK = 0.1;

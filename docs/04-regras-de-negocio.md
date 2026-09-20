@@ -519,13 +519,26 @@ dado. Ver `sim/src/flywire_sim/bristle_motor.py`, `tests/test_bristle_motor.py`.
 20/09/2026), decisão do usuário.** Primeira vez que um canal do `bristle`
 sai de telemetria pura pra efeito observável: quando `grooming` (o único
 canal com comportamento PUBLICADO, não cluster de conectividade) passa de
-`GROOMING_THRESHOLD=0,5`, `MotorMapping.java` ignora `phototaxis` e faz a
+`GROOMING_THRESHOLD`, `MotorMapping.java` ignora `phototaxis` e faz a
 abelha descer/pousar/ficar parada ("se limpando") até o canal cair de novo.
-Mesma disciplina de `phototaxis`/`yaw_steering`: constantes provisórias
-(`GROOMING_THRESHOLD`, `LANDING_DESCENT_BLOCKS_PER_TICK`), sem calibração,
-sem validação por lesão em servidor real ainda — isso é o próximo passo
-(comparar abelha com toque real vs. mascarado, medindo se ela realmente
-pousa diferente). Ver `plugin/src/main/java/.../MotorMapping.java`,
+
+**Primeiro `/flywirebee touchlesion` (20/09/2026) deu nulo — causa era
+calibração do limiar, não falta de efeito.** 20 trials, `path_length`
+normal=11,55±0,51 vs. mascarado=11,86±0,82 (direção certa, mascarado
+maior), mas Welch p=0,33 / Mann-Whitney p=0,39. Contando `grooming` acima
+de 0,5 por condição no log: mascarado já cruzava em 24% das amostras.
+Confirmado isolado (`Engine` direto, sem Minecraft, 5 sementes): **sem
+estímulo nenhum**, `grooming` fica em média 0,41-0,44, passa de 0,5 em
+25-27% das amostras só de ruído/atividade espontânea (RN-09) — bate com
+o 24% do log real. **Com** estímulo sustentado, satura em ~0,998 (100%
+das amostras). `GROOMING_THRESHOLD=0,5` estava perto demais do ruído de
+fundo, diluindo a comparação entre condições.
+
+**Recalibrado pra `GROOMING_THRESHOLD=0,8`** (bem acima do pico de ruído
+medido, 0,71; bem abaixo da saturação real, 0,998). `LANDING_DESCENT_
+BLOCKS_PER_TICK` continua sem calibração. **Repetição do
+`/flywirebee touchlesion` com o limiar novo ainda pendente** — critério
+de saída real da fase. Ver `plugin/src/main/java/.../MotorMapping.java`,
 `docs/03-roadmap-fases.md` F7.
 
 ---

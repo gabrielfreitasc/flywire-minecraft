@@ -619,9 +619,20 @@ ao rodar o comando.
 ter `path_length`/`avg_speed` MENORES (ela para pra se limpar), o
 MASCARADO maiores (nunca para, sempre voando via `phototaxis`).
 
-Compila limpo, jar copiado — **ainda não rodado em servidor real**. Ver
-`docs/02-arquitetura.md`, `docs/03-roadmap-fases.md` F7,
-`TouchLesionExperiment.java`, `ControlLoop.setTouchLesioned`.
+**Primeira rodada real (20/09/2026) deu nulo — causa era calibração do
+limiar, não falta de efeito.** 20 trials: direção certa (mascarado com
+rastro maior), mas p=0,33/0,39, longe de significativo. Contando
+`grooming` por condição no log: mascarado já cruzava 0,5 em 24% das
+amostras — confirmado isolado (sem Minecraft) que a atividade espontânea
+sozinha (sem estímulo nenhum) já fica em média 0,41-0,44 e passa de 0,5
+em 25-27% do tempo, contra ~100% com estímulo sustentado (satura em
+~0,998). `GROOMING_THRESHOLD` recalibrado de 0,5 pra **0,8** (bem acima
+do pico de ruído medido, 0,71). Jar novo compilado e copiado —
+**repetição do experimento com o limiar novo ainda pendente**.
+
+Ver `docs/02-arquitetura.md`, `docs/03-roadmap-fases.md` F7,
+`TouchLesionExperiment.java`, `ControlLoop.setTouchLesioned`,
+`MotorMapping.GROOMING_THRESHOLD`.
 
 ## Regra
 
