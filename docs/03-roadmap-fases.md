@@ -643,7 +643,7 @@ canto superior direito como esperado. Ver `plugin/README.md`.
 
 ---
 
-## F7 — Multi-sensor v2: chuva e toque 🔶 em andamento — `bristle` com L2/L3+curadoria prontos, falta sensor no plugin; `hygro` bloqueado em L2
+## F7 — Multi-sensor v2: chuva e toque 🔶 em andamento — `bristle` pronto até o sensor no plugin, falta 2º Engine no simulador; `hygro` bloqueado em L2
 
 Começou como planejamento puro (19/09/2026): registrar o plano completo antes
 de tocar em qualquer seed novo, dado que os dois sensores anteriores (F6,
@@ -727,14 +727,22 @@ falhou 3 vezes por diluição (RN-09/F1, F4 primeiro experimento, RN-08/F6).
       amplo — engloba contato com bloco, dano, e aproximação de mob, jogador
       ou objeto do jogo. Não é um evento Bukkit só, é uma FAMÍLIA de
       gatilhos.
-- [ ] Sensor no plugin — ainda pendente **como implementar essa família sem
-      virar ruído constante**: `EntityDamageEvent` (dano — evento discreto,
-      barato), sobreposição de `BoundingBox` contra bloco (abelha voando roça
-      terreno o tempo todo — precisa de um limiar/debounce, não disparar a
-      cada tick), proximidade de mob/jogador/objeto (`getNearbyEntities` com
-      raio, mesma cautela de debounce). Provavelmente vira **múltiplos
-      campos** no sensor (não um booleano só), cada um com sua lógica de
-      debounce — desenho ainda não feito, só o escopo foi decidido.
+- [x] **Sensor no plugin — implementado (20/09/2026), `TouchSensor.java`.**
+      Dois campos novos no protocolo (`touch_contact` borda, `touch_proximity`
+      nível), mais `damage` que já existia — três sinais, não um booleano só.
+      `touch_contact` usa heurística de deslocamento real vs. esperado
+      (Bukkit não tem evento de colisão pra entidade comandada por código);
+      `touch_proximity` usa `getNearbyEntities` num raio fixo. **Os dois
+      limiares são provisórios, não validados em servidor real** — mesma
+      disciplina de `MAX_YAW_RADIANS_PER_TICK`. Compila limpo
+      (`./gradlew compileJava`). Ver `plugin/README.md`,
+      `docs/02-arquitetura.md` (protocolo L6→L5).
+- [ ] **Pendente: o simulador ainda não consome os campos novos.**
+      `SimulationServer` (`server.py`) só roda UM `Engine` (ocelar) — falta
+      integrar um segundo `Engine` pro `bristle` dentro do loop da ponte
+      antes de `touch_contact`/`touch_proximity` significarem alguma coisa
+      pra simulação (hoje chegam e são ignorados, mesmo estado em que
+      `damage` já vivia). Próximo passo natural da fase real.
 - [x] **L2/L3 — RN-09 aplicada, sem precisar recalibrar (19/09/2026).**
       `graph.load`/`topology.group_outputs_by_predicted_sign` generalizados
       pra aceitar `out_dir`. Testado com os valores ATUAIS de `config.py`
@@ -801,13 +809,15 @@ ocelar — sinal RN-01/RN-02 resolvido, bias/ruído RN-09 calibrado, lesão com
 diferença estatisticamente mensurável — ou um resultado negativo é registrado
 com a mesma transparência do dia/noite nulo da F6.
 
-**`bristle` — L2/L3 e curadoria RN-08 equivalente prontas (19-20/09/2026),
-ver RN-09/RN-08 em `04-regras-de-negocio.md`.** Efeito estatístico limpíssimo
-(p≈0, N=30), sem precisar recalibrar nada. Curadoria de comportamento achou
-6/60 tipos publicados (todos `grooming`, coerente com a semente de contato) e
-52/60 com cluster de conectividade. Falta só: desenho do sensor de toque no
-plugin (escopo amplo já decidido pelo usuário — bloco, dano, proximidade —
-falta o "como" sem gerar ruído constante) e a lesão em servidor real.
+**`bristle` — L2/L3, curadoria RN-08 equivalente e sensor no plugin prontos
+(19-20/09/2026), ver RN-09/RN-08 em `04-regras-de-negocio.md`.** Efeito
+estatístico limpíssimo (p≈0, N=30), sem precisar recalibrar nada. Curadoria
+de comportamento achou 6/60 tipos publicados (todos `grooming`, coerente com
+a semente de contato) e 52/60 com cluster de conectividade. `TouchSensor.java`
+envia `touch_contact`/`touch_proximity` (provisórios, não validados) desde
+já. **Falta:** integrar um segundo `Engine` pro `bristle` em
+`SimulationServer` (o simulador ainda não consome os campos novos) e a
+lesão em servidor real.
 
 **`hygro` segue bloqueado em L2** — depende de decidir o tratamento dos 373
 neurônios serotoninérgicos (RN-01a reaberta) antes de sequer tentar calibrar

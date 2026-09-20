@@ -487,6 +487,38 @@ lado — limitação conhecida da API de scoreboard vanilla.
 **✅ Confirmado visualmente em servidor real** — painel aparece no canto
 superior direito como esperado (usuário confirmou).
 
+## Sensor de toque (F7/AD-17, 20/09/2026) — enviado, ainda não consumido
+
+Decisão do usuário: "toque" não é um evento só, é uma família — contato com
+bloco, dano (já existia, `DamageTracker`), e aproximação de mob, jogador ou
+objeto. `TouchSensor.java` implementa os dois gatilhos novos:
+
+- **`touch_contact`** (borda, consumido a cada troca, mesmo padrão de
+  `damage`) — Bukkit não tem evento de "colidiu com bloco" pra entidade
+  controlada por código (`setVelocity()`). Heurística: comparar o
+  deslocamento real do tick contra o que a velocidade comandada deveria
+  produzir (~96% em voo livre, medido na F4 — ver "Risco investigado"
+  acima). Se cair bem abaixo disso (`CONTACT_RATIO_THRESHOLD = 0.5`,
+  **provisório**), conta como contato.
+- **`touch_proximity`** (nível, verdadeiro enquanto algo estiver perto) —
+  `getNearbyEntities` num raio fixo (`PROXIMITY_RADIUS = 3.0` blocos,
+  **também provisório**), filtrando jogador/mob/item.
+
+**Nenhum dos dois limiares foi validado em servidor real ainda** — mesma
+disciplina de `MAX_YAW_RADIANS_PER_TICK` quando foi introduzido: primeira
+estimativa de engenharia, não número calibrado. Antes de confiar em
+`touch_contact`, testar voando a abelha de propósito contra uma parede
+(log deveria acender) e em voo livre normal (log NÃO deveria acender).
+
+**O simulador ainda não usa nenhum dos dois campos.** `SimulationServer`
+(`server.py`) carrega só UM `Connectome` hoje (o ocelar) — não existe
+`Engine` rodando o subcircuito `bristle` dentro do loop da ponte. RN-09
+(rede responde ao estímulo) e a curadoria RN-08 equivalente (6/60 tipos =
+`grooming`) já foram validadas separadamente, fora do loop da ponte, via
+scripts manuais (`tools/bristle_calibration_check.py`). Integrar um segundo
+`Engine` em `SimulationServer` é o próximo passo, não feito aqui — ver
+`docs/03-roadmap-fases.md` F7.
+
 ## Regra
 
 O plugin **nunca** altera a simulação. Se o comportamento não emerge, o problema

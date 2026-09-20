@@ -40,6 +40,7 @@ public final class ControlLoop {
     private final Plugin plugin;
     private final FlywireBeeMarker marker;
     private final DamageTracker damageTracker;
+    private final TouchSensor touchSensor = new TouchSensor();
     private final String bridgeHost;
     private final int bridgePort;
 
@@ -54,6 +55,11 @@ public final class ControlLoop {
     private BukkitTask tickTask;
     private final AtomicBoolean exchangeInFlight = new AtomicBoolean(false);
     private volatile Vector latestVelocity = new Vector(0, 0, 0);
+    // F7/AD-17 — velocidade que esteve ativa durante o tick que acabou de
+    // passar, usada por TouchSensor pra saber o deslocamento ESPERADO e
+    // comparar com o real (heurística de touch_contact). Não confundir com
+    // latestVelocity, que é a próxima a ser aplicada.
+    private volatile Vector lastAppliedVelocity = new Vector(0, 0, 0);
     private volatile JsonObject latestMotor = new JsonObject();
     private volatile int latestActiveDn = 0;
     private volatile long exchangeCount = 0;
@@ -178,7 +184,9 @@ public final class ControlLoop {
             return t;
         });
         latestVelocity = new Vector(0, 0, 0);
+        lastAppliedVelocity = new Vector(0, 0, 0);
         heading = null; // F6/AD-16 — começa do zero, da orientação real da abelha
+        touchSensor.reset(); // F7/AD-17 — sem posição anterior pra comparar ainda
         tickTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::onTick, 0L, 1L);
     }
 
@@ -209,8 +217,14 @@ public final class ControlLoop {
             return;
         }
 
+        // F7/AD-17 — grava ANTES de aplicar a velocidade nova: compara a
+        // posição atual (resultado de lastAppliedVelocity, aplicada no tick
+        // anterior) contra a posição gravada na chamada anterior.
+        touchSensor.recordTick(bee, lastAppliedVelocity);
+
         // RN-06: aplica o último vetor já calculado, nunca espera a ponte.
         bee.setVelocity(latestVelocity);
+        lastAppliedVelocity = latestVelocity;
 
         // F6/AD-16 — achado do usuário (18/09/2026): setVelocity() move a
         // abelha, mas NÃO gira o corpo visual dela — isso é responsabilidade
@@ -240,8 +254,10 @@ public final class ControlLoop {
 
         if (tickCount % LOG_EVERY_TICKS == 0) {
             plugin.getLogger().info(String.format(Locale.ROOT,
-                    "[ControlLoop] light=%.2f (real=%.2f, forçado=%s) vel=%s trocas=%d falhas=%d",
-                    light, realLight, forced, latestVelocity, exchangeCount, exchangeFailures));
+                    "[ControlLoop] light=%.2f (real=%.2f, forçado=%s) vel=%s trocas=%d falhas=%d "
+                            + "proximity=%s",
+                    light, realLight, forced, latestVelocity, exchangeCount, exchangeFailures,
+                    touchSensor.isNearSomething(bee)));
         }
         tickCount++;
 
@@ -251,6 +267,10 @@ public final class ControlLoop {
 
         double dorsalLight = bee.getLocation().getBlock().getLightFromSky() / 15.0;
         boolean damage = damageTracker.consumeRecentDamage();
+        // F7/AD-17 — família de sensores de toque (ver TouchSensor): contact
+        // é borda (consumido), proximity é nível (lido de novo a cada troca).
+        boolean touchContact = touchSensor.consumeContact();
+        boolean touchProximity = touchSensor.isNearSomething(bee);
         long tMs = System.currentTimeMillis();
         // F6/AD-16: heading é a direção COMANDADA da troca anterior, não a
         // orientação real da abelha — só cai pra getDirection() se ainda não
@@ -271,7 +291,8 @@ public final class ControlLoop {
                     bridge = new BridgeClient(bridgeHost, bridgePort);
                 }
                 JsonObject response = bridge.sendSensorAndReceiveMotor(
-                        light, dorsalLight, damage, tMs, muteToSend, stimulateToSend);
+                        light, dorsalLight, damage, touchContact, touchProximity, tMs,
+                        muteToSend, stimulateToSend);
                 if (sendMuteThisTime) {
                     muteDirty = false;
                 }

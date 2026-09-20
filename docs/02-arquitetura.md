@@ -84,7 +84,8 @@ vê intenção motora. Se o mob mudar, só L4 muda.
 
 ### L6 → L5 · sensores
 ```json
-{"t_ms": 12450, "light": 0.94, "dorsal_light": 0.61, "damage": false}
+{"t_ms": 12450, "light": 0.94, "dorsal_light": 0.61, "damage": false,
+ "touch_contact": false, "touch_proximity": false}
 ```
 Dois campos opcionais, adicionados na F5 (omitidos no exemplo acima por
 serem raros — a maioria das mensagens não os inclui):
@@ -99,6 +100,29 @@ só mudam o estado no simulador quando o campo está PRESENTE na mensagem —
 ausência mantém o que já estava configurado, não reseta a cada mensagem. Ver
 `server.py` e `plugin/README.md` para os comandos que expõem isso
 (`/flywirebee mute|unmute|stimulate`).
+
+**`touch_contact`/`touch_proximity` (F7/AD-17, 20/09/2026) — família de
+sensores de toque, decisão do usuário: toque engloba contato com bloco, dano
+(`damage`, já existia), e aproximação de mob/jogador/objeto. Dois campos
+NOVOS, sinais de natureza diferente:**
+- `touch_contact` — **borda** (consumido a cada leitura, mesmo padrão de
+  `damage`): heurística de deslocamento real vs. esperado pela velocidade
+  comandada (Bukkit não tem evento de "colidiu com bloco" pra entidade
+  controlada por código). **Provisório, não validado em servidor real** —
+  ver `TouchSensor.java`.
+- `touch_proximity` — **nível** (verdadeiro enquanto algo estiver perto,
+  não só no instante em que chegou): mob, jogador ou item dentro de um raio
+  fixo (também não calibrado).
+
+**Estado atual (20/09/2026): o plugin já envia os dois campos, o simulador
+ainda não os consome.** Não existe um segundo `Engine` rodando o subcircuito
+`bristle` em `server.py` — RN-09/RN-08 validaram o circuito isoladamente
+(scripts manuais, fora do loop da ponte), mas a integração em
+`SimulationServer` (que hoje só carrega UM `Connectome`, o ocelar) é
+trabalho pendente. Mesmo estado em que `damage` já vivia antes desta
+mudança — registrado explicitamente aqui para não ficar a impressão de que
+"enviar o campo" é o mesmo que "o circuito reage a ele". Ver
+`docs/03-roadmap-fases.md` F7.
 
 ### Protocolo da ponte
 - TCP em `localhost:8765`, JSON-lines (`\n`), UTF-8.

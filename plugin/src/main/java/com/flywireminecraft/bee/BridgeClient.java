@@ -41,9 +41,12 @@ public final class BridgeClient implements AutoCloseable {
     }
 
     /** Sem alterar mute/stimulate atuais — ver sobrecarga completa. */
-    public JsonObject sendSensorAndReceiveMotor(double light, double dorsalLight, boolean damage, long tMs)
-            throws IOException {
-        return sendSensorAndReceiveMotor(light, dorsalLight, damage, tMs, null, null);
+    public JsonObject sendSensorAndReceiveMotor(
+            double light, double dorsalLight, boolean damage,
+            boolean touchContact, boolean touchProximity, long tMs
+    ) throws IOException {
+        return sendSensorAndReceiveMotor(
+                light, dorsalLight, damage, touchContact, touchProximity, tMs, null, null);
     }
 
     /**
@@ -53,11 +56,21 @@ public final class BridgeClient implements AutoCloseable {
      * qualquer um dos dois significa "não mudar o que já está configurado
      * no simulador" — não é o mesmo que "limpar" (ver `server.py`).
      *
+     * <p>F7/AD-17 — {@code touchContact} (borda, esbarrou em bloco) e
+     * {@code touchProximity} (nível, algo perto agora) são a família de
+     * sensores de toque decidida pelo usuário (20/09/2026, ver
+     * {@link TouchSensor}). Enviados no protocolo desde já; o simulador
+     * (`server.py`) ainda não os consome — não existe um segundo `Engine`
+     * pro subcircuito `bristle` rodando ainda (RN-09/RN-08 já validaram o
+     * circuito isoladamente, ver docs/03-roadmap-fases.md F7). Mesmo estado
+     * que `damage` já estava antes desta mudança: chega, não é usado.
+     *
      * @throws IOException se a conexão cair — quem chama decide se reconecta
      *     ou segue sem atuar neste tick; nunca esperar aqui.
      */
     public JsonObject sendSensorAndReceiveMotor(
-            double light, double dorsalLight, boolean damage, long tMs,
+            double light, double dorsalLight, boolean damage,
+            boolean touchContact, boolean touchProximity, long tMs,
             Collection<String> mute, StimulateSpec stimulate
     ) throws IOException {
         JsonObject sensor = new JsonObject();
@@ -65,6 +78,8 @@ public final class BridgeClient implements AutoCloseable {
         sensor.addProperty("light", light);
         sensor.addProperty("dorsal_light", dorsalLight);
         sensor.addProperty("damage", damage);
+        sensor.addProperty("touch_contact", touchContact);
+        sensor.addProperty("touch_proximity", touchProximity);
         if (mute != null) {
             JsonArray muteArray = new JsonArray();
             mute.forEach(muteArray::add);
