@@ -561,10 +561,21 @@ esse descompasso de um tick parecia "toque" de novo bem na hora da
 transição. **Segunda correção:** folga de
 `GROOMING_TRANSITION_GRACE_TICKS=10` (0,5s, provisório) pausando
 `TouchSensor` por um tempo depois de QUALQUER troca de estado do
-`grooming`, não só enquanto ele está ativo. Jar novo compilado e copiado —
-**precisa reiniciar o servidor de novo, ainda sem reteste desta correção
-específica**. Ver `docs/02-arquitetura.md`, `docs/03-roadmap-fases.md` F7,
+`grooming`, não só enquanto ele está ativo.
+
+**✅ Confirmado em servidor real, 20/09/2026 — "voando normal" (usuário).**
+Depois de reiniciar com a segunda correção: voo livre estável em área
+aberta, `grooming` oscilando numa faixa saudável (~0,2-0,5) sem travar,
+`touch_contact` raro e isolado, pouso só com toque genuíno. **Achado à
+parte, sem relação com toque/grooming:** se a direção de voo (`heading`)
+apontar pra dentro de bloco/tronco de árvore, ela fica emperrada ali —
+`MotorMapping` não tem desvio de obstáculo. Limitação preexistente
+(RN-08 parcial, já documentada), não bug novo desta sessão. Ver
+`docs/02-arquitetura.md`, `docs/03-roadmap-fases.md` F7,
 `MotorMapping.isGroomingActive`, `ControlLoop.onTick`.
+
+**Próximo passo: experimento de lesão** comparando toque real vs.
+mascarado, mesmo padrão da F4 — ainda não implementado.
 
 ## Regra
 

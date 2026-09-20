@@ -643,7 +643,7 @@ canto superior direito como esperado. Ver `plugin/README.md`.
 
 ---
 
-## F7 — Multi-sensor v2: chuva e toque 🔶 em andamento — `bristle` controla a abelha (pouso via `grooming`), falta checagem visual + lesão; `hygro` bloqueado em L2
+## F7 — Multi-sensor v2: chuva e toque 🔶 em andamento — `bristle` controla a abelha e voa/pousa estável (confirmado visualmente), falta a lesão; `hygro` bloqueado em L2
 
 Começou como planejamento puro (19/09/2026): registrar o plano completo antes
 de tocar em qualquer seed novo, dado que os dois sensores anteriores (F6,
@@ -802,10 +802,23 @@ falhou 3 vezes por diluição (RN-09/F1, F4 primeiro experimento, RN-08/F6).
       `ControlLoop` ganhou `wasGroomingActive`/`groomingGraceTicksLeft`.
       Compila limpo, jar copiado — **precisa reiniciar o servidor de
       novo, ainda sem reteste desta correção específica**.
-- [ ] **Falta: reteste da segunda correção** — confirmar que ela se
-      estabiliza em voo livre numa área aberta, sem ficar oscilando.
-      Só depois faz sentido a lesão (comparar toque real vs. mascarado,
-      medindo se ela pousa mais/menos, mesmo padrão da F4).
+- [x] **Reteste da segunda correção — confirmado (20/09/2026).** Depois de
+      reiniciar de novo: voo livre estável em área aberta, `grooming`
+      oscilando numa faixa saudável (~0,2-0,5) sem prender, `touch_contact`
+      raro e isolado (não sustentado), e pouso correto só quando há toque
+      genuíno (`proximity` real). **Confirmado visualmente pelo usuário**
+      — "voando normal". Achado à parte, sem relação com toque/grooming:
+      se a direção de voo (`heading`) apontar pra dentro de um bloco/tronco
+      de árvore, ela fica emperrada ali (luz do bloco não muda apesar de
+      `vel` não-zero) — limitação conhecida, já documentada
+      (`MotorMapping` não tem desvio de obstáculo nem controle de altura
+      próprio). Não é bug novo desta sessão, só ficou visível por ela ter
+      pousado perto de uma árvore uma vez.
+- [ ] **Próximo passo: lesão em servidor real** — comparar toque real vs.
+      mascarado (mesmo padrão da F4), medindo se ela pousa
+      mais/permanece parada mais tempo com o sensor de toque ativo do que
+      com ele artificialmente desligado. Só agora que pouso/decolagem estão
+      estáveis isso faz sentido medir.
 - [x] **L2/L3 — RN-09 aplicada, sem precisar recalibrar (19/09/2026).**
       `graph.load`/`topology.group_outputs_by_predicted_sign` generalizados
       pra aceitar `out_dir`. Testado com os valores ATUAIS de `config.py`
