@@ -630,6 +630,14 @@ em 25-27% do tempo, contra ~100% com estímulo sustentado (satura em
 do pico de ruído medido, 0,71). Jar novo compilado e copiado —
 **repetição do experimento com o limiar novo ainda pendente**.
 
+**✅ CRITÉRIO DE SAÍDA ATINGIDO — segunda rodada (21/09/2026), limiar
+recalibrado.** 20 trials, mesma origem: `path_length` normal=7,36±0,49
+vs. mascarado=9,79±1,17 (direção certa, ~25% de efeito). **Welch p=0,013,
+Mann-Whitney p=0,0025 — os dois concordam.** Mesmo padrão de rigor que
+validou o circuito ocelar na F4 (p=0,0014 lá). Isto fecha a cadeia
+sensor→circuito→comportamento pro `bristle`, mesmo nível de evidência que
+`phototaxis` já tinha.
+
 Ver `docs/02-arquitetura.md`, `docs/03-roadmap-fases.md` F7,
 `TouchLesionExperiment.java`, `ControlLoop.setTouchLesioned`,
 `MotorMapping.GROOMING_THRESHOLD`.

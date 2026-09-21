@@ -536,10 +536,18 @@ fundo, diluindo a comparação entre condições.
 
 **Recalibrado pra `GROOMING_THRESHOLD=0,8`** (bem acima do pico de ruído
 medido, 0,71; bem abaixo da saturação real, 0,998). `LANDING_DESCENT_
-BLOCKS_PER_TICK` continua sem calibração. **Repetição do
-`/flywirebee touchlesion` com o limiar novo ainda pendente** — critério
-de saída real da fase. Ver `plugin/src/main/java/.../MotorMapping.java`,
-`docs/03-roadmap-fases.md` F7.
+BLOCKS_PER_TICK` continua sem calibração.
+
+**✅ Critério de saída atingido — segunda rodada (21/09/2026).** 20 trials,
+mesma origem (115, 64, -282): `path_length` normal=7,36±0,49 vs.
+mascarado=9,79±1,17 (direção certa — toque real faz ela pousar mais, andar
+menos). **Welch t-test p=0,013, Mann-Whitney U p=0,0025 — os dois
+concordam**, mesmo padrão de rigor que validou o ocelar na F4 (p=0,0014
+lá). N=15 normal/5 lesionado (desbalanceado por sorteio, como já
+aconteceu na F4 original). **Isto fecha a cadeia sensor→circuito→
+comportamento pro `bristle`**, mesmo nível de evidência que `phototaxis`
+já tinha — ver `docs/03-roadmap-fases.md` F7,
+`plugin/src/main/java/.../TouchLesionExperiment.java`.
 
 ---
 
@@ -663,5 +671,5 @@ plugin primeiro).
 | RN-06 | `engine.py`, `server.py`, `ControlLoop.java` | `test_bridge_request_response_no_frame_loss`, `test_bridge_history_stays_bounded_by_window` (`test_server.py`); validado em produção — 1500 trocas/0 falhas em servidor real (F4) | Médio |
 | RN-07 | `neuron.py` | `test_refractory` | Alto |
 | RN-08 | `motor.py`, `MotorMapping.java` | `test_motor_groups_cover_all_descendants`, `test_motor_decode_range`, `test_published_behavior_groups_are_real_types`, `test_connectivity_cluster_groups_are_real_types`, `test_steering_bilateral_pairs_are_balanced` | **Crítico — 18/47 tipos com literatura real (AD-14+AD-15), 27/34 restantes com cluster de conectividade BANC (telemetria só, não behavior medido), 1 tipo (DNpe027) ambíguo, 1 tipo (DNp40) sem nenhum dado. Canal `yaw_steering` (AD-16) é telemetria, sentido não validado. `MotorMapping.java` continua só com `phototaxis`.** |
-| RN-08 (`bristle`) | `bristle_motor.py` | `tests/test_bristle_motor.py` | Curadoria só — 6/60 tipos com comportamento publicado (todos `grooming`), 52/60 com cluster BANC (código bruto, sem nome), 2/60 sem dado. Nada disto entra em cálculo de velocidade ainda. |
+| RN-08 (`bristle`) | `bristle_motor.py`, `MotorMapping.java` | `tests/test_bristle_motor.py`, `/flywirebee touchlesion` (manual, servidor real) | **`grooming` (6/60 tipos, único com comportamento publicado) valida por lesão: Welch p=0,013, Mann-Whitney p=0,0025 (21/09/2026).** Controla a abelha de verdade (`MotorMapping.java`). Os outros 52/60 tipos (cluster BANC, código bruto sem nome) seguem só telemetria, não usados. |
 | RN-09 | `engine.py` | `tools/calibration_check.py` (ocelar), `tools/bristle_calibration_check.py` (F7, subcircuito `bristle` — sem recalibrar, ver acima) — estatísticos, manuais, não rodam no CI | Alto — validado por teste estatístico, ver acima |

@@ -643,7 +643,7 @@ canto superior direito como esperado. Ver `plugin/README.md`.
 
 ---
 
-## F7 — Multi-sensor v2: chuva e toque 🔶 em andamento — `bristle` controla a abelha e voa/pousa estável (confirmado visualmente), falta a lesão; `hygro` bloqueado em L2
+## F7 — Multi-sensor v2: chuva e toque 🔶 em andamento — `bristle` ✅ validado ponta a ponta (lesão p=0,0025); `hygro` bloqueado em L2
 
 Começou como planejamento puro (19/09/2026): registrar o plano completo antes
 de tocar em qualquer seed novo, dado que os dois sensores anteriores (F6,
@@ -878,11 +878,16 @@ falhou 3 vezes por diluição (RN-09/F1, F4 primeiro experimento, RN-08/F6).
 - [x] **Recalibrado `GROOMING_THRESHOLD` de 0,5 pra 0,8 (20/09/2026)** —
       bem acima do pico de ruído medido (0,71), bem abaixo da saturação
       real (0,998). Compila limpo, jar copiado.
-- [ ] **Falta: repetir `/flywirebee touchlesion` com o limiar novo e
-      reanalisar** — critério de saída real da fase, mesmo padrão da F4
-      (Welch + Mann-Whitney, p<0,05 em algum teste). Direção esperada
-      continua OPOSTA à da F4: grupo NORMAL com `path_length`/`avg_speed`
-      MENORES (para pra `grooming`), MASCARADO maiores (nunca para).
+- [x] **✅ CRITÉRIO DE SAÍDA ATINGIDO (20/09/2026) — segunda rodada, com o
+      limiar recalibrado.** 20 trials, mesma origem (115, 64, -282):
+      `path_length` normal=7,36±0,49 vs. mascarado=9,79±1,17 — direção
+      certa (normal MENOR, ela pousa mais), efeito grande (~25%). **Welch
+      t-test p=0,013, Mann-Whitney U p=0,0025 — os dois concordam**, mesmo
+      padrão de rigor que validou o circuito ocelar na F4 (lá p=0,0014).
+      N=15 normal / 5 lesionado (desbalanceado por sorteio aleatório, como
+      já aconteceu na F4 original). **Isto fecha a validação do
+      `bristle`**: sensor real → circuito → comportamento observável, a
+      mesma cadeia completa que a luz já tinha.
 - [x] **L2/L3 — RN-09 aplicada, sem precisar recalibrar (19/09/2026).**
       `graph.load`/`topology.group_outputs_by_predicted_sign` generalizados
       pra aceitar `out_dir`. Testado com os valores ATUAIS de `config.py`
@@ -943,26 +948,29 @@ nas anotações pros dois (`hygro` e `bristle`, nenhuma inventada), extraída e
 validada com `python tools/build_f7_circuits.py`. Nenhum resultado negativo
 precisou ser registrado desta vez — os dois rótulos existiam.
 
-**Critério de saída da fase inteira (validação por lesão em servidor real,
-ainda não atingido):** por sensor, ou o circuito chega ao mesmo padrão do
-ocelar — sinal RN-01/RN-02 resolvido, bias/ruído RN-09 calibrado, lesão com
-diferença estatisticamente mensurável — ou um resultado negativo é registrado
-com a mesma transparência do dia/noite nulo da F6.
+**Critério de saída da fase inteira:** por sensor, ou o circuito chega ao
+mesmo padrão do ocelar — sinal RN-01/RN-02 resolvido, bias/ruído RN-09
+calibrado, lesão com diferença estatisticamente mensurável — ou um resultado
+negativo é registrado com a mesma transparência do dia/noite nulo da F6.
+**`bristle` atingiu; `hygro` segue bloqueado.**
 
-**`bristle` — L2/L3, curadoria RN-08 equivalente, sensor no plugin E
-integração no simulador prontos e validados (19-20/09/2026), ver RN-09/RN-08
-em `04-regras-de-negocio.md`.** Efeito estatístico limpíssimo (p≈0, N=30),
-sem precisar recalibrar nada. Curadoria de comportamento achou 6/60 tipos
-publicados (todos `grooming`, coerente com a semente de contato) e 52/60 com
-cluster de conectividade. `TouchSensor.java` envia `touch_contact`/
-`touch_proximity` — testado em servidor real (cubículo fechado vs. área
-aberta). `SimulationServer` roda um segundo `Engine` pro `bristle`, testado
-de ponta a ponta contra o container Docker real (`grooming` satura perto de
-1,0 sob toque sustentado). **`grooming` já controla a abelha de verdade**
-(pousa/fica parada, `MotorMapping.java`, ainda sem checagem visual em
-servidor real). **Falta:** confirmar visualmente que o pouso funciona como
-esperado, depois a lesão em servidor real com jogador — critério de saída
-de verdade da fase, mesmo padrão da F4.
+**✅ `bristle` — CADEIA COMPLETA VALIDADA (19-21/09/2026): sensor real →
+circuito → comportamento observável, mesmo padrão da luz.** L2/L3 (RN-09,
+p≈0 N=30), curadoria RN-08 equivalente (6/60 tipos publicados, todos
+`grooming`, 52/60 cluster de conectividade), sensor no plugin
+(`touch_contact`/`touch_proximity`, testado cubículo fechado vs. área
+aberta), integração no simulador (segundo `Engine`, testado contra o
+container Docker real) e `grooming` controlando a abelha de verdade
+(pousa/fica parada, `MotorMapping.java`) — tudo pronto e testado
+individualmente. **Lesão em servidor real fechou a validação
+(21/09/2026):** primeira rodada deu nulo (p=0,33/0,39) por limiar mal
+calibrado (`GROOMING_THRESHOLD=0,5` cruzado por ruído espontâneo em 24-27%
+das amostras, medido tanto no log real quanto isolado via `Engine`, sem
+Minecraft); recalibrado pra 0,8; segunda rodada (20 trials, mesma origem):
+`path_length` normal=7,36±0,49 vs. mascarado=9,79±1,17, **Welch p=0,013,
+Mann-Whitney p=0,0025** — os dois concordam, direção certa (toque real faz
+ela pousar mais, andar menos). Mesmo rigor que validou o ocelar na F4
+(p=0,0014 lá).
 
 **`hygro` segue bloqueado em L2** — depende de decidir o tratamento dos 373
 neurônios serotoninérgicos (RN-01a reaberta) antes de sequer tentar calibrar
