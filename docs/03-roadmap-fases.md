@@ -643,7 +643,7 @@ canto superior direito como esperado. Ver `plugin/README.md`.
 
 ---
 
-## F7 — Multi-sensor v2: chuva e toque 🔶 em andamento — `bristle` ✅ validado ponta a ponta (lesão p=0,0025); `hygro` bloqueado em L2
+## F7 — Multi-sensor v2: chuva e toque ✅ concluída — `bristle` ✅ validado ponta a ponta (lesão p=0,0025); `hygro` ✅ validado ponta a ponta (lesão p=0,00019, 22/09/2026)
 
 Começou como planejamento puro (19/09/2026): registrar o plano completo antes
 de tocar em qualquer seed novo, dado que os dois sensores anteriores (F6,
@@ -695,18 +695,299 @@ falhou 3 vezes por diluição (RN-09/F1, F4 primeiro experimento, RN-08/F6).
       fronteira motora, confiança média 0,47). **Decisão de como tratar
       pendente** (não resolvida — não inventar sinal sem base de literatura,
       ver RN-01a).
-- [ ] Sensor no plugin — trivial, **já disponível**: `World#hasStorm()` /
-      `World#isThundering()` na API do Bukkit/Paper. Não precisa de circuito
-      novo pra isso funcionar tecnicamente; precisa de circuito novo pra ter
-      *significado biológico* na resposta (senão é só uma variável booleana
-      somada a um canal motor qualquer — mesma armadilha de diluição de novo).
-- [ ] **Bloqueado em L2/L3:** falta resolver RN-01a (sinal dos 373
-      neurônios serotoninérgicos) e calibrar bias/ruído (RN-09) pro tamanho
-      novo (5.638 ≠ 625) antes de rodar qualquer coisa em `engine.py`.
-- [ ] Validação — mesmo desenho da lesão da F4: chuva real ligada/desligada
-      (`world.setStorm(true/false)`), sorteado trial a trial na mesma rodada,
-      mesma origem, teleporte dentro do mesmo comando (lição da F6 sobre
-      deriva de IA nativa entre comandos manuais).
+- [x] **RN-01a resolvida em 96% (21/09/2026), AD-18.** Investigado por
+      `cell_class`: 318 são ORNs (colinérgicas, Yasuyama & Salvaterra 1999)
+      e 40 são neurônios locais do lobo antenal lLN1/lLN2 (GABAérgicos,
+      Schlegel et al. 2021, fonte independente do classificador) — mesmo
+      padrão de artefato de RN-02, confirmado por confiança baixa do rótulo
+      original (0,36-0,48) nesses dois grupos. Override em
+      `graph.py::apply_serotonin_artifact_overrides` (+ corrigido em
+      `topology.group_outputs_by_predicted_sign`, que também calculava sinal
+      e não tinha o override — achado ao revisar todos os call sites).
+      Restam 15 neurônios (inclui `CSD`, a serotonérgica real do lobo
+      antenal) genuinamente sem sinal — 0,27% do subcircuito, não 6,6%. Ver
+      RN-01a em `04-regras-de-negocio.md`, 28/28 testes passam.
+- [x] **RN-09 aplicada ao hygro, sem precisar recalibrar (21/09/2026).**
+      `tools/hygro_calibration_check.py`, mesmo desenho pareado do
+      `bristle`: 28/41 descendentes com caminho excitatório, 13/41
+      inibitório, N=30 sementes, valores atuais de `config.py` — grupo
+      excitatório diff média=139,90 (p≈0), inibitório diff média=29,03
+      (p≈0). Rede não fica silenciosa em 5.638 neurônios com os parâmetros
+      calibrados pro ocelar (625).
+- [x] **Sensor no plugin — implementado (21/09/2026).** `ControlLoop`
+      lê `bee.getWorld().hasStorm()` a cada troca (sinal de NÍVEL, igual
+      `touch_proximity` — não precisou de heurística nenhuma, diferente do
+      `touch_contact`, que precisou por falta de evento nativo). Campo
+      `raining` novo no protocolo (`BridgeClient`/`server.py`).
+- [x] **Terceiro `Engine` no `SimulationServer` (21/09/2026), mesmo padrão
+      do `bristle` (AD-17).** `hygro_connectome` opcional, default `None`
+      (compatível com quem só usa ocelar/bristle). `raining` estimula a
+      semente higrossensorial com `SENSOR_RAIN_AMPLITUDE` (mesmo valor já
+      validado em `tools/hygro_calibration_check.py`). 30/30 testes Python
+      passam; validado também contra o container Docker real (não só os
+      testes automatizados) — `raining=true` sustentado saturou
+      `hygrotaxis` em 0,977 (30/41 descendentes ativos), `raining=false`
+      ficou em 0,213 (só bias/ruído, RN-09) — checagem de manipulação limpa.
+- [x] **Decoder motor próprio — `hygro_motor.py` (21/09/2026).** Sem
+      curadoria RN-08 equivalente ainda (nenhuma leitura de literatura/BANC
+      feita pros 41 tipos do hygro) — só o canal `hygrotaxis`, mesmo
+      mecanismo que gerou `phototaxis` pro ocelar ANTES de RN-08 existir
+      (`topology.group_outputs_by_predicted_sign`, sem depender de saber o
+      que cada tipo "significa"). Inicialmente telemetria só; ver abaixo —
+      virou controle real no mesmo dia.
+- [x] **Visualização (21/09/2026), pedido do usuário.** `ActivityVisualizer`
+      ganhou suporte a múltiplos circuitos — `grooming` (bristle) tinha cor
+      própria nunca implementada até agora (só efeito físico + número no
+      HUD), `hygrotaxis` (hygro, azul-petróleo) ganhou junto. `LiveHud`
+      ganhou uma 5ª linha (`hygrotaxis`). Compila limpo, jar copiado —
+      **ainda sem confirmação visual em servidor real**, só validado via
+      Docker/testes automatizados.
+- [x] **Redesenho da paleta — 1 cor por circuito, não por canal (21/09/2026),
+      pedido do usuário.** A primeira versão dava 1 cor pra cada um dos 8
+      grupos por prefixo do ocelar (RN-08, telemetria sem curadoria) — 10
+      cores só ali, poluído e não escalável. Trocado por
+      `CircuitVisual(cor, canais[])`, uma entrada por circuito: ocelar
+      (amarelo, canais `phototaxis`+`yaw_steering`), bristle (marrom,
+      `grooming`), hygro (azul-petróleo, `hygrotaxis`) — os grupos brutos
+      por prefixo e `conn_*` saíram da visualização (continuam disponíveis
+      via `/flywirebee mute|stimulate` e log, só não viram partícula).
+      Quantidade de partículas = maior |valor| entre os canais do circuito
+      (decisão visual, não um sinal novo — não realimenta `MotorMapping`).
+      Escalável: circuito novo = uma linha em `ActivityVisualizer.CIRCUITS`.
+      Compila limpo, jar copiado.
+- [x] **✅ Confirmado em servidor real, 21/09/2026 (usuário).** Roteiro
+      completo (`/flywirebee give` → `control start` → partículas amarelas
+      já visíveis, painel de 5 linhas no canto superior direito, `/weather
+      rain` pra hygro, encostar em obstáculo pra bristle) — "tudo aconteceu
+      como o roteiro alegou". Log do servidor confirma a checagem de
+      manipulação do `hygro` ao vivo: `raining=true` sustentado manteve
+      `hygrotaxis` saturado (0,986–0,994); `/weather clear` (20:18:39) →
+      `raining=false` no tick seguinte → `hygrotaxis` caiu imediatamente pra
+      0,149 e seguiu oscilando em torno de 0 (ruído de fundo, -0,44 a
+      +0,25) — mesmo padrão já validado fora do jogo
+      (`tools/hygro_calibration_check.py`). `grooming` variou de 0,2 a 0,99
+      em resposta a `touch_contact` real, e a recuperação mecânica (F7,
+      polimento) disparou com componente horizontal não-nulo várias vezes
+      no log (ex.: `0.988,-0.0,-0.156`) — evidência incidental de que o
+      polimento do escape está mecanicamente ativo, embora a suavidade
+      visual especificamente não tenha sido o foco deste roteiro.
+- [x] **`hygrotaxis` vira controle real — "buscar abrigo" (21/09/2026),
+      decisão do usuário.** Pré-requisito notado antes de tentar a lesão:
+      diferente da luz/toque, `hygro` roda em `Engine` separado (AD-17) sem
+      nenhum canal ligado a `MotorMapping.java` ainda — uma lesão medindo
+      `path_length` com esse estado seria nula por construção (não por
+      ausência de efeito). Usuário decidiu o comportamento e propôs a
+      correção biológica: **diferente do pouso calmo do `grooming`**, uma
+      mosca de verdade voaria MAIS RÁPIDO até um abrigo quando começa a
+      chover, não devagar. Implementado: `hygrotaxis` >
+      `HYGROTAXIS_THRESHOLD` (0,8 — margem bem mais folgada que a do
+      `GROOMING_THRESHOLD` original, baseline até ~0,5 vs. chuva saturando
+      acima de 0,98, medido em `tools/hygro_calibration_check.py` e ao vivo
+      no roteiro acima) faz a abelha voar em velocidade MÁXIMA
+      (`MAX_SPEED_BLOCKS_PER_TICK`) na direção comandada enquanto mergulha
+      pro chão (`SHELTER_DIVE_DESCENT_BLOCKS_PER_TICK=0,3`, mais rápido que
+      o pouso do grooming); ao tocar o chão, para — mesmo estado final do
+      grooming, caminho até lá diferente (`MotorMapping.toVelocity`,
+      `isSeekingShelterActive`). Gate de "pouso intencional" do sistema de
+      recuperação mecânica de obstáculo (F7, polimento) estendido pra
+      incluir busca de abrigo, senão o sistema empurraria a abelha de volta
+      pro ar achando que ela está presa. Compila limpo, jar copiado —
+      **ainda sem teste em servidor real**.
+- [x] **Ferramenta de lesão implementada — `HygroLesionExperiment.java` +
+      `/flywirebee hygrolesion [trials] [segundos] [x y z]` (21/09/2026).**
+      Mesmo desenho estatístico e mesmo formato de CSV do
+      `TouchLesionExperiment` (bristle) e `LesionExperiment` (F4) —
+      `sim/tools/lesion_analysis.py` reaproveitado sem mudar nada, só
+      apontando pro `hygro_lesion_experiment.csv` novo.
+      `ControlLoop.setHygroLesioned` mascara `raining` (sempre `false`
+      quando lesionado) do mesmo jeito que `setTouchLesioned`/`setLesioned`
+      já mascaravam os deles. Diferente do toque (evento, precisa de
+      obstáculo perto), chuva é ambiente como a luz — qualquer origem
+      serve, DESDE que esteja chovendo de verdade no mundo (comando avisa
+      se `World#hasStorm()=false` ao iniciar). Direção esperada: mesma do
+      `bristle` — normal (chuva real) deveria ter `path_length` MENOR
+      (mergulha e para), mascarado MAIOR (nunca para). Compila limpo, jar
+      copiado — **ainda não rodado em servidor real**.
+- [x] **🐛 Bug real encontrado e corrigido no primeiro teste em servidor
+      real (21/09/2026) — abelha morreu afogada.** Usuário testou `/weather
+      rain` antes de rodar a lesão: a abelha mergulhou sobre um lago e
+      **nunca parou** — a checagem usava só `bee.isOnGround()`, e água não
+      conta como chão pra essa API, então o mergulho
+      (`SHELTER_DIVE_DESCENT_BLOCKS_PER_TICK`) continuou empurrando pra
+      baixo até ela se afogar/sufocar (dano padrão do Minecraft pra mob
+      não-aquático submerso). Mesma categoria do achado do "obstáculo
+      lateral" (F7): mecanismo pensado só pra um tipo de terreno (bloco
+      sólido) não cobria outro (água). **Corrigido:** `Entity#isInWater()`
+      tratado igual a `onGround` pra fins de "parar de descer"
+      (`MotorMapping.toVelocity` ganhou parâmetro `inWater`; gate de "pouso
+      intencional" da recuperação de obstáculo em `ControlLoop` também
+      atualizado). Compila limpo, jar copiado, servidor reiniciado.
+      **Incerteza registrada, não resolvida:** o fix impede o mergulho
+      contínuo, mas não foi testado se, parada dentro d'água, ela recupera
+      sozinha ou afunda aos poucos por física passiva do jogo — se
+      persistir, precisará de um passo ativo de subida ao detectar água,
+      não implementado ainda. **Lesão da chuva adiada até confirmar que
+      este fix resolveu, antes de coletar dados.**
+- [x] **🐛 Segundo bug real, mesmo teste (21/09/2026) — abelha morreu
+      afogada DE NOVO, com o fix do primeiro bug já aplicado.** Parada na
+      água, ela começou a "tiquetaquear": virar rápido e tentar mergulhar
+      de novo repetidamente, até morrer de novo. Usuário testou também
+      longe de qualquer lago, em chão sólido: mesmo sintoma —
+      "se arrastando no chão voando, dando tique, virando de um lado e
+      outro" — confirmando que não é específico de água. **Causa:**
+      `bee.isOnGround()`/`isInWater()` não são estáveis tick a tick (física
+      de boiar/assentar do próprio jogo, mais o fato de serem lidos numa
+      thread diferente da que move a abelha, RN-06) — cada vez que uma
+      leitura de UM tick só dizia "não chegou", o mergulho de velocidade
+      máxima reativava, com o corpo virando pra a direção de `heading`
+      atual (que segue girando sozinha por causa do `yaw_steering` do
+      ocelar, circuito independente). Parecia decisão nova a cada vez; era
+      só o estado piscando. **Corrigido com uma trava "assentada"
+      (`ControlLoop.settledForLanding`):** primeira vez que observa
+      chão/água durante um episódio de grooming/abrigo ativo, trava; só
+      destrava quando o PRÓPRIO canal desativa (grooming ou hygrotaxis cai
+      abaixo do limiar), nunca por uma leitura instável de um tick.
+      `MotorMapping.toVelocity` simplificado de volta pra um parâmetro só
+      (`landed`, já estabilizado por quem chama) em vez dos dois brutos do
+      fix anterior. Compila limpo, jar copiado, servidor reiniciado.
+      **✅ Reteste confirmado pelo usuário (21/09/2026)** — chão sólido:
+      mergulha, toca o chão, fica parada sem tique/giro. Perto de água:
+      mesma coisa, sem afogar. "Ela fez o que foi descrito no roteiro."
+      Fecha os dois bugs de física da busca de abrigo.
+- [x] **Refinamento do conceito de abrigo (21/09/2026), pedido do usuário
+      antes da lesão.** Até aqui, "abrigo" era só "tocou chão ou água em
+      qualquer lugar" — usuário apontou que abrigo de verdade precisa de um
+      teto (bloco sólido, pelo menos 1 bloco acima dela). Implementado
+      `ShelterSensor.hasShelterAbove` — varre até 10 blocos acima da
+      posição procurando um bloco opaco (`Material#isOccluding()`, não
+      conta vidro/placa como cobertura parcial). Comportamento quando
+      pousa sem cobertura: **continua procurando** (decisão do usuário,
+      opção escolhida sobre "para em qualquer lugar" ou "não implementar
+      ainda") — se não achou teto, segue se deslocando na direção
+      comandada, sem mais pressão vertical pra baixo (evita reabrir o bug
+      de afogamento: já tocou algo uma vez, não precisa "mergulhar" de
+      novo). Só para de verdade quando `ShelterSensor` confirma cobertura.
+      Gate do sistema de recuperação de obstáculo atualizado: só conta
+      como "pouso intencional" quando achou abrigo DE VERDADE, não só por
+      ter tocado algo — enquanto procurando, se ficar presa contra um
+      obstáculo, o sistema de recuperação continua podendo ajudar.
+      Compila limpo, jar copiado, servidor reiniciado.
+- [x] **🐛 Terceiro bug real (22/09/2026), no mesmo teste do refinamento de
+      abrigo — ela parou de mergulhar de vez, só voava reto sem nunca
+      descer.** Log confirmou: `hygrotaxis` saturado (0,98+), `raining=true`
+      o tempo todo, `onGround=false`, mas velocidade Y sempre `0.0` — nunca
+      mergulhava. Causa: a trava do bug 2 (`settledForLanding`) era
+      PERMANENTE — uma vez tocando chão/água (mesmo de raspão, ou empurrada
+      pelo sistema de recuperação de obstáculo, visível no log) ficava
+      `landed=true` pra sempre até o canal desativar, mesmo com ela de
+      volta no ar. **Corrigido:** trocada a trava permanente por uma janela
+      curta (`ticksSinceGroundOrWaterContact` / `LANDED_GRACE_TICKS=10`,
+      ~0,5s, mesma ordem de `GROOMING_TRANSITION_GRACE_TICKS`) — absorve o
+      flicker de 1 tick do bug 2 sem perder decolagem de verdade. Compila
+      limpo, jar copiado, servidor reiniciado.
+- [x] **🐛 Quarto bug real (22/09/2026) — buscava, mas voltava
+      repetidamente pra quase o mesmo lugar.** Descia até o chão sem
+      cobertura (certo), mas ao "decolar de novo em busca de cobertura"
+      voltava rápido pra mesma posição, em ciclo. Causa: a busca no chão
+      comandava velocidade vertical zero — física de "andar" do Minecraft
+      tem atrito bem mais forte que a de voo, então o deslocamento real
+      ficava pequeno; o sistema de recuperação de obstáculo (ainda ativo
+      enquanto procura, por design) achava que ela tinha travado e dava um
+      empurrão pra cima; já no ar, a busca reativava o mergulho usando
+      `heading` (direção do ocelar, gira devagar via `yaw_steering`) —
+      ainda apontando quase pro mesmo lugar, trazendo ela de volta.
+      **Corrigido:** busca sem cobertura ganhou uma subida leve constante
+      (`SEARCH_HOVER_BLOCKS_PER_TICK=0,08`) em vez de Y=0 — mantém física
+      de voo (bem menos atrito), evita a interferência do sistema de
+      recuperação, e faz ela perder contato com o chão periodicamente
+      (reativando o mergulho em direções ligeiramente diferentes a cada
+      ciclo, conforme `heading` gira) em vez de arrastar no mesmo lugar.
+      Engenharia, não busca de caminho de verdade. Compila limpo, jar
+      copiado, servidor reiniciado.
+- [x] **Reteste (22/09/2026) — parcialmente positivo, achado misto.**
+      Usuário confirmou o mais importante: **ela pousa de verdade só
+      quando detecta abrigo real** ("aparentemente ela está pousando
+      abaixo de um abrigo quando percebe que está sobre um abrigo") — o
+      núcleo do comportamento funciona. Mas a busca "trancava" tentando
+      subir degraus de 1 bloco de terreno (subia um pouco, caía de volta,
+      repetia) — `SEARCH_HOVER_BLOCKS_PER_TICK=0,08` não ganhava altura
+      rápido o bastante. **Recalibrado pra 0,15** (mesma magnitude já
+      testada em `RECOVERY_BOOST_BLOCKS_PER_TICK` pra escalar obstáculo
+      lateral — reaproveita escala já validada, não número novo).
+      Log de diagnóstico (`getLightFromSky()` no instante exato da decisão
+      de abrigo) adicionado nesta rodada mas ainda não precisou ser
+      consultado — o "parar sem teto" relatado antes não se repetiu.
+      Compila limpo, jar copiado, servidor reiniciado.
+- [x] **🐛 Quinto bug real (22/09/2026) — parava fora de cobertura
+      visível, confirmado pelo log de diagnóstico.** Reteste do hover
+      recalibrado: usuário reportou ela parada no chão sem teto. Log
+      mostrou dois eventos reais de "abrigo encontrado" na mesma sessão:
+      `skylight=0` (cobertura de verdade) e `skylight=14` (quase o máximo
+      — luz difundindo de uma sombra vizinha, não bloco real acima dela;
+      o motor do jogo propaga luz lateralmente entre colunas). O limiar
+      `< 15` (qualquer redução) era sensível demais a essa difusão.
+      **Corrigido:** `ShelterSensor` agora exige `skylight <= 4`
+      (`MAX_SKYLIGHT_UNDER_SHELTER`) — bloqueio substancial, não qualquer
+      atenuação. Calibração provisória com só 2 pontos de dado (0 real,
+      14 falso-positivo) — pode precisar de ajuste fino de novo. Compila
+      limpo, jar copiado, servidor reiniciado.
+- [x] **🐛 Sexto bug real (22/09/2026) — passou por árvores com cobertura
+      sem parar.** Usuário perguntou se a ALTURA da árvore/construção
+      importa — não deveria (ar não atenua luz no motor do jogo, só bloco
+      atenua; uma folha lá no alto com ar livre até embaixo já abaixaria o
+      skylight do mesmo jeito que cobertura baixa). Suspeita mais provável:
+      copa de árvore é naturalmente esparsa (buracos entre blocos de
+      folha) — checar só a coluna EXATA onde ela está fazia "passar batido"
+      pelos buracos, mesmo visualmente debaixo da árvore. **Corrigido:**
+      `ShelterSensor` agora checa a coluna dela mais as 4 vizinhas
+      (padrão "mais", N/S/L/O) — conta como abrigo se qualquer uma tiver
+      skylight baixo, cobrindo os buracos sem exigir alinhamento perfeito
+      com uma folha específica. Compila limpo, jar copiado, servidor
+      reiniciado. **✅ Reteste confirmado pelo usuário (22/09/2026)** —
+      "testei e agora ela parou embaixo da árvore". Fecha a cadeia de seis
+      bugs reais do comportamento de busca de abrigo (afogamento ×2,
+      trava permanente, ciclo de retorno, limiar de luz frouxo demais,
+      cobertura esparsa) — pronto pra lesão de verdade. Observação
+      separada do usuário (não tratada, não bloqueante): ela "pula"
+      subindo/descendo mesmo em terreno plano — consequência esperada do
+      ciclo planeio→mergulho do bug 4 (nunca flutua indefinidamente, perde
+      contato e remergulha periodicamente), registrado como pendência de
+      polimento, mesma categoria do escape de obstáculo lateral.
+- [x] **Primeira rodada real (22/09/2026) — confundida, não conta.** 20
+      trials, origem perto de árvore (necessário pro `ShelterSensor`
+      achar cobertura). Mann-Whitney deu p=0,021 (direção certa: normal
+      4,72 blocos vs. mascarado 11,74), mas log mostrou `grooming`
+      saturado (~0,998) o experimento inteiro e `proximity=true` quase
+      sempre — **perto de árvore também aciona `touch_proximity` do
+      bristle**, e `MotorMapping` checa `grooming` antes de `hygrotaxis`,
+      então essa rodada mediu majoritariamente o pouso do `grooming`, não
+      a busca de abrigo do `hygro`. CSV preservado como
+      `hygro_lesion_experiment_confounded_by_grooming.csv` — não usar
+      pra citar resultado do hygro. **Corrigido:**
+      `ControlLoop.setBristleSuppressedForExperiment` suprime o efeito do
+      bristle na velocidade durante todo o experimento (circuito continua
+      rodando de verdade, só o efeito no movimento é ignorado) — ligado
+      automaticamente por `HygroLesionExperiment`. Compila limpo, jar
+      copiado, servidor reiniciado.
+- [x] **✅ CRITÉRIO DE SAÍDA ATINGIDO (22/09/2026) — segunda rodada, sem
+      o confundidor do bristle.** 20 trials, mesma origem perto de árvore,
+      chuva real ligada o experimento inteiro: `path_length` normal
+      (chuva real) = 0,333±0,299 blocos vs. mascarado (sem chuva) =
+      28,30±0,676 blocos (9 normais / 11 mascarados, sorteio
+      desbalanceado como já aconteceu em outras rodadas). **Welch
+      t-test p≈0,00000, Mann-Whitney U=0,0 p=0,00019 — separação
+      perfeita, zero sobreposição entre os grupos.** Mais forte que
+      qualquer lesão anterior deste projeto (ocelar p=0,0014, bristle
+      p=0,0025) — faz sentido: `hygrotaxis` vira comportamento BINÁRIO
+      (para completamente sob abrigo vs. voa normal ~28 blocos), não uma
+      diferença de magnitude parcial como `phototaxis`. **Fecha a cadeia
+      completa do `hygro`: sensor real → circuito → busca de abrigo →
+      comportamento observável**, mesmo padrão do ocelar (F4) e do
+      bristle (F7), depois de 6 bugs reais de física corrigidos e 1
+      confundidor real (bristle/proximity) isolado. CSV:
+      `hygro_lesion_experiment.csv` (a rodada confundida anterior ficou
+      preservada como `hygro_lesion_experiment_confounded_by_grooming.csv`,
+      não usar pra citar resultado).
 
 ### Sub-trilha: toque ✅ L0→L1 extraída (19/09/2026), L2/L3 pendente
 
@@ -841,10 +1122,26 @@ falhou 3 vezes por diluição (RN-09/F1, F4 primeiro experimento, RN-08/F6).
       parece um solavanco, não um movimento suave. **Decisão do usuário:
       deixar como está por agora, registrado como pendência de polimento**
       (não bloqueia a lesão).
-- [ ] **Pendência (não bloqueante): suavizar a recuperação mecânica** —
-      considerar girar o corpo junto (`bee.setRotation`, mesmo padrão do
-      achado de yaw/AD-16) e/ou somar um componente horizontal pra longe
-      do obstáculo detectado, em vez de só vertical puro.
+- [x] **Pendência de polimento resolvida (21/09/2026) — recuperação
+      mecânica ganhou componente horizontal + giro do corpo.** Antes o
+      empurrão era só vertical puro (`Vector(0, boost, 0)`) e a rotação do
+      corpo usava `latestVelocity` (a próxima decisão do circuito), não a
+      velocidade REALMENTE aplicada durante o empurrão — por isso o escape
+      parecia um solavanco desalinhado. `ControlLoop` agora: (1) no
+      instante em que trava, calcula a direção horizontal oposta a `heading`
+      (a direção COMANDADA no momento do travamento — aproximação de "onde
+      está o obstáculo", já que foi tentando ir por ali que travou) e some
+      esse vetor ao empurrão vertical (`RECOVERY_BOOST_HORIZONTAL_BLOCKS_PER_TICK
+      = 0,10`, estimativa de engenharia, não calibrada); (2) a rotação do
+      corpo (`bee.setRotation`, mesmo mecanismo do achado de yaw/AD-16)
+      passa a seguir a velocidade REALMENTE aplicada a cada tick
+      (`velocityToApply`), não mais `latestVelocity` — durante o empurrão o
+      corpo agora acompanha a direção de escape em vez de continuar
+      apontando pra onde o circuito mandava antes de travar. Compila
+      limpo (`./gradlew build`), jar copiado pra `mc-server/plugins/`.
+      **Ainda sem reteste visual em servidor real** — próximo passo antes
+      de considerar fechado, mesma disciplina das outras correções desta
+      fase (não afirmar resultado sem o teste, ver `docs/00-visao-geral.md`).
 - [x] **Experimento de lesão implementado (20/09/2026),
       `TouchLesionExperiment.java` + `/flywirebee touchlesion [trials]
       [segundos] [x y z]`.** Mesmo desenho estatístico e mesmo formato de
@@ -952,7 +1249,8 @@ precisou ser registrado desta vez — os dois rótulos existiam.
 mesmo padrão do ocelar — sinal RN-01/RN-02 resolvido, bias/ruído RN-09
 calibrado, lesão com diferença estatisticamente mensurável — ou um resultado
 negativo é registrado com a mesma transparência do dia/noite nulo da F6.
-**`bristle` atingiu; `hygro` segue bloqueado.**
+**`bristle` atingiu (21/09/2026); `hygro` atingiu (22/09/2026). F7 concluída
+— os dois sensores novos fecharam o mesmo padrão do ocelar.**
 
 **✅ `bristle` — CADEIA COMPLETA VALIDADA (19-21/09/2026): sensor real →
 circuito → comportamento observável, mesmo padrão da luz.** L2/L3 (RN-09,
@@ -972,9 +1270,29 @@ Mann-Whitney p=0,0025** — os dois concordam, direção certa (toque real faz
 ela pousar mais, andar menos). Mesmo rigor que validou o ocelar na F4
 (p=0,0014 lá).
 
-**`hygro` segue bloqueado em L2** — depende de decidir o tratamento dos 373
-neurônios serotoninérgicos (RN-01a reaberta) antes de sequer tentar calibrar
-RN-09 pra esse subcircuito.
+**✅ `hygro` — CADEIA COMPLETA VALIDADA (19-22/09/2026): sensor real →
+circuito → comportamento observável.** RN-01a resolvida em 96% (AD-18: 318
+ORNs + 40 neurônios locais do lobo antenal, override por `cell_class` com
+fonte independente do classificador), RN-09 validada sem recalibrar
+(`tools/hygro_calibration_check.py`, p≈0 nos dois grupos de topologia),
+sensor no plugin (`World#hasStorm()`), terceiro `Engine` no
+`SimulationServer` (testado contra o container Docker real), canal
+`hygrotaxis` (topologia de sinal) virando comportamento real — "buscar
+abrigo" (decisão do usuário: foge da chuva rápido, não pousa devagar como
+o grooming) — depois de **seis bugs reais de física corrigidos** (dois
+episódios de afogamento, trava permanente vs. janela de tolerância, ciclo
+de retorno ao mesmo lugar, limiar de luz frouxo demais, cobertura esparsa
+de copa de árvore) e **um confundidor real isolado** (proximidade da
+árvore acionando `grooming` do bristle, que tinha prioridade sobre
+`hygrotaxis` em `MotorMapping` e mascarava o efeito). **Lesão em servidor
+real fechou a validação (22/09/2026):** primeira rodada confundida (não
+conta, CSV preservado como `..._confounded_by_grooming.csv`); segunda
+rodada, com o bristle isolado do movimento
+(`ControlLoop.setBristleSuppressedForExperiment`), 20 trials:
+`path_length` normal=0,333±0,299 vs. mascarado=28,30±0,676 blocos, **Welch
+p≈0,00000, Mann-Whitney U=0,0 p=0,00019** — separação perfeita, o
+resultado mais forte de qualquer lesão deste projeto (ocelar p=0,0014,
+bristle p=0,0025).
 
 ---
 
@@ -987,7 +1305,7 @@ RN-09 pra esse subcircuito.
 | Circuito de 2 saltos (10.578 neurônios) | v2 |
 | Cérebro inteiro (139k) fora do loop | v3 |
 | Plasticidade / aprendizado | v3 — o conectoma é estático por natureza |
-| Multi-sensor: chuva, toque | **F7 — L0/L1 extraída, L2/L3 pendente, ver acima** (dia/noite saiu daqui, ver F6) |
+| Multi-sensor: chuva, toque | **F7 — `bristle` validado ponta a ponta; `hygro` L2/L3 pronto, falta integração + lesão, ver acima** (dia/noite saiu daqui, ver F6) |
 
 ## Dívida técnica aberta
 

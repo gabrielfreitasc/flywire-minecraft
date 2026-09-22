@@ -74,6 +74,31 @@ import org.bukkit.util.Vector;
  * quando foi introduzido. O experimento de lesão real (comparar abelha com
  * toque real vs. mascarado, medindo se ela realmente pousa mais/menos) é o
  * próximo passo, não feito aqui.
+ *
+ * <p><b>Buscar abrigo (F7/AD-17, 21/09/2026, PRIMEIRA VEZ QUE O HYGRO
+ * CONTROLA A ABELHA — decisão do usuário).</b> Quando
+ * {@code hygro_motor.hygrotaxis} (único canal do `hygro`, topologia de
+ * sinal — ver `hygro_motor.py`) passa de {@link #HYGROTAXIS_THRESHOLD}, a
+ * abelha busca abrigo — **deliberadamente diferente do pouso calmo do
+ * `grooming`**: usuário observou que, na vida real, um inseto voaria MAIS
+ * RÁPIDO até um abrigo quando começa a chover, não devagar. Enquanto no ar,
+ * voa em velocidade máxima ({@code MAX_SPEED_BLOCKS_PER_TICK}) na direção
+ * comandada enquanto mergulha pro chão ({@link
+ * #SHELTER_DIVE_DESCENT_BLOCKS_PER_TICK}, mais rápido que
+ * {@code LANDING_DESCENT_BLOCKS_PER_TICK}); ao tocar o chão, para — mesmo
+ * estado final do `grooming`, caminho até lá diferente. Sem lesão validando
+ * ainda; {@code HYGROTAXIS_THRESHOLD} tem margem bem mais folgada que a do
+ * `GROOMING_THRESHOLD` original — baseline medido (calibração + servidor
+ * real, 21/09/2026) oscila entre -0,44 e +0,5, chuva sustentada satura em
+ * 0,986-0,994.
+ *
+ * <p><b>Dois bugs reais, mesmo teste em servidor real (21/09/2026) — abelha
+ * morreu afogada DUAS vezes seguidas.</b> Mesma categoria de achado do
+ * "obstáculo lateral" da F7: mecanismo pensado só pra um cenário (chão
+ * sólido, leitura estável) não cobria outro. Ver docstring do parâmetro
+ * {@code landed} de {@link #toVelocity} pro relato completo dos dois — o
+ * segundo só apareceu depois de corrigir o primeiro. Corrigidos antes de
+ * qualquer nova lesão — não afirmar resultado sem consertar o bug primeiro.
  */
 public final class MotorMapping {
 
@@ -98,6 +123,42 @@ public final class MotorMapping {
     // tocar o chão. PROVISÓRIO — nunca testado em servidor real.
     private static final double LANDING_DESCENT_BLOCKS_PER_TICK = 0.1;
 
+    // F7/AD-17 — margem já observada (calibração + servidor real,
+    // 21/09/2026, ver docstring da classe) é bem maior que a do grooming
+    // original: baseline até ~0,5, chuva satura acima de 0,98. 0,8 fica
+    // longe dos dois lados, sem precisar de recalibração posterior como
+    // aconteceu com GROOMING_THRESHOLD.
+    private static final double HYGROTAXIS_THRESHOLD = 0.8;
+    // Descida vertical enquanto buscando abrigo — mais rápida que o pouso
+    // calmo do grooming (mesma escala de MAX_SPEED_BLOCKS_PER_TICK, "voando
+    // rápido pra fugir da chuva"). PROVISÓRIO — nunca testado em servidor real.
+    private static final double SHELTER_DIVE_DESCENT_BLOCKS_PER_TICK = 0.3;
+    // F7/AD-17 — bug 4 real (22/09/2026): buscar sem cobertura com
+    // velocidade vertical zero deixava a abelha "andando" no chão (física
+    // de atrito bem mais forte que a de voo do Minecraft), quase sem
+    // deslocamento real — o sistema de recuperação de obstáculo (ainda
+    // ativo enquanto procura, ver ControlLoop) achava que ela tinha
+    // travado, dava um empurrão pra cima, e a busca reativava o mergulho
+    // usando `heading` — que gira devagar (yaw_steering) e ainda apontava
+    // quase pro mesmo lugar, trazendo ela de volta perto de onde começou,
+    // repetidamente. Corrigido dando uma subida leve constante enquanto
+    // procura sem abrigo — mantém ela em física de VOO (bem menos atrito)
+    // em vez de física de andar, evita a interferência do sistema de
+    // recuperação, e a leva a perder contato com o chão periodicamente
+    // (reativando o mergulho em direções ligeiramente diferentes a cada
+    // ciclo, conforme `heading` gira) em vez de ficar arrastando no mesmo
+    // lugar. PROVISÓRIO, engenharia — não é busca de caminho de verdade.
+    //
+    // Recalibrado (22/09/2026) de 0,08 pra 0,15 — usuário testou e viu ela
+    // "trancar" tentando subir degraus de terreno (elevação de 1 bloco):
+    // subia um pouco, caía de volta, repetia — 0,08/tick não ganhava
+    // altura rápido o bastante pra vencer um degrau antes de perder o
+    // impulso. 0,15 é a mesma magnitude já usada (e testada) em
+    // RECOVERY_BOOST_BLOCKS_PER_TICK pra "escalar" obstáculo lateral —
+    // reaproveita uma escala que já se mostrou suficiente nesse mesmo tipo
+    // de situação, não um número novo arbitrário.
+    private static final double SEARCH_HOVER_BLOCKS_PER_TICK = 0.15;
+
     private MotorMapping() {
     }
 
@@ -115,15 +176,86 @@ public final class MotorMapping {
     }
 
     /**
-     * @param onGround estado FÍSICO atual da abelha ({@code bee.isOnGround()}
-     *     — {@code MotorMapping} não toca na API do Bukkit diretamente, quem
-     *     chama (`ControlLoop`) fornece o estado do mundo).
+     * @param landed decisão JÁ ESTABILIZADA de "chegou, pode parar de
+     *     descer/mergulhar" — {@code MotorMapping} não toca na API do
+     *     Bukkit diretamente nem guarda estado entre ticks, quem chama
+     *     (`ControlLoop`) fornece isso pronto. **Não é só
+     *     {@code bee.isOnGround() || bee.isInWater()} lido no instante** —
+     *     ver o porquê abaixo.
+     *
+     *     <p><b>Bug 1, real, servidor real (21/09/2026):</b> checagem
+     *     original usava só {@code onGround}; mergulho sobre um lago nunca
+     *     parava (água não conta pra {@code onGround}) até a abelha morrer
+     *     afogada. Corrigido incluindo {@code isInWater()}.
+     *
+     *     <p><b>Bug 2, real, servidor real (21/09/2026), no MESMO teste do
+     *     fix do Bug 1:</b> incluir {@code isInWater()} não bastou —
+     *     parada na água, a abelha começou a "tiquetaquear": virava rápido e
+     *     tentava mergulhar de novo, repetidamente, até morrer de novo.
+     *     Causa: {@code isInWater()} não é estável tick a tick na superfície
+     *     da água (física de boiar do próprio jogo, mais o fato de ser lido
+     *     numa thread diferente da que move a abelha) — cada vez que lia
+     *     "saiu da água" por UM tick, o mergulho de velocidade máxima
+     *     reativava na direção de {@code heading} atual, que continua
+     *     girando sozinha por causa do `yaw_steering` do ocelar (circuito
+     *     independente, nunca para). Isso parecia decisão nova a cada vez;
+     *     era só o estado piscando. **Corrigido transferindo a decisão pro
+     *     chamador**, que absorve o flicker numa janela curta
+     *     (`ticksSinceGroundOrWaterContact`/`LANDED_GRACE_TICKS`, ver
+     *     `ControlLoop`) em vez de reagir a uma leitura de um tick só.
+     *
+     *     <p><b>Bug 3, real, servidor real (22/09/2026), no fix de "buscar
+     *     até achar abrigo":</b> a primeira versão desta janela era uma
+     *     trava PERMANENTE (uma vez tocando chão/água, ficava `landed=true`
+     *     pra sempre até o canal desativar) — resolvia o Bug 2, mas
+     *     quebrava a busca: se ela tocasse de raspão (ou fosse empurrada
+     *     pelo sistema de recuperação de obstáculo) e voltasse pro ar,
+     *     {@code landed} continuava `true`, e ela nunca mais mergulhava —
+     *     só deslizava na horizontal pro resto do episódio, mesmo bem no
+     *     ar. Corrigido: a janela agora é CURTA (alguns ticks depois do
+     *     último toque confirmado), não permanente — absorve flicker sem
+     *     perder decolagem de verdade.
+     * @param sheltered só usado pela busca de abrigo (`hygro`), ignorado por
+     *     `grooming`: decisão (também JÁ ESTABILIZADA pelo chamador, ver
+     *     {@code ControlLoop}) de que a abelha está debaixo de um teto de
+     *     verdade ({@link ShelterSensor#hasShelterAbove}), não só tocou
+     *     chão/água em qualquer lugar a céu aberto — decisão do usuário
+     *     (21/09/2026): abrigo de verdade tem bloco sólido acima. Enquanto
+     *     {@code landed} é true mas {@code sheltered} é false, a abelha
+     *     continua se deslocando (não mergulha de novo — evita repetir os
+     *     dois bugs acima) até achar um lugar coberto.
      */
-    public static Vector toVelocity(JsonObject bridgeResponse, Vector heading, boolean onGround) {
+    public static Vector toVelocity(
+            JsonObject bridgeResponse, Vector heading, boolean landed, boolean sheltered
+    ) {
         if (isGroomingActive(bridgeResponse.getAsJsonObject("bristle_motor"))) {
             // F7/AD-17 — grooming vence phototaxis: para de avançar, desce até
-            // pousar, fica parada uma vez no chão.
-            return onGround ? new Vector(0, 0, 0) : new Vector(0, -LANDING_DESCENT_BLOCKS_PER_TICK, 0);
+            // pousar, fica parada uma vez no chão (ou na água, ver docstring).
+            // Sem conceito de "abrigo" aqui — qualquer chão/água serve.
+            return landed ? new Vector(0, 0, 0) : new Vector(0, -LANDING_DESCENT_BLOCKS_PER_TICK, 0);
+        }
+        if (isSeekingShelterActive(bridgeResponse.getAsJsonObject("hygro_motor"))) {
+            // F7/AD-17 — busca abrigo: voa RÁPIDO (velocidade máxima) até
+            // achar um lugar com teto de verdade (ver docstring do parâmetro
+            // sheltered) — diferente do pouso calmo do grooming.
+            if (sheltered) {
+                return new Vector(0, 0, 0); // abrigo de verdade — para
+            }
+            if (landed) {
+                // Já tocou chão/água, mas sem cobertura — continua se
+                // deslocando pra procurar em outro lugar. Subida leve
+                // constante (não mais Y=0) — ver docstring de
+                // SEARCH_HOVER_BLOCKS_PER_TICK (bug 4): mantém física de
+                // voo, evita o atrito de "andar" e a interferência do
+                // sistema de recuperação de obstáculo.
+                Vector search = heading.clone().multiply(MAX_SPEED_BLOCKS_PER_TICK);
+                search.setY(SEARCH_HOVER_BLOCKS_PER_TICK);
+                return search;
+            }
+            // Ainda no ar — mergulha até tocar em algo pela primeira vez.
+            Vector dive = heading.clone().multiply(MAX_SPEED_BLOCKS_PER_TICK);
+            dive.setY(-SHELTER_DIVE_DESCENT_BLOCKS_PER_TICK);
+            return dive;
         }
 
         JsonObject motor = bridgeResponse.getAsJsonObject("motor");
@@ -154,6 +286,19 @@ public final class MotorMapping {
             return false; // sem Engine do bristle rodando — sem efeito, comportamento antigo
         }
         return bristleMotor.get("grooming").getAsDouble() > GROOMING_THRESHOLD;
+    }
+
+    /**
+     * F7/AD-17 — mesmo motivo de {@link #isGroomingActive}: exposto público
+     * porque {@code ControlLoop} também usa (pro gate de "pouso intencional"
+     * do sistema de recuperação mecânica de obstáculo — sem isso, buscar
+     * abrigo de propósito seria confundido com estar preso).
+     */
+    public static boolean isSeekingShelterActive(JsonObject hygroMotor) {
+        if (hygroMotor == null || !hygroMotor.has("hygrotaxis")) {
+            return false; // sem Engine do hygro rodando — sem efeito, comportamento antigo
+        }
+        return hygroMotor.get("hygrotaxis").getAsDouble() > HYGROTAXIS_THRESHOLD;
     }
 
     private static double clamp(double value, double min, double max) {

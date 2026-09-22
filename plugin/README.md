@@ -164,16 +164,49 @@ blocos, já documentado) inflando a diferença — com ruído baixo, o efeito
 real parece mais modesto, mas muito mais confiável estatisticamente. Ver
 `docs/03-roadmap-fases.md`, F6.
 
-## Visualização de atividade (F5)
+## Visualização de atividade (F5, redesenhada F7/21-09-2026)
 
 `/flywirebee visualize <on|off>` — liga junto com `control start` por padrão.
 `ActivityVisualizer` spawna partículas coloridas (`Particle.DUST`) ao redor da
-abelha, uma cor fixa por canal do vetor motor. `phototaxis` (amarelo) e
-`locomotion_drive` (branco) têm cor própria — são os dois canais que de fato movem a
-abelha (`MotorMapping`). Quantidade de partículas por canal é proporcional a |valor|
-do canal, renderizado a ~4Hz (20Hz seria spam visual).
-**✅ Confirmado visualmente em servidor real — 16/09/2026 (phototaxis) e de novo após
-RN-08/AD-14 (locomotion_drive, partículas brancas visíveis junto das amarelas).**
+abelha, renderizado a ~4Hz (20Hz seria spam visual). Quantidade de partículas
+é proporcional a |valor| do canal de referência do circuito.
+
+**✅ Confirmado visualmente em servidor real — 16/09/2026 (phototaxis) e de
+novo após RN-08/AD-14 (partículas brancas de `locomotion_drive`, que na
+época controlava a abelha).**
+
+**Redesenho (21/09/2026, pedido do usuário) — 1 cor por CIRCUITO, não por
+canal.** A versão original dava 1 cor pra cada um dos 8 grupos por prefixo
+do ocelar (RN-08, telemetria sem curadoria) + `phototaxis` +
+`locomotion_drive` — 10 cores só do ocelar (`locomotion_drive` já tinha sido
+revertido de `MotorMapping` nesse meio tempo, ver `motor.py`, mas a cor
+continuava lá). Trocado por uma composição fixa e **escalável**
+(`ActivityVisualizer.CIRCUITS`, uma entrada por circuito):
+
+| Circuito | Cor | Canal(is) de referência |
+|---|---|---|
+| ocelar | amarelo (luz) | `phototaxis` (validado, F4) + `yaw_steering` (em validação) |
+| bristle | marrom (toque/limpeza) | `grooming` (validado, F7) |
+| hygro | azul-petróleo (chuva) | `hygrotaxis` (telemetria, RN-09 validado, sem lesão) |
+
+Os 8 grupos por prefixo do ocelar e `conn_*` (bristle) saem da visualização
+— continuam disponíveis via `/flywirebee mute|stimulate` e no log, só não
+viram partícula (eram ruído visual, sem curadoria/significado). Quando o
+circuito tem mais de um canal de referência (só o ocelar, por ora), a
+contagem de partículas usa o MAIOR `|valor|` entre eles — decisão visual
+pra saber quantas partículas mostrar, não um sinal novo somado/realimentado
+em `MotorMapping.java` (mesma armadilha de RN-08/RN-09 é sobre o vetor que
+MOVE a abelha, não sobre a contagem de partículas na tela). Circuito novo =
+uma linha em `CIRCUITS`, não uma paleta nova.
+
+**✅ Confirmado em servidor real, 21/09/2026.** Roteiro completo rodado pelo
+usuário: partículas amarelas (ocelar) visíveis assim que `control start`
+ligou, painel de 5 linhas no canto superior direito, `/weather rain`
+saturou a densidade teal (`hygrotaxis`) e `/weather clear` derrubou de
+volta — log confirma `hygrotaxis` caindo de ~0,99 pra 0,149 no tick
+seguinte ao comando. Encostar em obstáculo fez a densidade marrom
+(`grooming`) subir, log mostrando picos até 0,999. "Tudo aconteceu como o
+roteiro alegou" — usuário.
 
 ## Lesão e estimulação por comando (F5)
 
@@ -641,6 +674,166 @@ sensor→circuito→comportamento pro `bristle`, mesmo nível de evidência que
 Ver `docs/02-arquitetura.md`, `docs/03-roadmap-fases.md` F7,
 `TouchLesionExperiment.java`, `ControlLoop.setTouchLesioned`,
 `MotorMapping.GROOMING_THRESHOLD`.
+
+## Sensor de chuva (F7/AD-17, 21/09/2026) — integrado, sem lesão ainda
+
+Terceiro subcircuito (`hygro`) seguindo o mesmo caminho que o `bristle` já
+percorreu: RN-01a resolvida em 96% (AD-18, ver `docs/04-regras-de-negocio.md`)
+e RN-09 validada sem recalibrar (`tools/hygro_calibration_check.py`) antes
+de tocar em plugin/simulador.
+
+**Sensor — mais simples que o de toque.** `bee.getWorld().hasStorm()` já é
+um sinal de NÍVEL pronto da API do Bukkit/Paper — diferente de
+`touch_contact`, que precisou de uma heurística (comparar deslocamento
+real vs. esperado) por falta de evento nativo de colisão. Campo `raining`
+novo no protocolo (`BridgeClient.sendSensorAndReceiveMotor`, `server.py`).
+
+**Simulador — terceiro `Engine`, mesmo padrão do `bristle`.**
+`SimulationServer` ganhou `hygro_connectome` opcional. `raining` estimula a
+semente higrossensorial com `SENSOR_RAIN_AMPLITUDE` (mesmo valor validado
+em `tools/hygro_calibration_check.py`, RN-09: p≈0 nos dois grupos de
+topologia, N=30). **Testado contra o container Docker real** (não só os
+testes automatizados) — checagem de manipulação:
+
+| `raining` | `hygrotaxis` |
+|---|---|
+| `false` (10 amostras sustentadas) | 0,213 (só bias/ruído basal, RN-09) |
+| `true` (10 amostras sustentadas) | 0,977 (quase saturado, 30/41 descendentes ativos) |
+
+**Decoder — `hygro_motor.py`, só o canal `hygrotaxis`.** Diferente do
+`bristle_motor.py` (que já tem RN-08 equivalente via BANC — `grooming` +
+`conn_*`), o `hygro` não tem curadoria de comportamento por tipo de
+descendente nenhuma ainda. `hygrotaxis` vem só da topologia de sinal
+(`topology.group_outputs_by_predicted_sign`) — o mesmo mecanismo que gerou
+`phototaxis` pro ocelar ANTES de RN-08 existir, sem precisar saber o que
+cada tipo "significa" biologicamente.
+
+**"Buscar abrigo" — hygrotaxis vira controle real (21/09/2026), decisão do
+usuário.** Antes da lesão fazer sentido, precisava de um comportamento pra
+medir — `hygro` roda em `Engine` separado (AD-17), sem nenhum canal ligado
+a `MotorMapping` ainda, então uma lesão medindo `path_length` seria nula
+por construção. Usuário propôs a correção biológica: **diferente do pouso
+calmo do `grooming`**, uma mosca de verdade voaria MAIS RÁPIDO até um
+abrigo quando começa a chover, não devagar. Implementado:
+`hygrotaxis > HYGROTAXIS_THRESHOLD` (0,8 — margem folgada, baseline até
+~0,5 vs. chuva saturando acima de 0,98) faz a abelha voar em velocidade
+MÁXIMA na direção comandada enquanto mergulha pro chão
+(`SHELTER_DIVE_DESCENT_BLOCKS_PER_TICK=0,3`, mais rápido que o pouso do
+grooming); ao tocar o chão, para — mesmo estado final do `grooming`,
+caminho até lá diferente. O gate de "pouso intencional" da recuperação
+mecânica de obstáculo (seção acima) foi estendido pra reconhecer isso
+também, senão o sistema empurraria a abelha de volta pro ar achando que
+ela está presa.
+
+**🐛 Bug real, primeiro teste em servidor real (21/09/2026) — abelha
+morreu afogada.** A checagem de "chegou, pode parar" usava só
+`bee.isOnGround()`. A abelha mergulhou sobre um lago; água não conta como
+chão pra essa API, então o mergulho nunca parou — continuou empurrando pra
+baixo até ela se afogar/sufocar. Mesma categoria do achado do "obstáculo
+lateral" acima: mecanismo pensado só pra bloco sólido, não cobria água.
+**Corrigido:** `Entity#isInWater()` tratado igual a `onGround` (`toVelocity`
+ganhou parâmetro `inWater`, gate de pouso intencional também atualizado).
+Compila limpo, jar copiado, servidor reiniciado. **Incerteza não resolvida:**
+não testado se, parada dentro d'água, ela sai sozinha ou afunda aos poucos
+por física passiva — se persistir, precisa de um passo ativo de subida ao
+detectar água. **Lesão adiada até confirmar que o fix resolveu.**
+
+**🐛 Segundo bug real, mesmo teste (21/09/2026) — abelha morreu afogada DE
+NOVO, com o fix acima já aplicado.** Parada na água, começou a
+"tiquetaquear": virar rápido e tentar mergulhar de novo, repetidamente, até
+morrer de novo. Testado também longe de água, em chão sólido: **mesmo
+sintoma** — "se arrastando no chão voando, dando tique, virando de um lado
+e outro" — confirma que não é específico de água. Causa:
+`isOnGround()`/`isInWater()` não são estáveis tick a tick (física de
+boiar/assentar do próprio jogo + lidos numa thread diferente da que move a
+abelha) — cada leitura de UM tick dizendo "não chegou" reativava o
+mergulho de velocidade máxima, virando o corpo pra direção de `heading`
+atual (que gira sozinha por causa do `yaw_steering` do ocelar, circuito
+independente) — parecia decisão nova a cada vez, era só o estado piscando.
+**Corrigido com trava "assentada" (`ControlLoop.settledForLanding`):**
+primeira vez que observa chão/água durante um episódio ativo, trava; só
+destrava quando o canal (grooming/hygro) desativa de verdade, nunca por
+uma leitura de um tick só. `MotorMapping.toVelocity` voltou a um parâmetro
+só (`landed`, já estabilizado por quem chama). Compila limpo, jar copiado,
+servidor reiniciado. **✅ Reteste confirmado pelo usuário (21/09/2026)** —
+chão sólido e perto de água, sem tique/giro/afogamento — "ela fez o que
+foi descrito no roteiro". Fecha os dois bugs de física.
+
+**Mais quatro bugs reais no refinamento de "abrigo de verdade" (22/09/2026)
+— resumo, detalhe completo em `docs/03-roadmap-fases.md` F7:**
+1. Trava de "pousou" permanente em vez de janela curta — ela parava de
+   mergulhar de vez depois de tocar algo uma vez, mesmo de volta no ar.
+   Corrigido com `LANDED_GRACE_TICKS=10` (janela, não trava permanente).
+2. Busca com velocidade vertical zero sofria atrito de "andar" (bem maior
+   que o de voo), o sistema de recuperação de obstáculo achava que ela
+   tinha travado e a levava de volta quase pro mesmo lugar via `heading`.
+   Corrigido com subida leve constante (`SEARCH_HOVER_BLOCKS_PER_TICK`,
+   recalibrado de 0,08 pra 0,15 depois que ela travava em degraus).
+3. Limiar de `ShelterSensor` (`skylight < 15`) pegava difusão de luz de
+   sombra vizinha, não cobertura real — apertado pra `<= 4`.
+4. Copas de árvore são esparsas (buracos entre folhas); checar só a coluna
+   exata da abelha deixava passar por baixo sem detectar. Ampliado pra
+   checar a coluna dela + 4 vizinhas (padrão "mais").
+
+**✅ Confirmado em servidor real, 22/09/2026** — "testei e agora ela parou
+embaixo da árvore". Pendência de polimento registrada, não bloqueante: ela
+"pula" subindo/descendo mesmo em terreno plano, consequência esperada do
+ciclo planeio→mergulho do item 2.
+
+**✅ CADEIA COMPLETA VALIDADA, lesão real (22/09/2026).** Primeira rodada
+de `/flywirebee hygrolesion` deu p=0,021 mas estava confundida — log
+mostrou `grooming` saturado o experimento inteiro (origem perto de árvore
+também aciona `touch_proximity` do bristle, que tem prioridade sobre
+`hygrotaxis` em `MotorMapping`). Corrigido suprimindo o efeito do bristle
+na velocidade durante o experimento
+(`ControlLoop.setBristleSuppressedForExperiment`, ligado automaticamente
+por `HygroLesionExperiment`). Segunda rodada, 20 trials, mesma origem:
+`path_length` normal=0,333±0,299 vs. mascarado=28,30±0,676 blocos —
+**Welch p≈0,00000, Mann-Whitney U=0,0 p=0,00019**, separação perfeita.
+Fecha `hygro`: sensor real → circuito → busca de abrigo → comportamento
+observável, mesmo padrão do ocelar (F4) e do bristle.
+
+**Refinamento — abrigo de verdade exige teto (21/09/2026), pedido do
+usuário.** "Tocou chão/água em qualquer lugar" não é a mesma coisa que
+"achou abrigo" — usuário pediu que só contasse com bloco sólido pelo menos
+1 acima dela. `ShelterSensor.hasShelterAbove` varre até 10 blocos acima
+procurando algo opaco (`Material#isOccluding()`). Se pousar sem cobertura,
+**continua procurando** (decisão do usuário) — se desloca na direção
+comandada sem mais pressão vertical (não reabre o bug de afogamento) até
+achar um lugar coberto de verdade. O gate de "pouso intencional" da
+recuperação de obstáculo também foi ajustado: só conta como intencional
+com abrigo de verdade encontrado — enquanto ainda procurando, o sistema de
+recuperação continua ajudando se ela ficar presa. Compila limpo, jar
+copiado, servidor reiniciado — **ainda sem reteste**.
+
+**Experimento de lesão — `HygroLesionExperiment.java` + `/flywirebee
+hygrolesion [trials=20] [segundos=10] [x y z]`.** Mesmo desenho estatístico
+e mesmo CSV do `TouchLesionExperiment`. `ControlLoop.setHygroLesioned`
+mascara `raining` (sempre `false` quando lesionado). Diferente do toque,
+chuva é ambiente como a luz — qualquer origem serve, MAS só testa algo se
+estiver chovendo de verdade (`/weather rain` antes — o comando avisa se
+não estiver). Direção esperada, mesma do `bristle`: normal (chuva real)
+`path_length` MENOR (mergulha e para), mascarado MAIOR (nunca para).
+**Ainda não rodado.**
+
+```
+python tools/lesion_analysis.py ../mc-server/plugins/FlywireBee/hygro_lesion_experiment.csv
+```
+
+**Visualização.** `ActivityVisualizer` ganhou suporte a múltiplos
+circuitos simultâneos (ocelar + bristle + hygro, cada um com seu próprio
+`JsonObject` — espaços de `nid` independentes entre circuitos, nunca
+misturados, só renderizados juntos). `grooming` ganhou cor própria só agora
+(marrom) — não tinha nenhuma antes desta mudança, só o efeito físico de
+pouso e o número no HUD. `hygrotaxis` ganhou azul-petróleo. `LiveHud` ganhou
+uma 5ª linha. Redesenhada no mesmo dia pra 1 cor por circuito (ver seção
+"Visualização de atividade" acima). **✅ Confirmado em servidor real,
+21/09/2026** — ver essa mesma seção pro detalhe do roteiro e do log.
+
+Ver `docs/02-arquitetura.md`, `docs/03-roadmap-fases.md` F7,
+`sim/src/flywire_sim/hygro_motor.py`, `ControlLoop.java`,
+`MotorMapping.java`, `HygroLesionExperiment.java`,
+`ActivityVisualizer.java`, `LiveHud.java`.
 
 ## Regra
 

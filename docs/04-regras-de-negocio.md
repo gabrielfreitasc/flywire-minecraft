@@ -53,16 +53,53 @@ motora** — ao contrário do ocelar (4 afetados, todos folhas, impacto nulo),
 aqui a maioria fica no MEIO do circuito, silenciando conexões reais de
 propagação, não só saídas mortas.
 
-**Decisão pendente, não resolvida ainda:** manter sinal 0 (comportamento
-default de RN-01a) silencia de verdade uma fração não-trivial (6,6%) do
-subcircuito hygro — atenua o sinal que se quer medir, mas não é o mesmo erro
-de "somar canais que não respondem ao mesmo estímulo" (RN-08/RN-09) porque
-aqui não há dois canais a somar, é incerteza genuína sobre o papel funcional
-da serotonina nesse trecho do circuito. Registrado como bloqueio conhecido
-para a fase real de F7 (L2/L3 do subcircuito `hygro`) — não inventar um sinal
-para esses neurônios sem base de literatura, mesma disciplina de RN-02 (que só
-teve override porque havia motivo biológico concreto — histamina fora das 6
-classes do classificador — não porque "0 não serve").
+**Resolvido — 96% do bloqueio, via AD-18 (21/09/2026).** Investigando os 373
+neurônios por `cell_class` (não só `cell_type`), dois grupos saltaram fora,
+juntos 358/373 (96%):
+
+| Grupo | n | `cell_class` | Confiança média do rótulo "serotonin" | Transmissor real, fonte independente |
+|---|---|---|---|---|
+| ORN (neurônio receptor olfativo) | 318 | `olfactory` | 0,48 | **Colinérgico** — estabelecido (Yasuyama & Salvaterra 1999; Barbara et al. 2005), não é achado novo nem disputado |
+| Neurônio local do lobo antenal (lLN1/lLN2) | 40 | `ALLN` | 0,36 | **GABAérgico** — Schlegel et al. 2021 (eLife), transmissor atribuído por hemilinhagem via imuno-histoquímica, fonte INDEPENDENTE do classificador de Eckstein et al. |
+
+Mesmo padrão de artefato já registrado em RN-02 (histamina fora das 6 classes
+do classificador) e no achado do `DNp27` acima (classificador erra numa
+proteína específica) — não é "inventar sinal", é substituir um rótulo de
+classificador por identidade de transmissor estabelecida/independente para um
+subconjunto específico e nomeável. A confiança baixa do rótulo "serotonin"
+nesses dois grupos (0,36–0,48) é consistente com artefato, não com acerto —
+contraste com o grupo que sobrou (ver abaixo), onde a confiança é bem maior.
+
+**Continua genuinamente sem sinal (15 neurônios, 0,27% do subcircuito, sinal
+0 mantido):** `CSD` (2 neurônios, confiança 0,80) **é** a serotonérgica real
+e conhecida do lobo antenal (CSDn — Roy et al. 2007; Dacks et al. 2009) — não
+um artefato, mas seu efeito funcional na rede não está estabelecido o
+suficiente pra virar sinal ±1 sem inventar. Os outros 13
+(`DNg30`×2, `SLP403`×4, `SLP304b`×2, `AVLP594`×2, `CB0212`×2, `ALON3`×1) não
+têm `cell_class` que bata com nenhuma fonte independente — seguem sem
+resolução, mesma disciplina de antes.
+
+Implementado em `graph.py::apply_serotonin_artifact_overrides`, aplicado em
+`graph.load()` e em `topology.group_outputs_by_predicted_sign` (usado por
+`motor.py` e pelos scripts de calibração — os dois lugares que já calculavam
+sinal precisavam do mesmo override, achado ao revisar todos os call sites de
+`apply_nt_overrides`). `OLFACTORY_RECEPTOR_SIGN=1` e
+`ANTENNAL_LOBE_LOCAL_NEURON_SIGN=-1` em `config.py`. Testes:
+`test_serotonin_artifact_override` (sintético) e
+`test_serotonin_artifact_override_hygro` (dado real, 28/28 passam).
+
+**RN-09 aplicada ao hygro, sem precisar recalibrar (21/09/2026) —
+`tools/hygro_calibration_check.py`, mesmo desenho pareado de
+`bristle_calibration_check.py`.** Topologia de sinal: 28/41 descendentes com
+caminho previsto excitatório, 13/41 inibitório (menos assimétrico que o
+ocelar 29×63, mas separado por segurança, mesma lição de RN-09). N=30
+sementes pareadas, valores ATUAIS de `config.py` (calibrados só pro ocelar,
+625 neurônios): grupo excitatório diff média=139,90 (t-test e Wilcoxon
+p≈0), grupo inibitório diff média=29,03 (p≈0 nos dois) — em 5.638 neurônios,
+sem sweep de `BIAS_CURRENT`/`NOISE_STD` novo. **Isto fecha o bloqueio de
+L2/L3 do `hygro`** registrado no roadmap (F7) — falta sensor no plugin,
+integração no simulador (segundo `Engine`, mesmo padrão do `bristle`) e
+validação por lesão em servidor real, não código de sinal/calibração.
 
 **Achado (17/09/2026) — `DNp27` provavelmente é erro de classificador, não
 neurônio serotonérgico de verdade.** Cruzando nossos 168 tipos celulares contra

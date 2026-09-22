@@ -57,6 +57,25 @@ def apply_nt_overrides(nodes: pd.DataFrame, sign: np.ndarray) -> np.ndarray:
     return sign
 
 
+def apply_serotonin_artifact_overrides(nodes: pd.DataFrame, sign: np.ndarray) -> np.ndarray:
+    """RN-01a/AD-18 — dois grupos rotulados "serotonin" pelo classificador de
+    Eckstein et al., mas com transmissor real estabelecido por fonte
+    independente (não é suposição nova, mesmo padrão de `apply_nt_overrides`):
+    ORNs (colinérgicas) e neurônios locais do lobo antenal, família
+    lLN1/lLN2 (GABAérgicos, Schlegel et al. 2021). Não cobre o restante dos
+    neurônios "serotonin" (inclui `CSD`, a serotonérgica real do lobo
+    antenal) — esses continuam sinal 0, incerteza genuína sem fonte pra
+    resolver. Ver RN-01a em docs/04-regras-de-negocio.md.
+    """
+    nt = nodes.top_nt.str.lower().fillna("")
+    is_serotonin = (nt == "serotonin").to_numpy()
+    cell_class = nodes.cell_class.fillna("")
+    sign = sign.copy()
+    sign[is_serotonin & (cell_class == "olfactory").to_numpy()] = C.OLFACTORY_RECEPTOR_SIGN
+    sign[is_serotonin & (cell_class == "ALLN").to_numpy()] = C.ANTENNAL_LOBE_LOCAL_NEURON_SIGN
+    return sign
+
+
 def load(out_dir: Path | None = None) -> Connectome:
     """Carrega um subcircuito extraído por `ingest.build`. `out_dir` default é
     `C.PROCESSED` (circuito ocelar, v1); outros circuitos (AD-17, F7) passam
@@ -66,6 +85,7 @@ def load(out_dir: Path | None = None) -> Connectome:
     edges = pd.read_parquet(out_dir / "edges.parquet")
 
     sign = apply_nt_overrides(nodes, assign_sign(nodes))
+    sign = apply_serotonin_artifact_overrides(nodes, sign)
 
     n = len(nodes)
     w = edges.syn.to_numpy(np.float32) * C.SYNAPTIC_GAIN

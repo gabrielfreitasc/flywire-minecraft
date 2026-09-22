@@ -22,11 +22,12 @@ Decisões com consequência arquitetural. Uma ADR nunca é editada depois de ace
 | AD-15 | Segunda fonte de curadoria de RN-08 via BANC connectome (Bates, Phelps, Kim, Yang et al. 2026) — literatura (+5 tipos) e cluster de conectividade (+33 tipos, epistemicamente mais fraco) | 2026-09-16 | Aceita |
 | AD-16 | Canal `yaw_steering` (RN-08) — direção via par bilateral (`side`) dos 4 tipos steering; telemetria só, sem tradução validada pra `MotorMapping.java` | 2026-09-17 | Aceita |
 | AD-17 | Múltiplos subcircuitos (F7 — chuva/toque) como engines separados, não grafo único fundido com o ocelar; `ingest.py` generalizado para semente/hops/saída nomeados | 2026-09-19 | Aceita |
+| AD-18 | RN-01a — override de 358/373 neurônios "serotonin" do hygro (artefato de classificador): ORN→colinérgico (Yasuyama & Salvaterra 1999), lLN1/lLN2→GABAérgico (Schlegel et al. 2021) | 2026-09-21 | Aceita |
 
 AD-01 a AD-05 estão detalhadas em [`../01-camada-de-dados.md`](../01-camada-de-dados.md).
 AD-07 a AD-10 e AD-17 estão detalhadas em [`../02-arquitetura.md`](../02-arquitetura.md).
-AD-13, AD-14, AD-15, AD-16 estão detalhadas em
-[`../04-regras-de-negocio.md`](../04-regras-de-negocio.md) como RN-09, RN-08.
+AD-13, AD-14, AD-15, AD-16, AD-18 estão detalhadas em
+[`../04-regras-de-negocio.md`](../04-regras-de-negocio.md) como RN-09, RN-08, RN-01a.
 
 ## Formato para novas ADRs
 

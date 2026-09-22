@@ -41,6 +41,20 @@ INHIBITORY_NT = ("gaba", "glutamate")  # glutamato é INIBITÓRIO em Drosophila 
 # Eckstein et al. não tem histamina entre suas 6 classes e os rotula como serotonina.
 PHOTORECEPTOR_SIGN = -1
 
+# RN-01a/AD-18 — mesmo padrão de artefato do classificador que gerou
+# PHOTORECEPTOR_SIGN, achado ao investigar o subcircuito `hygro` (F7):
+# Eckstein et al. rotula "serotonin" quando a evidência real aponta pra outro
+# transmissor. Dois grupos identificados por fonte independente do
+# classificador, não por suposição:
+# - ORNs (`cell_class == "olfactory"`) são colinérgicas — estabelecido
+#   (Yasuyama & Salvaterra 1999; Barbara et al. 2005).
+# - Neurônios locais do lobo antenal (`cell_class == "ALLN"`, famílias
+#   lLN1/lLN2) são GABAérgicos — Schlegel et al. 2021 (eLife), atribuição de
+#   transmissor por hemilinhagem via imuno-histoquímica.
+# Ver RN-01a em docs/04-regras-de-negocio.md.
+OLFACTORY_RECEPTOR_SIGN = 1
+ANTENNAL_LOBE_LOCAL_NEURON_SIGN = -1
+
 # ------------------------------------------------------------ modelo (RN-07)
 DT_MS = 1.0                # passo de integração
 V_REST = 0.0               # potencial de repouso (normalizado)
@@ -96,6 +110,14 @@ SENSOR_LIGHT_GAIN = 2.0
 # servidor real — ver plugin/README.md; a amplitude de estímulo resultante
 # no circuito ainda não).
 SENSOR_TOUCH_AMPLITUDE = 2.0
+
+# F7/AD-17 — amplitude de estímulo na semente do subcircuito `hygro` quando
+# `raining` (World#hasStorm(), ligado/desligado) indica chuva. MESMO valor
+# usado em `tools/hygro_calibration_check.py`, onde já foi validado (RN-09:
+# diff média=139,90 no grupo excitatório e 29,03 no inibitório, p≈0 nos
+# dois, N=30) — mesma disciplina de SENSOR_TOUCH_AMPLITUDE acima. Não
+# calibrado contra dinâmica real de chuva no Minecraft ainda.
+SENSOR_RAIN_AMPLITUDE = 2.0
 
 # ------------------------------------------------------------------ RN-08
 # Escala usada para normalizar taxa de disparo (Hz) em (-1, 1) via tanh.

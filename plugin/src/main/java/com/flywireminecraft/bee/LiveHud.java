@@ -21,9 +21,11 @@ import java.util.Locale;
  * <p><b>Só mostra canal que existe de verdade no dado</b> — nada de rótulo
  * inventado (ver `CONVENCOES.md`). Por decisão do usuário: `phototaxis`
  * (validado, F4, p=0,0014), `yaw_steering` (em validação, RN-08/AD-16),
- * `active_dn` (quantos descendentes dispararam na janela) e `grooming`
+ * `active_dn` (quantos descendentes dispararam na janela), `grooming`
  * (F7/AD-17, canal do `bristle` — controla comportamento real desde
- * `MotorMapping` ganhar a lógica de pouso, ver docstring de lá).
+ * `MotorMapping` ganhar a lógica de pouso, ver docstring de lá) e
+ * `hygrotaxis` (F7/AD-17, 21/09/2026, canal do `hygro` — só telemetria,
+ * RN-09 validado mas sem lesão em servidor real, ver `hygro_motor.py`).
  *
  * <p><b>Aparece no canto SUPERIOR DIREITO da tela</b> — é onde o Minecraft
  * renderiza a sidebar do scoreboard nativamente; não existe slot de canto
@@ -40,7 +42,7 @@ import java.util.Locale;
 final class LiveHud {
 
     private static final String OBJECTIVE_NAME = "flywirebeelive";
-    private static final String[] LINE_ENTRIES = {"§0", "§1", "§2", "§3"};
+    private static final String[] LINE_ENTRIES = {"§0", "§1", "§2", "§3", "§4"};
 
     private static Scoreboard board;
     private static Objective objective;
@@ -49,13 +51,16 @@ final class LiveHud {
     }
 
     /** Roda na thread principal (chamado de {@code ControlLoop::onTick}). */
-    static void update(Plugin plugin, JsonObject motor, int activeDn, JsonObject bristleMotor) {
+    static void update(
+            Plugin plugin, JsonObject motor, int activeDn, JsonObject bristleMotor, JsonObject hygroMotor
+    ) {
         ensureBoard();
 
         setLine(0, "phototaxis", formatChannel(motor, "phototaxis"));
         setLine(1, "yaw_steering", formatChannel(motor, "yaw_steering"));
         setLine(2, "active_dn", String.valueOf(activeDn));
         setLine(3, "grooming", formatChannel(bristleMotor, "grooming"));
+        setLine(4, "hygrotaxis", formatChannel(hygroMotor, "hygrotaxis"));
 
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.getScoreboard() != board) {

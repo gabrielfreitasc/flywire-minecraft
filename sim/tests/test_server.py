@@ -123,6 +123,54 @@ def test_bridge_with_bristle_exposes_bristle_telemetry():
             sock.close()
 
 
+def test_bridge_without_hygro_omits_hygro_fields():
+    """F7/AD-17 — sem hygro_connectome (default None), resposta idêntica a
+    antes desta mudança: sem 'hygro_motor'/'hygro_active_dn'."""
+    cc = graph.load()
+    with SimulationServer(cc, host="127.0.0.1", port=0) as srv:
+        time.sleep(0.1)
+        sock = socket.create_connection(("127.0.0.1", srv.port), timeout=5.0)
+        sock_file = sock.makefile("rwb")
+        try:
+            sensor = {"t_ms": 0, "light": 0.5, "dorsal_light": 0.0, "damage": False}
+            sock_file.write((json.dumps(sensor) + "\n").encode("utf-8"))
+            sock_file.flush()
+            payload = json.loads(sock_file.readline().decode("utf-8"))
+            assert "hygro_motor" not in payload
+            assert "hygro_active_dn" not in payload
+        finally:
+            sock.close()
+
+
+def test_bridge_with_hygro_exposes_hygrotaxis():
+    """F7/AD-17 — com hygro_connectome, a resposta ganha 'hygro_motor'
+    (telemetria só, canal 'hygrotaxis' de topologia de sinal, RN-09
+    validado mas sem lesão em servidor real) e 'hygro_active_dn'. 'raining'
+    dispara a semente do hygro via SENSOR_RAIN_AMPLITUDE."""
+    cc = graph.load()
+    hygro_cc = graph.load(C.PROCESSED / "hygro")
+    with SimulationServer(cc, hygro_connectome=hygro_cc, host="127.0.0.1", port=0) as srv:
+        time.sleep(0.1)
+        sock = socket.create_connection(("127.0.0.1", srv.port), timeout=5.0)
+        sock_file = sock.makefile("rwb")
+        try:
+            for i in range(5):
+                sensor = {
+                    "t_ms": i * 50, "light": 0.0, "dorsal_light": 0.0,
+                    "damage": False, "raining": True,
+                }
+                sock_file.write((json.dumps(sensor) + "\n").encode("utf-8"))
+                sock_file.flush()
+                payload = json.loads(sock_file.readline().decode("utf-8"))
+                time.sleep(0.05)
+            assert "hygro_motor" in payload
+            assert "hygrotaxis" in payload["hygro_motor"]
+            assert all(-1.0 < v < 1.0 for v in payload["hygro_motor"].values())
+            assert isinstance(payload["hygro_active_dn"], int)
+        finally:
+            sock.close()
+
+
 def test_bridge_survives_client_disconnect():
     """Se o plugin cair, o simulador continua rodando (não deve travar/crashar)."""
     cc = graph.load()

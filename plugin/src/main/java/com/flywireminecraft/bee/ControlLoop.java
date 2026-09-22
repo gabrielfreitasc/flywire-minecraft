@@ -66,6 +66,10 @@ public final class ControlLoop {
     // F7/AD-17 — telemetria do subcircuito bristle (vazio se server.py não
     // tiver bristle_connectome carregado).
     private volatile JsonObject latestBristleMotor = new JsonObject();
+    // F7/AD-17 — telemetria do subcircuito hygro (vazio se server.py não
+    // tiver hygro_connectome carregado). Só o canal `hygrotaxis`, telemetria
+    // pura — ver hygro_motor.py, não entra em MotorMapping.java ainda.
+    private volatile JsonObject latestHygroMotor = new JsonObject();
     // F7/AD-17 — achado em servidor real (20/09/2026): pausar TouchSensor só
     // ENQUANTO grooming está ativo não bastava. Toda vez que grooming CRUZA
     // o limiar (subindo OU descendo), a velocidade comandada muda de direção
@@ -98,15 +102,52 @@ public final class ControlLoop {
     private static final double STUCK_DISPLACEMENT_THRESHOLD_BLOCKS = 0.3;
     private static final double RECOVERY_BOOST_BLOCKS_PER_TICK = 0.15;
     private static final int RECOVERY_BOOST_TICKS = 20; // 1s de empurrão
+    // F7 — polimento (pendência registrada em docs/03-roadmap-fases.md,
+    // 20/09/2026): o empurrão era só vertical, sem componente horizontal pra
+    // longe do obstáculo nem giro do corpo, por isso parecia um solavanco em
+    // vez de um movimento de escape. Direção horizontal = oposto da direção
+    // COMANDADA no momento em que travou (heading, não a orientação visual)
+    // — é a direção que a abelha estava tentando seguir quando esbarrou,
+    // logo o obstáculo está aproximadamente nela. Estimativa de engenharia,
+    // não calibrada, mesma categoria das constantes acima.
+    private static final double RECOVERY_BOOST_HORIZONTAL_BLOCKS_PER_TICK = 0.10;
     private Location stuckCheckAnchor = null;
     private int stuckCheckTicksLeft = STUCK_CHECK_TICKS;
     private int recoveryBoostTicksLeft = 0;
+    private Vector recoveryEscapeDirection = new Vector(0, 0, 0);
+    // F7/AD-17 — bug 2 real (21/09/2026, ver MotorMapping.toVelocity):
+    // bee.isOnGround()/isInWater() não são estáveis tick a tick na
+    // superfície da água (física de boiar do jogo + leitura fora da thread
+    // principal), então reagir a uma leitura de UM tick só fazia o mergulho
+    // de busca de abrigo reativar em rajadas, girando o corpo sem parar até
+    // a abelha morrer de novo.
+    //
+    // F7/AD-17 — bug 3 real (22/09/2026), no fix de "buscar até achar
+    // abrigo": uma trava PERMANENTE (true pra sempre até o canal desativar)
+    // resolvia o bug 2, mas criava outro — uma vez tocando chão/água UMA
+    // VEZ (mesmo de raspão, ou empurrada pelo sistema de recuperação de
+    // obstáculo), o código achava "já pousou" PRA SEMPRE, mesmo que ela
+    // estivesse bem no ar de novo — ela só deslizava na horizontal, nunca
+    // mais mergulhava. Corrigido trocando a trava permanente por uma
+    // JANELA CURTA de tolerância: `landed` fica true por até
+    // LANDED_GRACE_TICKS depois do último toque confirmado — absorve
+    // flicker de 1 tick (bug 2) sem perder decolagem de verdade (bug 3).
+    private static final int LANDED_GRACE_TICKS = 10; // ~0,5s a 20Hz, mesma ordem de GROOMING_TRANSITION_GRACE_TICKS
+    private volatile int ticksSinceGroundOrWaterContact = LANDED_GRACE_TICKS;
+    // F7/AD-17 — decisão do usuário (21/09/2026): "abrigo" só conta com
+    // teto de verdade acima (ShelterSensor), não só ter tocado chão/água
+    // em qualquer lugar a céu aberto. Trava assim que observa cobertura
+    // real; só destrava quando o canal do hygro desativa. Sem conceito
+    // equivalente pro grooming (toque não tem noção de "abrigo").
+    private volatile boolean shelterFoundThisEpisode = false;
 
     private volatile long exchangeCount = 0;
     private volatile long exchangeFailures = 0;
     private long tickCount = 0;
     private volatile Double forcedLight = null;
     private volatile boolean touchLesioned = false; // F7/AD-17 — ver setTouchLesioned
+    private volatile boolean hygroLesioned = false; // F7/AD-17 — ver setHygroLesioned
+    private volatile boolean bristleSuppressedForExperiment = false; // F7/AD-17 — ver setBristleSuppressedForExperiment
     private volatile boolean visualize = true;
     // F6/AD-16 — direção COMANDADA, persiste entre trocas (não é a orientação
     // visual da abelha, que a IA nativa continua controlando). null = precisa
@@ -190,6 +231,38 @@ public final class ControlLoop {
     }
 
     /**
+     * F7/AD-17 — experimento de lesão pro `hygro` (chuva): quando true,
+     * {@code raining} sempre chega `false` na ponte, não importa o que
+     * {@code World#hasStorm()} diga de verdade — mesma filosofia de
+     * {@link #setLesioned}/{@link #setTouchLesioned}. O sensor real continua
+     * sendo lido (não pausa nada) — só a LEITURA enviada é mascarada.
+     */
+    public void setHygroLesioned(boolean lesioned) {
+        this.hygroLesioned = lesioned;
+    }
+
+    /**
+     * F7/AD-17 — confundidor real encontrado na primeira rodada de
+     * {@code /flywirebee hygrolesion} (22/09/2026): a origem precisa ficar
+     * perto de árvore/construção pra ter abrigo de verdade (`ShelterSensor`),
+     * mas "perto de árvore" também aciona {@code touch_proximity} do
+     * `bristle` (raio de 3 blocos) — o log confirmou {@code grooming}
+     * saturado (~0,998) o experimento inteiro, e {@code MotorMapping}
+     * checa `grooming` ANTES de `hygrotaxis`, então o pouso do `grooming`
+     * mascarava a busca de abrigo do `hygro` o tempo todo, invalidando a
+     * medição. Diferente de {@link #setTouchLesioned} (mascara o que é
+     * ENVIADO ao circuito do bristle) — isto faz {@code MotorMapping}
+     * ignorar a saída do bristle na hora de decidir velocidade, mesmo que
+     * o circuito continue rodando e disparando de verdade (telemetria/
+     * visualização não mentem, só o efeito no movimento é suprimido).
+     * Escopo: só durante o experimento de lesão do hygro, ligado/desligado
+     * pelo próprio {@link HygroLesionExperiment}.
+     */
+    public void setBristleSuppressedForExperiment(boolean suppressed) {
+        this.bristleSuppressedForExperiment = suppressed;
+    }
+
+    /**
      * F6 — experimento de dose-resposta ({@link LightDoseResponseExperiment}):
      * substitui a luz real por um valor arbitrário em [0, 1], ignorando o
      * bloco onde a abelha está. {@code null} volta a usar a luz real. Mesmo
@@ -247,6 +320,9 @@ public final class ControlLoop {
         stuckCheckAnchor = null;
         stuckCheckTicksLeft = STUCK_CHECK_TICKS;
         recoveryBoostTicksLeft = 0;
+        recoveryEscapeDirection = new Vector(0, 0, 0);
+        ticksSinceGroundOrWaterContact = LANDED_GRACE_TICKS;
+        shelterFoundThisEpisode = false;
         tickTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::onTick, 0L, 1L);
     }
 
@@ -314,12 +390,26 @@ public final class ControlLoop {
             stuckCheckTicksLeft--;
             if (stuckCheckTicksLeft <= 0) {
                 double moved = bee.getLocation().distance(stuckCheckAnchor);
-                boolean intentionalLanding = bee.isOnGround() && groomingActive;
+                // F7/AD-17 — pouso do grooming é sempre intencional dentro da
+                // janela de tolerância (ticksSinceGroundOrWaterContact, bug 3
+                // em ControlLoop). Busca de abrigo (hygro) só conta como
+                // intencional quando achou cobertura DE VERDADE
+                // (shelterFoundThisEpisode) — enquanto ainda procurando
+                // (tocou chão/água mas sem teto), ela continua se deslocando,
+                // e se ficar presa contra um obstáculo nesse meio tempo, o
+                // sistema de recuperação deve continuar podendo ajudar, não
+                // achar que é "abrigo".
+                boolean landedStable = ticksSinceGroundOrWaterContact < LANDED_GRACE_TICKS;
+                boolean intentionalLanding = (landedStable && groomingActive)
+                        || (shelterFoundThisEpisode
+                                && MotorMapping.isSeekingShelterActive(latestHygroMotor));
                 if (moved < STUCK_DISPLACEMENT_THRESHOLD_BLOCKS && !intentionalLanding) {
                     recoveryBoostTicksLeft = RECOVERY_BOOST_TICKS;
+                    Vector commandedDirection = heading != null ? heading : bee.getLocation().getDirection();
+                    recoveryEscapeDirection = horizontalOpposite(commandedDirection);
                     plugin.getLogger().info(String.format(Locale.ROOT,
-                            "[ControlLoop] recuperação: só %.2f blocos em %d ticks — empurrão pra cima",
-                            moved, STUCK_CHECK_TICKS));
+                            "[ControlLoop] recuperação: só %.2f blocos em %d ticks — empurrão pra cima e pra longe (%s)",
+                            moved, STUCK_CHECK_TICKS, recoveryEscapeDirection));
                 }
                 stuckCheckAnchor = bee.getLocation();
                 stuckCheckTicksLeft = STUCK_CHECK_TICKS;
@@ -331,7 +421,10 @@ public final class ControlLoop {
         // sobrescreve por cima (ver acima).
         Vector velocityToApply;
         if (recoveryBoostTicksLeft > 0) {
-            velocityToApply = new Vector(0, RECOVERY_BOOST_BLOCKS_PER_TICK, 0);
+            velocityToApply = new Vector(
+                    recoveryEscapeDirection.getX() * RECOVERY_BOOST_HORIZONTAL_BLOCKS_PER_TICK,
+                    RECOVERY_BOOST_BLOCKS_PER_TICK,
+                    recoveryEscapeDirection.getZ() * RECOVERY_BOOST_HORIZONTAL_BLOCKS_PER_TICK);
             recoveryBoostTicksLeft--;
         } else {
             velocityToApply = latestVelocity;
@@ -346,34 +439,48 @@ public final class ControlLoop {
         // `goals off`). Resultado: corpo aponta pra um lado, movimento real
         // vai pra outro — parece "andar de ré" mesmo o giro medido
         // (net_turn_rad) estando correto. Corrigido girando o corpo junto
-        // com `latestVelocity` a cada tick — conversão vetor->yaw padrão do
-        // Bukkit (yaw=0 look +Z/sul, cresce no sentido horário visto de cima).
-        if (latestVelocity.lengthSquared() > 1.0E-6) {
-            Vector dir = latestVelocity.clone().normalize();
+        // com a velocidade REALMENTE aplicada a cada tick (não
+        // `latestVelocity` — durante um empurrão de recuperação (F7,
+        // polimento) o corpo precisa acompanhar a direção de escape, não a
+        // direção que o circuito escolheria se não tivesse travado) —
+        // conversão vetor->yaw padrão do Bukkit (yaw=0 look +Z/sul, cresce no
+        // sentido horário visto de cima).
+        if (velocityToApply.lengthSquared() > 1.0E-6) {
+            Vector dir = velocityToApply.clone().normalize();
             float yaw = (float) Math.toDegrees(Math.atan2(-dir.getX(), dir.getZ()));
             bee.setRotation(yaw, bee.getLocation().getPitch());
         }
 
         if (visualize && tickCount % VISUALIZE_EVERY_TICKS == 0) {
-            visualizer.render(bee, latestMotor);
+            visualizer.render(bee, latestMotor, latestBristleMotor, latestHygroMotor);
         }
         if (tickCount % HUD_EVERY_TICKS == 0) {
-            LiveHud.update(plugin, latestMotor, latestActiveDn, latestBristleMotor);
+            LiveHud.update(plugin, latestMotor, latestActiveDn, latestBristleMotor, latestHygroMotor);
         }
 
         double realLight = bee.getLocation().getBlock().getLightLevel() / 15.0;
         Double forced = forcedLight;
         double light = forced != null ? forced : realLight;
+        // F7/AD-17 — sensor do subcircuito hygro (chuva): nível, igual
+        // touch_proximity, não borda. World#hasStorm() já reflete o ciclo de
+        // clima do Minecraft sem precisar de heurística nenhuma (diferente
+        // de touch_contact, que precisou de uma por falta de evento nativo).
+        // Lido aqui (antes do log) e reaproveitado mais abaixo pra troca com
+        // a ponte — mesmo valor, não duas leituras.
+        boolean raining = bee.getWorld().hasStorm();
 
         if (tickCount % LOG_EVERY_TICKS == 0) {
             String grooming = latestBristleMotor.has("grooming")
                     ? String.format(Locale.ROOT, "%.3f", latestBristleMotor.get("grooming").getAsDouble())
                     : "-";
+            String hygrotaxis = latestHygroMotor.has("hygrotaxis")
+                    ? String.format(Locale.ROOT, "%.3f", latestHygroMotor.get("hygrotaxis").getAsDouble())
+                    : "-";
             plugin.getLogger().info(String.format(Locale.ROOT,
                     "[ControlLoop] light=%.2f (real=%.2f, forçado=%s) vel=%s trocas=%d falhas=%d "
-                            + "proximity=%s grooming=%s onGround=%s",
+                            + "proximity=%s grooming=%s onGround=%s raining=%s hygrotaxis=%s",
                     light, realLight, forced, latestVelocity, exchangeCount, exchangeFailures,
-                    touchSensor.isNearSomething(bee), grooming, bee.isOnGround()));
+                    touchSensor.isNearSomething(bee), grooming, bee.isOnGround(), raining, hygrotaxis));
         }
         tickCount++;
 
@@ -416,6 +523,9 @@ public final class ControlLoop {
         boolean damageToSend = touchLesionedNow ? false : damage;
         boolean touchContactToSend = touchLesionedNow ? false : touchContact;
         boolean touchProximityToSend = touchLesionedNow ? false : touchProximity;
+        // F7/AD-17 — experimento de lesão do hygro: mascara o que é ENVIADO,
+        // não o que é detectado (mesma lógica das linhas acima).
+        boolean rainingToSend = hygroLesioned ? false : raining;
 
         bridgeExecutor.submit(() -> {
             try {
@@ -423,8 +533,8 @@ public final class ControlLoop {
                     bridge = new BridgeClient(bridgeHost, bridgePort);
                 }
                 JsonObject response = bridge.sendSensorAndReceiveMotor(
-                        light, dorsalLight, damageToSend, touchContactToSend, touchProximityToSend, tMs,
-                        muteToSend, stimulateToSend);
+                        light, dorsalLight, damageToSend, touchContactToSend, touchProximityToSend,
+                        rainingToSend, tMs, muteToSend, stimulateToSend);
                 if (sendMuteThisTime) {
                     muteDirty = false;
                 }
@@ -432,7 +542,62 @@ public final class ControlLoop {
                     stimulateDirty = false;
                 }
                 Vector newHeading = MotorMapping.rotatedHeading(response, currentHeading);
-                latestVelocity = MotorMapping.toVelocity(response, newHeading, bee.isOnGround());
+
+                // F7/AD-17 — confundidor real (22/09/2026, ver docstring de
+                // setBristleSuppressedForExperiment): durante o experimento
+                // de lesão do hygro, ignora a saída do bristle na decisão de
+                // velocidade (cópia sem "bristle_motor") — o circuito
+                // continua rodando e disparando de verdade, só o EFEITO no
+                // movimento é suprimido, pra não deixar grooming (acionado
+                // por estar perto da árvore que dá abrigo) mascarar a busca
+                // de abrigo do hygro.
+                JsonObject responseForMotor = response;
+                if (bristleSuppressedForExperiment) {
+                    responseForMotor = response.deepCopy();
+                    responseForMotor.remove("bristle_motor");
+                }
+
+                // F7/AD-17 — bugs 2 e 3 reais (ver docstring do campo
+                // ticksSinceGroundOrWaterContact e de MotorMapping.toVelocity):
+                // não passar onGround/isInWater crus pro MotorMapping —
+                // janela curta de tolerância absorve flicker de 1 tick sem
+                // travar "pousada" pra sempre se ela ficar no ar de novo.
+                boolean touchingGroundOrWater = bee.isOnGround() || bee.isInWater();
+                boolean groomingActiveNow =
+                        MotorMapping.isGroomingActive(responseForMotor.getAsJsonObject("bristle_motor"));
+                boolean shelterActiveNow =
+                        MotorMapping.isSeekingShelterActive(responseForMotor.getAsJsonObject("hygro_motor"));
+                if (!(groomingActiveNow || shelterActiveNow)) {
+                    ticksSinceGroundOrWaterContact = LANDED_GRACE_TICKS; // próximo episódio começa "no ar"
+                    shelterFoundThisEpisode = false;
+                } else if (touchingGroundOrWater) {
+                    ticksSinceGroundOrWaterContact = 0;
+                    // F7/AD-17 — decisão do usuário: só conta abrigo com
+                    // teto de verdade acima (ver ShelterSensor). Só checa
+                    // geometria quando já tocou algo (barato: não varre
+                    // blocos toda hora, só quando pode importar) e ainda
+                    // não achou — depois de achar, trava e não recomputa.
+                    if (shelterActiveNow && !shelterFoundThisEpisode
+                            && ShelterSensor.hasShelterAbove(bee.getLocation())) {
+                        shelterFoundThisEpisode = true;
+                        // F7/AD-17 — diagnóstico (22/09/2026, usuário relatou
+                        // parar sem cobertura visível): loga o valor bruto de
+                        // getLightFromSky() e a posição no instante exato da
+                        // decisão, pra confirmar se é o sensor errando (ex.:
+                        // chuva mexendo no valor) ou um bloco isolado real
+                        // (folha/borda) que não parece "abrigo" a olho nu.
+                        Location loc = bee.getLocation();
+                        plugin.getLogger().info(String.format(Locale.ROOT,
+                                "[ControlLoop] abrigo encontrado — skylight=%d em (%.1f, %.1f, %.1f)",
+                                loc.getBlock().getLightFromSky(), loc.getX(), loc.getY(), loc.getZ()));
+                    }
+                } else if (ticksSinceGroundOrWaterContact < LANDED_GRACE_TICKS) {
+                    ticksSinceGroundOrWaterContact++;
+                }
+                boolean landed = ticksSinceGroundOrWaterContact < LANDED_GRACE_TICKS;
+                boolean sheltered = shelterFoundThisEpisode;
+
+                latestVelocity = MotorMapping.toVelocity(responseForMotor, newHeading, landed, sheltered);
                 heading = newHeading;
                 JsonObject motor = response.getAsJsonObject("motor");
                 if (motor != null) {
@@ -445,6 +610,10 @@ public final class ControlLoop {
                 if (bristleMotor != null) {
                     latestBristleMotor = bristleMotor;
                 }
+                JsonObject hygroMotor = response.getAsJsonObject("hygro_motor");
+                if (hygroMotor != null) {
+                    latestHygroMotor = hygroMotor;
+                }
                 exchangeCount++;
             } catch (IOException e) {
                 exchangeFailures++;
@@ -455,6 +624,22 @@ public final class ControlLoop {
                 exchangeInFlight.set(false);
             }
         });
+    }
+
+    /**
+     * F7 — polimento da recuperação mecânica: direção horizontal (unitária,
+     * Y=0) oposta a {@code direction}, usada pra empurrar a abelha pra longe
+     * do obstáculo que ela estava tentando atravessar quando travou. Vetor
+     * nulo se {@code direction} não tem componente horizontal (ex.: olhando
+     * reto pra cima/baixo) — nesse caso o empurrão fica só vertical, como
+     * antes deste polimento.
+     */
+    private static Vector horizontalOpposite(Vector direction) {
+        Vector horizontal = new Vector(direction.getX(), 0, direction.getZ());
+        if (horizontal.lengthSquared() < 1.0E-6) {
+            return new Vector(0, 0, 0);
+        }
+        return horizontal.normalize().multiply(-1);
     }
 
     private void closeQuietly() {

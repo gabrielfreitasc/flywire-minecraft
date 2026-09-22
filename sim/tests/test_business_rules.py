@@ -64,6 +64,41 @@ def test_photoreceptor_override_real_data(real_nodes):
     assert (sign[is_photoreceptor] == -1).all()
 
 
+def test_serotonin_artifact_override():
+    """RN-01a/AD-18 — ORNs (cell_class="olfactory") viram +1 apesar do
+    rótulo "serotonin"; neurônios locais do lobo antenal (cell_class="ALLN")
+    viram -1; o resto rotulado "serotonin" (ex.: CSD) fica em 0, sem fonte
+    independente pra resolver."""
+    synthetic = pd.DataFrame(
+        {
+            "top_nt": ["serotonin", "serotonin", "serotonin", "acetylcholine"],
+            "cell_class": ["olfactory", "ALLN", "", "olfactory"],
+        }
+    )
+    sign = graph.apply_serotonin_artifact_overrides(synthetic, graph.assign_sign(synthetic))
+    np.testing.assert_array_equal(sign, [1, -1, 0, 1])
+
+
+def test_serotonin_artifact_override_hygro():
+    """RN-01a/AD-18 — no subcircuito hygro real: 318 ORNs -> +1, 40
+    neurônios locais (lLN1/lLN2) -> -1, restante (15, inclui CSD) fica em 0.
+    Números medidos e documentados em RN-01a — se mudarem, a extração do
+    hygro mudou e a doc precisa ser revisada, não só este teste."""
+    hygro_nodes = pd.read_parquet(C.PROCESSED / "hygro" / "nodes.parquet")
+    sign = graph.apply_serotonin_artifact_overrides(hygro_nodes, graph.assign_sign(hygro_nodes))
+
+    nt = hygro_nodes.top_nt.str.lower().fillna("")
+    is_serotonin = (nt == "serotonin").to_numpy()
+    is_orn = (hygro_nodes.cell_class == "olfactory").to_numpy()
+    is_alln = (hygro_nodes.cell_class == "ALLN").to_numpy()
+
+    assert (is_serotonin & is_orn).sum() == 318
+    assert (is_serotonin & is_alln).sum() == 40
+    assert (sign[is_serotonin & is_orn] == 1).all()
+    assert (sign[is_serotonin & is_alln] == -1).all()
+    assert (sign[is_serotonin & ~is_orn & ~is_alln] == 0).sum() == 15
+
+
 def test_threshold(real_edges):
     """RN-03 — nenhuma aresta com menos de SYN_THRESHOLD sinapses sobrevive."""
     assert (real_edges.syn >= C.SYN_THRESHOLD).all()

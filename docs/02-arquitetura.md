@@ -85,7 +85,7 @@ vê intenção motora. Se o mob mudar, só L4 muda.
 ### L6 → L5 · sensores
 ```json
 {"t_ms": 12450, "light": 0.94, "dorsal_light": 0.61, "damage": false,
- "touch_contact": false, "touch_proximity": false}
+ "touch_contact": false, "touch_proximity": false, "raining": false}
 ```
 Dois campos opcionais, adicionados na F5 (omitidos no exemplo acima por
 serem raros — a maioria das mensagens não os inclui):
@@ -138,6 +138,20 @@ provisórias, sem validação visual em servidor real ainda. Ver
 `docs/03-roadmap-fases.md` F7, `sim/src/flywire_sim/server.py`,
 `sim/src/flywire_sim/bristle_motor.py`,
 `plugin/.../MotorMapping.java`.
+
+**`raining` (F7/AD-17, 21/09/2026) — terceiro `Engine`, subcircuito `hygro`
+(chuva).** Campo novo, sinal de NÍVEL (verdadeiro enquanto
+`World#hasStorm()` for true, não um evento de borda como `touch_contact`).
+`SimulationServer` ganhou `hygro_connectome` opcional (default `None`, mesmo
+padrão do `bristle_connectome` — sem quebrar quem só usa ocelar/bristle).
+`raining` estimula a semente higrossensorial com `SENSOR_RAIN_AMPLITUDE`
+(mesmo valor validado em `tools/hygro_calibration_check.py`, RN-09: p≈0 nos
+dois grupos de topologia, N=30). Resposta ganha `hygro_motor` (canal
+`hygrotaxis`, topologia de sinal — mesmo mecanismo que gerou `phototaxis`
+antes de RN-08 existir, ver `hygro_motor.py`) e `hygro_active_dn`. **Sem
+curadoria RN-08 equivalente ainda** (nenhuma leitura de literatura/BANC feita
+pros 41 tipos de descendente do hygro) e **sem lesão em servidor real** —
+`hygrotaxis` é telemetria/visualização, não entra em `MotorMapping.java`.
 
 ### Protocolo da ponte
 - TCP em `localhost:8765`, JSON-lines (`\n`), UTF-8.
