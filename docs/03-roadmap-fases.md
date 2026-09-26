@@ -1886,7 +1886,9 @@ neurônio real.
       embodiment, não muda o que o circuito calcula (RN-08). Fuga
       (`escapeLatchTicksLeft > 0`), empurrões de recuperação e desvio do
       grooming ficam de fora: medo vence cansaço. Todas as constantes
-      PROVISÓRIAS. **Reteste em jogo pendente.** Ainda NÃO faz ela buscar
+      PROVISÓRIAS. **✅ Confirmado em servidor real (26/09/2026)** — usuário
+      testou, barra de fome, indicadores ○/● do painel e reação (mais lenta e
+      mais baixa) funcionaram. Ainda NÃO faz ela buscar
       comida ativamente quando faminta (só fica lenta e baixa).
 
 Nenhum teste Python novo (mudança inteiramente do lado do plugin, sem
