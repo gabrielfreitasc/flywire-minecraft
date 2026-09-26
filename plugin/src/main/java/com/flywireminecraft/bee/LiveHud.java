@@ -1,7 +1,10 @@
 package com.flywireminecraft.bee;
 
 import com.google.gson.JsonObject;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.Bukkit;
+import org.bukkit.Color;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scoreboard.Criteria;
@@ -81,14 +84,28 @@ final class LiveHud {
         // F9 (25/09/2026, pedido do usuário) — rótulo em PT-br + nome do
         // canal real entre parênteses, ex.: "Toque (grooming)" — mesma
         // convenção de StatusLabel.java, não é rótulo inventado, é tradução.
-        setLine(0, "Luz (phototaxis)", formatChannel(motor, "phototaxis"));
-        setLine(1, "Giro (yaw_steering)", formatChannel(motor, "yaw_steering"));
+        // F11 (26/09/2026, pedido do usuário) — cada grupamento neural ganha
+        // um indicador na cor da partícula do circuito (ActivityVisualizer):
+        // ○ em repouso, ● quando o canal está excitado agora. "Excitado" usa
+        // o MESMO limiar que já dispara comportamento quando existe um em
+        // MotorMapping (grooming/hygro/escape/taste); phototaxis/yaw_steering
+        // /startle não têm limiar de comportamento — ACTIVE_VISUAL_THRESHOLD
+        // é só cosmético.
+        setLine(0, "Luz (phototaxis)", formatChannel(motor, "phototaxis"),
+                ActivityVisualizer.COLOR_OCELAR, channelAbove(motor, "phototaxis", true));
+        setLine(1, "Giro (yaw_steering)", formatChannel(motor, "yaw_steering"),
+                ActivityVisualizer.COLOR_OCELAR, channelAbove(motor, "yaw_steering", true));
         setLine(2, "Ativos (active_dn)", String.valueOf(activeDn));
-        setLine(3, "Toque (grooming)", formatChannel(bristleMotor, "grooming"));
-        setLine(4, "Clima (hygrotaxis)", formatChannel(hygroMotor, "hygrotaxis"));
-        setLine(5, "Som/Vento (startle)", formatChannel(johnstonMotor, "startle"));
-        setLine(6, "Medo (escape_drive)", formatChannel(escapeMotor, "escape_drive"));
-        setLine(7, "Paladar (appetite)", formatChannel(tasteMotor, "appetite"));
+        setLine(3, "Toque (grooming)", formatChannel(bristleMotor, "grooming"),
+                ActivityVisualizer.COLOR_BRISTLE, MotorMapping.isGroomingActive(bristleMotor));
+        setLine(4, "Clima (hygrotaxis)", formatChannel(hygroMotor, "hygrotaxis"),
+                ActivityVisualizer.COLOR_HYGRO, MotorMapping.isSeekingShelterActive(hygroMotor));
+        setLine(5, "Som/Vento (startle)", formatChannel(johnstonMotor, "startle"),
+                ActivityVisualizer.COLOR_JOHNSTON, channelAbove(johnstonMotor, "startle", false));
+        setLine(6, "Medo (escape_drive)", formatChannel(escapeMotor, "escape_drive"),
+                ActivityVisualizer.COLOR_ESCAPE, MotorMapping.isEscapeActive(escapeMotor));
+        setLine(7, "Paladar (appetite)", formatChannel(tasteMotor, "appetite"),
+                ActivityVisualizer.COLOR_TASTE, MotorMapping.isTasteSeekingActive(tasteMotor));
         // F11 — ver docstring da classe: proxy de engenharia, não canal do simulador.
         setLine(8, "Energia", String.format(Locale.ROOT, "%.0f%%", energyLevel * 100));
 
@@ -141,5 +158,27 @@ final class LiveHud {
         if (team != null) {
             team.setPrefix(label + ": " + value + " ");
         }
+    }
+
+    /** Linha de grupamento neural: ○/● na cor do circuito + texto normal. */
+    private static void setLine(int index, String label, String value, Color color, boolean active) {
+        Team team = board.getEntryTeam(LINE_ENTRIES[index]);
+        if (team != null) {
+            Component dot = Component.text(active ? "●" : "○",
+                    TextColor.color(color.getRed(), color.getGreen(), color.getBlue()));
+            team.prefix(Component.text().append(dot)
+                    .append(Component.text(" " + label + ": " + value + " ")).build());
+        }
+    }
+
+    /** Só cosmético — canais sem limiar de comportamento em {@code MotorMapping}. */
+    private static final double ACTIVE_VISUAL_THRESHOLD = 0.5;
+
+    private static boolean channelAbove(JsonObject motor, String channel, boolean useAbsolute) {
+        if (motor == null || !motor.has(channel)) {
+            return false;
+        }
+        double value = motor.get(channel).getAsDouble();
+        return (useAbsolute ? Math.abs(value) : value) > ACTIVE_VISUAL_THRESHOLD;
     }
 }

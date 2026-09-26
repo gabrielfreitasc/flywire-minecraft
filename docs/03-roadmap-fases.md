@@ -1876,12 +1876,18 @@ neurônio real.
       parênteses (não vem do simulador, não tem um pra citar).
 - [x] **Balão de texto** — "Faminta!" quando energia < 20%, prioridade
       BAIXA (informativo só, não muda comportamento de voo ainda).
-- [ ] **Sem efeito no comportamento ainda** — decisão implícita (mesma
-      disciplina de telemetria-antes-de-comportamento já usada nos
-      outros circuitos): energia baixa não força busca de comida, só
-      avisa. Virar comportamento real (ex.: taxia até comida quando
-      faminta, priorizar sobre phototaxis) é possível próximo passo, não
-      pedido ainda.
+- [x] **Reação à fome (26/09/2026, pedido do usuário).** Energia abaixo de
+      40% (`EnergyTracker.HUNGRY_BELOW`): a abelha voa mais LENTA
+      (velocidade horizontal cai linearmente até 35% com energia zero) e
+      mais BAIXO (teto de altura acima do chão desce de ~7,5 blocos até 1,5
+      com energia zero; `rayTraceBlocks` pra baixo, até 16 blocos).
+      `ControlLoop.applyHungerModifiers`, aplicado só no fim, sobre a
+      velocidade já decidida pelos circuitos — fadiga física de
+      embodiment, não muda o que o circuito calcula (RN-08). Fuga
+      (`escapeLatchTicksLeft > 0`), empurrões de recuperação e desvio do
+      grooming ficam de fora: medo vence cansaço. Todas as constantes
+      PROVISÓRIAS. **Reteste em jogo pendente.** Ainda NÃO faz ela buscar
+      comida ativamente quando faminta (só fica lenta e baixa).
 
 Nenhum teste Python novo (mudança inteiramente do lado do plugin, sem
 protocolo/simulador envolvido) — 44/44 continuam passando.

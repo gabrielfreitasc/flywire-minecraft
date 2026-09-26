@@ -51,7 +51,20 @@ final class StatusLabel {
     private static final double STARTLE_LABEL_THRESHOLD = 0.5; // só cosmético, ver docstring
     private static final double LOW_ENERGY_LABEL_THRESHOLD = 0.2; // só cosmético, ver docstring
 
+    // F11 (26/09/2026, pedido do usuário) — barra de fome ABAIXO da abelha:
+    // 5 ícones que vão esvaziando conforme o percentual do EnergyTracker.
+    // Só caracteres do plano básico do Unicode (●/○) — emoji fora do BMP
+    // (ex.: drumstick) não renderiza na fonte padrão do Minecraft.
+    // Deslocamento Y é estimativa visual (nameplate de marker stand
+    // renderiza um pouco acima da posição do stand) — ajustar se ficar
+    // colado/longe demais.
+    private static final double HUNGER_BAR_OFFSET_BLOCKS = -0.6;
+    private static final int HUNGER_ICONS = 5;
+    private static final String HUNGER_ICON_FULL = "●";
+    private static final String HUNGER_ICON_EMPTY = "○";
+
     private ArmorStand stand;
+    private ArmorStand hungerStand;
 
     /** Roda na thread principal (chamado de {@code ControlLoop::onTick}). */
     void update(
@@ -60,30 +73,58 @@ final class StatusLabel {
             boolean tasteFollowingPlayer, double energyLevel
     ) {
         if (stand == null || !stand.isValid()) {
-            spawn(bee);
+            stand = spawn(bee, HEIGHT_OFFSET_BLOCKS);
         }
         stand.teleport(bee.getLocation().add(0, HEIGHT_OFFSET_BLOCKS, 0));
         stand.setCustomName(pickMessage(bristleMotor, hygroMotor, johnstonMotor, tasteMotor,
                 groomingEpisodeIsDodge, sheltered, escapeActive, tasteFollowingPlayer, energyLevel));
+
+        if (hungerStand == null || !hungerStand.isValid()) {
+            hungerStand = spawn(bee, HUNGER_BAR_OFFSET_BLOCKS);
+        }
+        hungerStand.teleport(bee.getLocation().add(0, HUNGER_BAR_OFFSET_BLOCKS, 0));
+        hungerStand.setCustomName(hungerBar(energyLevel));
     }
 
-    /** Chamar em {@code ControlLoop::stop} — não deixa o marcador sobrando no mundo. */
+    /** Chamar em {@code ControlLoop::stop} — não deixa os marcadores sobrando no mundo. */
     void remove() {
         if (stand != null) {
             stand.remove();
             stand = null;
         }
+        if (hungerStand != null) {
+            hungerStand.remove();
+            hungerStand = null;
+        }
     }
 
-    private void spawn(Bee bee) {
-        Location loc = bee.getLocation().add(0, HEIGHT_OFFSET_BLOCKS, 0);
-        stand = (ArmorStand) bee.getWorld().spawnEntity(loc, EntityType.ARMOR_STAND);
-        stand.setInvisible(true);
-        stand.setMarker(true); // sem hitbox/colisão/física
-        stand.setGravity(false);
-        stand.setSmall(true);
-        stand.setCustomNameVisible(true);
-        stand.setPersistent(false); // não sobrevive a restart do servidor — recriado no próximo start()
+    /**
+     * 5 ícones, cheios conforme {@code ceil(energia * 5)} — qualquer
+     * energia acima de zero mostra pelo menos um ícone cheio, só 0% zera a
+     * barra. Cheios em dourado, vazios em cinza escuro (vira vermelho
+     * quando só sobra 1 ícone, mesmo limiar de aviso do "Faminta!").
+     */
+    private String hungerBar(double energyLevel) {
+        int filled = (int) Math.ceil(Math.max(0.0, Math.min(1.0, energyLevel)) * HUNGER_ICONS);
+        ChatColor fullColor = filled <= 1 ? ChatColor.RED : ChatColor.GOLD;
+        StringBuilder bar = new StringBuilder();
+        bar.append(fullColor);
+        bar.append(HUNGER_ICON_FULL.repeat(filled));
+        bar.append(ChatColor.DARK_GRAY);
+        bar.append(HUNGER_ICON_EMPTY.repeat(HUNGER_ICONS - filled));
+        return bar.toString();
+    }
+
+    private ArmorStand spawn(Bee bee, double yOffset) {
+        Location loc = bee.getLocation().add(0, yOffset, 0);
+        ArmorStand created = (ArmorStand) bee.getWorld().spawnEntity(loc, EntityType.ARMOR_STAND);
+        created.setInvisible(true);
+        created.setMarker(true); // sem hitbox/colisão/física
+        created.setGravity(false);
+        created.setSmall(true);
+        created.setCustomNameVisible(true);
+        created.setPersistent(false); // não sobrevive a restart do servidor — recriado no próximo start()
+        return created;
     }
 
     private String pickMessage(

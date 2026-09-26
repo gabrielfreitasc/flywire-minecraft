@@ -1,10 +1,12 @@
 package com.flywireminecraft.bee;
 
 import com.google.gson.JsonObject;
+import org.bukkit.FluidCollisionMode;
 import org.bukkit.Location;
 import org.bukkit.entity.Bee;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.util.RayTraceResult;
 import org.bukkit.util.Vector;
 
 import java.io.IOException;
@@ -602,8 +604,11 @@ public final class ControlLoop {
                     0,
                     dodgeDirection.getZ() * DODGE_BOOST_HORIZONTAL_BLOCKS_PER_TICK);
             dodgeBoostTicksLeft--;
-        } else {
+        } else if (escapeLatchTicksLeft > 0) {
+            // F11 — fuga NÃO é reduzida pela fome (medo vence cansaço).
             velocityToApply = latestVelocity;
+        } else {
+            velocityToApply = applyHungerModifiers(bee, latestVelocity);
         }
         bee.setVelocity(velocityToApply);
         lastAppliedVelocity = velocityToApply;
@@ -948,6 +953,45 @@ public final class ControlLoop {
                 exchangeInFlight.set(false);
             }
         });
+    }
+
+    /**
+     * F11 (26/09/2026, pedido do usuário) — reação à fome: com energia baixa
+     * ({@link EnergyTracker#hungerFactor}) a abelha voa mais DEVAGAR
+     * (horizontal reduzido até {@link EnergyTracker#MIN_SPEED_FRACTION}) e
+     * mais BAIXO (teto de altura acima do chão desce de
+     * {@code STARVING_CEILING + FED_CEILING_EXTRA} até
+     * {@link EnergyTracker#STARVING_CEILING_BLOCKS}). Aplicado só no fim,
+     * sobre a velocidade já decidida pelos circuitos — não muda o que o
+     * circuito calcula (RN-08), é fadiga física de embodiment, mesmo
+     * status do sistema de recuperação. Fuga e empurrões mecânicos ficam de
+     * fora (ver chamada). Roda na thread principal (rayTraceBlocks). Sem
+     * chão a até 16 blocos abaixo, só a redução de velocidade vale.
+     */
+    private Vector applyHungerModifiers(Bee bee, Vector velocity) {
+        double hunger = energyTracker.hungerFactor();
+        if (hunger <= 0.0) {
+            return velocity;
+        }
+        Vector adjusted = velocity.clone();
+        double speedFraction = 1.0 - hunger * (1.0 - EnergyTracker.MIN_SPEED_FRACTION);
+        adjusted.setX(adjusted.getX() * speedFraction);
+        adjusted.setZ(adjusted.getZ() * speedFraction);
+
+        double ceiling = EnergyTracker.STARVING_CEILING_BLOCKS
+                + (1.0 - hunger) * EnergyTracker.FED_CEILING_EXTRA_BLOCKS;
+        Location location = bee.getLocation();
+        RayTraceResult ground = bee.getWorld().rayTraceBlocks(
+                location, new Vector(0, -1, 0), 16.0, FluidCollisionMode.NEVER, true);
+        if (ground != null) {
+            double height = location.getY() - ground.getHitPosition().getY();
+            if (height > ceiling) {
+                adjusted.setY(Math.min(adjusted.getY(), -EnergyTracker.HUNGRY_DESCENT_BLOCKS_PER_TICK));
+            } else if (adjusted.getY() > 0) {
+                adjusted.setY(Math.min(adjusted.getY(), (ceiling - height) * 0.2));
+            }
+        }
+        return adjusted;
     }
 
     /**

@@ -41,6 +41,19 @@ final class EnergyTracker {
     // ticks) de contato sustentado com comida. PROVISÓRIO.
     private static final double REPLENISH_PER_TICK_WHILE_EATING = 0.01;
 
+    // F11 — reação à fome (pedido do usuário, 26/09/2026): abaixo de
+    // HUNGRY_BELOW ela fica mais lenta e voa mais baixa, quanto mais faminta
+    // pior. Tudo PROVISÓRIO, engenharia (mesmo status do resto deste medidor).
+    static final double HUNGRY_BELOW = 0.4;
+    /** Fração da velocidade normal com energia zero (0,35 = 35%). */
+    static final double MIN_SPEED_FRACTION = 0.35;
+    /** Altura máxima acima do chão com energia zero, em blocos. */
+    static final double STARVING_CEILING_BLOCKS = 1.5;
+    /** Altura máxima extra (acima do teto de faminta) quando a fome acaba de começar. */
+    static final double FED_CEILING_EXTRA_BLOCKS = 6.0;
+    /** Velocidade vertical de descida ao ultrapassar o teto de altura, por tick. */
+    static final double HUNGRY_DESCENT_BLOCKS_PER_TICK = 0.1;
+
     private volatile double energy = ENERGY_MAX;
 
     /** Chamar em {@code ControlLoop::start} — começa cheia a cada novo episódio de controle. */
@@ -65,6 +78,18 @@ final class EnergyTracker {
             double depletion = BASE_DEPLETION_PER_TICK + blocksMovedThisTick * MOVEMENT_DEPLETION_PER_BLOCK;
             energy = Math.max(0.0, energy - depletion);
         }
+    }
+
+    /**
+     * Intensidade da fome: 0,0 com energia >= {@link #HUNGRY_BELOW}, sobe
+     * linearmente até 1,0 com energia zero.
+     */
+    double hungerFactor() {
+        double e = energy;
+        if (e >= HUNGRY_BELOW) {
+            return 0.0;
+        }
+        return 1.0 - e / HUNGRY_BELOW;
     }
 
     /** Nível atual — 0,0 (faminta) a 1,0 (cheia). */

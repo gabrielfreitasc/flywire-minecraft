@@ -63,13 +63,23 @@ public final class ActivityVisualizer {
     // Ordem = ordem de desenho. Cor de cada circuito reaproveitada da versão
     // anterior (já eram as cores de destaque de phototaxis/grooming/
     // hygrotaxis) — só a composição mudou, não a paleta em si.
+    // Cores por circuito, pacote-visíveis: LiveHud reaproveita as MESMAS
+    // cores nos indicadores ○/● do painel (pedido do usuário, 26/09/2026),
+    // sem duplicar RGB.
+    static final Color COLOR_OCELAR = Color.fromRGB(255, 230, 0);    // amarelo (luz)
+    static final Color COLOR_BRISTLE = Color.fromRGB(139, 90, 43);   // marrom (toque/limpeza)
+    static final Color COLOR_HYGRO = Color.fromRGB(0, 128, 128);     // azul-petróleo (chuva)
+    static final Color COLOR_JOHNSTON = Color.fromRGB(220, 0, 0);    // vermelho (alarme/som)
+    static final Color COLOR_ESCAPE = Color.fromRGB(148, 0, 211);    // violeta (medo/fuga)
+    static final Color COLOR_TASTE = Color.fromRGB(255, 105, 180);   // rosa (paladar/doce)
+
     private static final CircuitVisual[] CIRCUITS = {
-            new CircuitVisual(Color.fromRGB(255, 230, 0), "phototaxis", "yaw_steering"),   // ocelar — amarelo (luz)
-            new CircuitVisual(Color.fromRGB(139, 90, 43), "grooming"),                     // bristle — marrom (toque/limpeza)
-            new CircuitVisual(Color.fromRGB(0, 128, 128), "hygrotaxis"),                   // hygro — azul-petróleo (chuva)
-            new CircuitVisual(Color.fromRGB(220, 0, 0), "startle"),                        // johnston — vermelho (alarme/som)
-            new CircuitVisual(Color.fromRGB(148, 0, 211), "escape_drive"),                 // escape — violeta (medo/fuga)
-            new CircuitVisual(Color.fromRGB(255, 105, 180), "appetite"),                   // taste — rosa (paladar/doce)
+            new CircuitVisual(COLOR_OCELAR, "phototaxis", "yaw_steering"),
+            new CircuitVisual(COLOR_BRISTLE, "grooming"),
+            new CircuitVisual(COLOR_HYGRO, "hygrotaxis"),
+            new CircuitVisual(COLOR_JOHNSTON, "startle"),
+            new CircuitVisual(COLOR_ESCAPE, "escape_drive"),
+            new CircuitVisual(COLOR_TASTE, "appetite"),
     };
 
     private static final int MAX_PARTICLES_PER_CIRCUIT = 6;
