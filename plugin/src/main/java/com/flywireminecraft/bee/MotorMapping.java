@@ -99,6 +99,39 @@ import org.bukkit.util.Vector;
  * {@code landed} de {@link #toVelocity} pro relato completo dos dois — o
  * segundo só apareceu depois de corrigir o primeiro. Corrigidos antes de
  * qualquer nova lesão — não afirmar resultado sem consertar o bug primeiro.
+ *
+ * <p><b>Fuga por looming (F9/AD-20, 24/09/2026, PRIORIDADE MÁXIMA — decisão
+ * do usuário).</b> Quando {@code escape_motor.escape_drive} (único canal do
+ * `escape`, curado por identidade celular — DNp01/Giant Fiber + DNp02, ver
+ * `escape_motor.py`) passa de {@link #ESCAPE_THRESHOLD}, a abelha ignora
+ * TUDO (hygro/grooming/phototaxis) e voa pra longe da ameaça que disparou o
+ * {@link LoomingSensor}, numa velocidade MAIOR que o voo normal — decisão
+ * do usuário, coerente com a biologia real (Giant Fiber dispara
+ * salto+voo de fuga, não um passeio calmo). Direção vem de
+ * {@link LoomingSensor#fleeDirectionAwayFromNearestThreat} (a mesma ameaça
+ * mais próxima que fez o sensor disparar), com um leve componente vertical
+ * pra cima (subir também ajuda a escapar de ameaça terrestre). Sem hint
+ * disponível (ameaça saiu do raio entre a leitura do sensor e a troca
+ * responder), cai pra {@code heading} — mesma convenção do hint de abrigo.
+ *
+ * <p><b>Trava temporal (25/09/2026, pedido do usuário).</b> {@code
+ * escapeActive}/{@code escapeDirectionHint} aqui já vêm com a decisão
+ * ESTABILIZADA pelo {@code ControlLoop} ({@code ESCAPE_LATCH_TICKS}, ~2,5s)
+ * — {@code MotorMapping} não checa mais {@code escape_motor} cru nem
+ * conhece {@link #ESCAPE_THRESHOLD} pra essa decisão (o limiar só é usado
+ * pelo chamador, pra armar/recarregar a trava). Sem isso, um sinal que cai
+ * rápido (a ameaça sai do raio, ou a distância para de fechar) faria a fuga
+ * durar menos que uma troca — tempo curto demais pra observar visualmente.
+ *
+ * <p><b>Nada disto foi validado por lesão em servidor real ainda</b> —
+ * mesma disciplina de grooming/hygro quando entraram: {@code
+ * ESCAPE_SPEED_BLOCKS_PER_TICK}/{@code ESCAPE_VERTICAL_BOOST_BLOCKS_PER_TICK}
+ * são estimativas de engenharia, não calibradas. {@code ESCAPE_THRESHOLD}
+ * já foi recalibrado (25/09/2026) contra a distribuição real de baseline vs.
+ * estimulado (ver docstring da constante) — achado real em servidor real:
+ * o valor original (0,8) deixava a abelha "fugindo" o tempo todo mesmo sem
+ * ameaça nenhuma. O experimento de lesão (mascarar {@code looming_threat},
+ * medir se ela realmente foge menos) é o próximo passo, não feito aqui.
  */
 public final class MotorMapping {
 
@@ -122,6 +155,12 @@ public final class MotorMapping {
     // Descida vertical enquanto GROOMING_THRESHOLD é ultrapassado, até
     // tocar o chão. PROVISÓRIO — nunca testado em servidor real.
     private static final double LANDING_DESCENT_BLOCKS_PER_TICK = 0.1;
+    // F9 — componente horizontal durante a descida do grooming (ver
+    // docstring do branch em toVelocity) — mesma ordem de grandeza de
+    // SEARCH_HOVER_BLOCKS_PER_TICK (achado real: precisa de "físico de
+    // voo" suficiente pra não ficar mecanicamente presa). PROVISÓRIO, não
+    // calibrado.
+    private static final double GROOMING_DESCENT_HORIZONTAL_BLOCKS_PER_TICK = 0.15;
 
     // F7/AD-17 — margem já observada (calibração + servidor real,
     // 21/09/2026, ver docstring da classe) é bem maior que a do grooming
@@ -158,6 +197,43 @@ public final class MotorMapping {
     // reaproveita uma escala que já se mostrou suficiente nesse mesmo tipo
     // de situação, não um número novo arbitrário.
     private static final double SEARCH_HOVER_BLOCKS_PER_TICK = 0.15;
+
+    // F7/AD-17 — polimento (22/09/2026), pedido do usuário: o ciclo
+    // planeio→mergulho (bug 4) fica visualmente "pulando" mesmo em terreno
+    // plano, porque toda vez que ela perde contato durante a busca, a
+    // re-descida reativa o MESMO mergulho íngreme
+    // (SHELTER_DIVE_DESCENT_BLOCKS_PER_TICK=0,3) usado pro primeiro
+    // mergulho urgente quando a chuva começa. Separado em dois casos: a
+    // primeira descida do episódio (ainda no ar, nunca tocou nada) continua
+    // rápida — é a urgência real que o usuário pediu ("voaria com mais
+    // velocidade até um abrigo"). Re-descidas DURANTE a busca (já tocou
+    // pelo menos uma vez, voltou pro ar via SEARCH_HOVER) usam este valor
+    // bem mais suave — ela já está perto do chão, não precisa "mergulhar"
+    // de novo, só descer um pouco. Reduz a amplitude do ciclo sem mudar o
+    // mecanismo. PROVISÓRIO, não testado em servidor real ainda.
+    private static final double SEARCH_REDESCENT_BLOCKS_PER_TICK = 0.05;
+
+    // F9 — recalibrado (25/09/2026), bug real achado em servidor real: 0,8
+    // (valor original, "por consistência" com os outros limiares) deu
+    // escape_drive oscilando 0,58-0,97 com looming=false o tempo todo — a
+    // abelha entrava em modo fuga sem ameaça nenhuma, atropelando qualquer
+    // teste de grooming/hygro. Causa raiz não era o limiar, era a ESCALA:
+    // grupo de só 4 neurônios (DNp01+DNp02) satura o tanh genérico mesmo em
+    // repouso (ver ESCAPE_MOTOR_RATE_SCALE em config.py — corrigido lá).
+    // Medido isolado com a escala nova: baseline tanh média=0,249
+    // (p95=0,351), estimulado=0,979 — gap de quase 0,63. 0,6 fica bem acima
+    // do p95 de baseline e bem abaixo da saturação estimulada, mesma
+    // disciplina que recalibrou GROOMING_THRESHOLD (0,5→0,8) na F7.
+    private static final double ESCAPE_THRESHOLD = 0.6;
+    // Mais rápido que MAX_SPEED_BLOCKS_PER_TICK (que já é chamado de
+    // "velocidade máxima" em phototaxis/busca de abrigo) — decisão explícita
+    // do usuário: fuga de ameaça real deve ser mais urgente que qualquer
+    // outro voo. 1,5x MAX_SPEED_BLOCKS_PER_TICK, estimativa de engenharia,
+    // não calibrada.
+    private static final double ESCAPE_SPEED_BLOCKS_PER_TICK = 0.45;
+    // Componente vertical leve durante a fuga — subir também afasta de
+    // ameaça terrestre. PROVISÓRIO, não calibrado.
+    private static final double ESCAPE_VERTICAL_BOOST_BLOCKS_PER_TICK = 0.2;
 
     private MotorMapping() {
     }
@@ -224,23 +300,92 @@ public final class MotorMapping {
      *     {@code landed} é true mas {@code sheltered} é false, a abelha
      *     continua se deslocando (não mergulha de novo — evita repetir os
      *     dois bugs acima) até achar um lugar coberto.
+     * @param hasTouchedThisEpisode só usado pela busca de abrigo: já tocou
+     *     chão/água pelo menos uma vez neste episódio (JÁ ESTABILIZADO pelo
+     *     chamador, ver {@code ControlLoop}), mesmo que {@code landed} tenha
+     *     voltado a `false` (ela subiu de novo via planeio, ver
+     *     {@code SEARCH_HOVER_BLOCKS_PER_TICK}). Diferencia o primeiro
+     *     mergulho do episódio (rápido, {@code SHELTER_DIVE_DESCENT_
+     *     BLOCKS_PER_TICK}) das re-descidas durante a busca (suaves,
+     *     {@code SEARCH_REDESCENT_BLOCKS_PER_TICK}) — polimento pedido pelo
+     *     usuário, ver docstring da constante.
+     * @param shelterDirectionHint só usado pela busca de abrigo: direção
+     *     horizontal (unitária) pra um abrigo detectado por perto
+     *     ({@link ShelterSensor#findNearbyShelterDirection}), ou
+     *     {@code null} se nada foi detectado nas proximidades. Quando
+     *     presente, SUBSTITUI {@code heading} nos movimentos de busca/
+     *     mergulho — mira direto na cobertura conhecida em vez de seguir a
+     *     direção do circuito ocelar (`yaw_steering`), que não tem relação
+     *     nenhuma com onde está o abrigo. Pedido do usuário (23/09/2026),
+     *     depois de testar um cubo pequeno com abrigo num canto: sem isto,
+     *     ela só vagava sem se aproximar.
+     * @param escapeActive decisão JÁ ESTABILIZADA pelo chamador (ver
+     *     {@code ControlLoop}) de que a fuga por looming deve controlar
+     *     agora — NÃO é {@code isEscapeActive(bridgeResponse...)} lido cru
+     *     desta troca: {@code escape_drive}/{@code looming_threat} são
+     *     sinais de nível que podem cair rápido (a ameaça sai do raio de
+     *     busca, a distância para de fechar), e sem essa estabilização a
+     *     fuga podia durar só uma troca, tempo curto demais pra observar
+     *     visualmente (pedido do usuário, 25/09/2026). O chamador garante
+     *     um mínimo de tempo de fuga (`ESCAPE_LATCH_TICKS`) mesmo depois do
+     *     circuito real cair abaixo do limiar. Mesma disciplina de
+     *     {@code landed}/{@code sheltered} acima — {@code MotorMapping} não
+     *     guarda estado entre ticks, só aplica o que já vier pronto.
+     * @param escapeDirectionHint só usado pela fuga por looming: direção
+     *     horizontal (unitária) PRA LONGE da ameaça mais próxima
+     *     ({@link LoomingSensor#fleeDirectionAwayFromNearestThreat}),
+     *     capturada pelo chamador no início/recarga da trava (não
+     *     recalculada a cada tick da fuga) — {@code null} só se nunca
+     *     nenhuma ameaça esteve no raio de busca. Mesma convenção de
+     *     {@code shelterDirectionHint}: substitui {@code heading} quando
+     *     presente, cai pra {@code heading} quando não.
      */
     public static Vector toVelocity(
-            JsonObject bridgeResponse, Vector heading, boolean landed, boolean sheltered
+            JsonObject bridgeResponse, Vector heading, boolean landed, boolean sheltered,
+            boolean hasTouchedThisEpisode, boolean escapeActive, Vector shelterDirectionHint,
+            Vector escapeDirectionHint
     ) {
-        if (isGroomingActive(bridgeResponse.getAsJsonObject("bristle_motor"))) {
-            // F7/AD-17 — grooming vence phototaxis: para de avançar, desce até
-            // pousar, fica parada uma vez no chão (ou na água, ver docstring).
-            // Sem conceito de "abrigo" aqui — qualquer chão/água serve.
-            return landed ? new Vector(0, 0, 0) : new Vector(0, -LANDING_DESCENT_BLOCKS_PER_TICK, 0);
+        if (escapeActive) {
+            // F9/AD-20 — prioridade máxima, ignora tudo mais (ver docstring
+            // da classe). Foge na direção oposta à ameaça, ou heading se a
+            // ameaça já saiu do raio de busca entre a leitura do sensor e a
+            // resposta da ponte chegar.
+            Vector fleeDirection = escapeDirectionHint != null ? escapeDirectionHint : heading;
+            Vector escapeVelocity = fleeDirection.clone().multiply(ESCAPE_SPEED_BLOCKS_PER_TICK);
+            escapeVelocity.setY(ESCAPE_VERTICAL_BOOST_BLOCKS_PER_TICK);
+            return escapeVelocity;
         }
         if (isSeekingShelterActive(bridgeResponse.getAsJsonObject("hygro_motor"))) {
-            // F7/AD-17 — busca abrigo: voa RÁPIDO (velocidade máxima) até
-            // achar um lugar com teto de verdade (ver docstring do parâmetro
+            // F7/AD-17 — busca abrigo VENCE grooming quando os dois estão
+            // ativos ao mesmo tempo (decisão do usuário, 22/09/2026, achado
+            // em jogo livre: abelha parada e estática com chuva + mob perto
+            // — touch_proximity do mob subia grooming, que tinha prioridade
+            // e mascarava a busca de abrigo por completo). Fugir da chuva é
+            // mais urgente/vital que parar pra se limpar por um mob de
+            // passagem — inverteu a ordem de checagem em relação à versão
+            // original (que checava grooming primeiro, sem essa noção de
+            // urgência relativa). Voa RÁPIDO (velocidade máxima) até achar
+            // um lugar com teto de verdade (ver docstring do parâmetro
             // sheltered) — diferente do pouso calmo do grooming.
             if (sheltered) {
+                // F7/AD-17 — bug 6 real (22/09/2026): abelha flutuando
+                // parada no ar longe de cobertura, porque `sheltered`
+                // travava pra sempre. Bug 7 (mesmo dia): exigir `landed`
+                // aqui TAMBÉM pra parar quebrou o caso normal — flicker de
+                // onGround numa abelha genuinamente descansando (mesma
+                // instabilidade do bug 2) já bastava pra `landed` piscar
+                // falso e tirá-la do abrigo de novo. Resolvido nos DOIS
+                // bugs do lado de `ControlLoop` agora (ver
+                // SHELTER_ABANDON_TICKS): a trava de `sheltered` só se
+                // desfaz sozinha depois de ausência sustentada de verdade
+                // (segundos, não meio segundo) — aqui volta a confiar só
+                // nela, sem `landed` no meio.
                 return new Vector(0, 0, 0); // abrigo de verdade — para
             }
+            // F7/AD-17 — busca guiada: mira num abrigo detectado por perto
+            // em vez de seguir heading (sem relação com onde está o abrigo)
+            // — ver docstring do parâmetro shelterDirectionHint.
+            Vector moveDirection = shelterDirectionHint != null ? shelterDirectionHint : heading;
             if (landed) {
                 // Já tocou chão/água, mas sem cobertura — continua se
                 // deslocando pra procurar em outro lugar. Subida leve
@@ -248,14 +393,55 @@ public final class MotorMapping {
                 // SEARCH_HOVER_BLOCKS_PER_TICK (bug 4): mantém física de
                 // voo, evita o atrito de "andar" e a interferência do
                 // sistema de recuperação de obstáculo.
-                Vector search = heading.clone().multiply(MAX_SPEED_BLOCKS_PER_TICK);
+                Vector search = moveDirection.clone().multiply(MAX_SPEED_BLOCKS_PER_TICK);
                 search.setY(SEARCH_HOVER_BLOCKS_PER_TICK);
                 return search;
             }
-            // Ainda no ar — mergulha até tocar em algo pela primeira vez.
-            Vector dive = heading.clone().multiply(MAX_SPEED_BLOCKS_PER_TICK);
-            dive.setY(-SHELTER_DIVE_DESCENT_BLOCKS_PER_TICK);
+            // Ainda no ar. Primeiro mergulho do episódio (nunca tocou nada
+            // ainda): rápido, urgente — ver docstring da classe. Re-descida
+            // durante a busca (já tocou antes, subiu de novo via
+            // SEARCH_HOVER): bem mais suave — ver docstring de
+            // SEARCH_REDESCENT_BLOCKS_PER_TICK, polimento pra reduzir o
+            // "pulo" visual do ciclo planeio→mergulho.
+            double descent = hasTouchedThisEpisode
+                    ? SEARCH_REDESCENT_BLOCKS_PER_TICK
+                    : SHELTER_DIVE_DESCENT_BLOCKS_PER_TICK;
+            Vector dive = moveDirection.clone().multiply(MAX_SPEED_BLOCKS_PER_TICK);
+            dive.setY(-descent);
             return dive;
+        }
+        if (isGroomingActive(bridgeResponse.getAsJsonObject("bristle_motor"))) {
+            // F7/AD-17 — grooming vence phototaxis (mas não hygro, ver
+            // acima): para de avançar, desce até pousar, fica parada uma vez
+            // no chão (ou na água, ver docstring). Sem conceito de "abrigo"
+            // aqui — qualquer chão/água serve.
+            //
+            // F9 — bug real, achado do usuário (25/09/2026): descida
+            // ORIGINAL era puramente vertical (0,-DESCENT,0), sem componente
+            // horizontal nenhum. Resquício de quando `grooming` foi
+            // implementado (F7), ANTES de todos os bugs de "mergulho preso"
+            // do `hygro` serem descobertos e corrigidos (ver docstring da
+            // classe, seção "Buscar abrigo"). Confirmado em servidor real:
+            // abelha numa área reclusa nunca alcançava `onGround` (log:
+            // vel=0,-0.1,0 sustentado, onGround=false o tempo todo), e o
+            // sistema de recuperação mecânica (ControlLoop) disparava
+            // repetidamente (217 vezes numa sessão) sem nunca resolver —
+            // ele empurra na direção OPOSTA a `heading`, que não tem
+            // relação nenhuma com o que está bloqueando a descida vertical
+            // pura; assim que o empurrão acaba, grooming volta a mandar
+            // velocidade zero-horizontal, trava nas paredes de novo, loop
+            // infinito ("voando pra parede", achado do usuário). Corrigido
+            // dando um componente horizontal (`heading`, mesma direção que
+            // phototaxis usaria — sem conceito de "abrigo" pra mirar,
+            // diferente do hygro) durante a descida — ela desliza enquanto
+            // desce em vez de cair reto, com folga pra sair de um canto
+            // apertado sozinha.
+            if (landed) {
+                return new Vector(0, 0, 0);
+            }
+            Vector descending = heading.clone().multiply(GROOMING_DESCENT_HORIZONTAL_BLOCKS_PER_TICK);
+            descending.setY(-LANDING_DESCENT_BLOCKS_PER_TICK);
+            return descending;
         }
 
         JsonObject motor = bridgeResponse.getAsJsonObject("motor");
@@ -299,6 +485,19 @@ public final class MotorMapping {
             return false; // sem Engine do hygro rodando — sem efeito, comportamento antigo
         }
         return hygroMotor.get("hygrotaxis").getAsDouble() > HYGROTAXIS_THRESHOLD;
+    }
+
+    /**
+     * F9/AD-20 — mesmo motivo de {@link #isGroomingActive}/
+     * {@link #isSeekingShelterActive}: exposto público porque
+     * {@code ControlLoop} também usa (pra saber se precisa computar
+     * {@code escapeDirectionHint} antes de chamar {@link #toVelocity}).
+     */
+    public static boolean isEscapeActive(JsonObject escapeMotor) {
+        if (escapeMotor == null || !escapeMotor.has("escape_drive")) {
+            return false; // sem Engine do escape rodando — sem efeito, comportamento antigo
+        }
+        return escapeMotor.get("escape_drive").getAsDouble() > ESCAPE_THRESHOLD;
     }
 
     private static double clamp(double value, double min, double max) {

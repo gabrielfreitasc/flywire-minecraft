@@ -28,7 +28,7 @@ public final class FlywireBeeMarker {
 
     public void mark(Bee bee) {
         bee.getPersistentDataContainer().set(key, PersistentDataType.BYTE, (byte) 1);
-        bee.customName(Component.text("FlyWire Bee"));
+        bee.customName(Component.text("Drosophila melanogaster Bee"));
         bee.setCustomNameVisible(true);
         bee.setGlowing(true);
     }

@@ -101,6 +101,48 @@ L2/L3 do `hygro`** registrado no roadmap (F7) — falta sensor no plugin,
 integração no simulador (segundo `Engine`, mesmo padrão do `bristle`) e
 validação por lesão em servidor real, não código de sinal/calibração.
 
+**RN-01a/AD-19 — mesmo padrão de artefato no subcircuito `johnston` (F8,
+vento/som, 23/09/2026).** Semente = 874 neurônios do órgão de Johnston
+(`cell_sub_class` em {"wind_gravity", "auditory"}, `super_class=="sensory"`,
+`nerve=="AN"` — nomenclatura JO-* de Kamikouchi et al. 2009/Yorozu et al.
+2009, achado real ao planejar o F8, não inventado). **77 desses (72
+`auditory`, 5 `wind_gravity`, principalmente JO-A/JO-B) vinham rotulados
+"serotonin"**, confiança moderada (média 0,51) — mesmo padrão de artefato
+de RN-02/AD-18. Literatura independente estabelece identidade colinérgica
+via expressão de ChAT: **Kitamoto et al. 1995** (J Neurobiol 28:70-81,
+ChAT-lacZ) e **Yasuyama & Salvaterra 1999** (os mesmos autores que já
+confirmam identidade colinérgica dos ORNs em RN-01a/AD-18). Override em
+`graph.py::apply_johnston_artifact_overrides` (aplicado também em
+`topology.group_outputs_by_predicted_sign` e `tools/signal_topology.py`,
+mesmo cuidado do AD-18). `JOHNSTON_ORGAN_SIGN=1` em `config.py`. Testes:
+`test_johnston_artifact_override` (sintético) e
+`test_johnston_artifact_override_real_data` (dado real, 32/32 passam).
+
+**RN-09 aplicada ao johnston, sem precisar recalibrar (23/09/2026) —
+`tools/johnston_calibration_check.py`.** Topologia de sinal: 135/136
+descendentes com caminho previsto excitatório, só 1 inibitório (ainda mais
+lopsided que o bristle, 109/110 — a semente já nasce majoritariamente
+colinérgica depois do override acima). N=30 sementes pareadas, valores
+ATUAIS de `config.py`: grupo excitatório diff média=433,87 (t-test e
+Wilcoxon p≈0), grupo inibitório (n=1) diff média=-0,20 (p=0,012/0,014,
+efeito pequeno mas mensurável mesmo com 1 neurônio só) — em 1.740
+neurônios, sem sweep de `BIAS_CURRENT`/`NOISE_STD` novo. **Isto fecha o
+bloqueio de L2/L3 do `johnston`** — falta sensor no plugin (que sinal do
+Minecraft mapeia pra "vento/som"? ainda não decidido), integração no
+simulador e validação por lesão, não código de sinal/calibração.
+
+**Achado real, cometido e corrigido na mesma sessão (23/09/2026):**
+primeira tentativa de extração do `johnston` chamou `ingest.build()` sem
+`out_dir` explícito, sobrescrevendo `data/processed/nodes.parquet` (o
+circuito OCELAR canônico da v1) com o dado de teste. Detectado e
+restaurado na hora (`python -c "from flywire_sim import ingest;
+ingest.build()"`, sem argumentos = circuito ocelar default), confirmado
+contra os números documentados no `CLAUDE.md` (625 nós, 2.981 arestas) e
+30/30 testes. Lição: `out_dir=None` em `ingest.build` tem default
+silencioso pro ocelar — sempre passar `out_dir` explícito em qualquer
+teste exploratório de subcircuito novo, nunca confiar no default fora do
+circuito ocelar de verdade.
+
 **Achado (17/09/2026) — `DNp27` provavelmente é erro de classificador, não
 neurônio serotonérgico de verdade.** Cruzando nossos 168 tipos celulares contra
 `gt_data.csv` (flyconnectome/drosophila_neurotransmitters — dado de literatura,
@@ -163,6 +205,21 @@ Justificativa biológica: descendentes levam comando do cérebro para o cordão 
 ventral, que não está no conectoma. É a fronteira natural do dado.
 
 Onde: `ingest.py::expand`, `motor.py`.
+
+**AD-20/F9 (24/09/2026) — o que conta como "primeiro estágio" é por subcircuito, não
+global.** Bristle/hygro/johnston têm semente em `super_class == "sensory"` (fotorreceptor,
+hygrosensory, órgão de Johnston — todos primeiro estágio "cru" na ontologia do FlyWire). O
+circuito `escape` (fuga por looming) tem semente em LC4/LPLC2 (`super_class ==
+"visual_projection"`) + DNp01/DNp02 (`super_class == "descending"`, já a SAÍDA) — nenhum nó
+`super_class == "sensory"` aparece no grafo de 1 salto a partir da semente. `ingest.build`
+ganha o parâmetro `sensory_cell_types`: quando dado, marca `role="sensory"` por identidade
+de `cell_type`, não por `super_class`, só pro circuito que passar o parâmetro (default
+`None` preserva os outros). Justificativa: `Connectome.sensory` é onde `Engine.stimulate()`
+injeta corrente (ver `server.py`) — sem essa marcação o circuito `escape` nunca receberia o
+estímulo de ameaça, mesmo com o resto da extração correta. LC4/LPLC2 são genuinamente o
+primeiro estágio DESTE subcircuito extraído (detectores de movimento/looming — Ache et al.
+2019; von Reyn et al. 2017), mesmo não sendo "sensory" na ontologia de corpo inteiro do
+FlyWire. Ver `sim/tools/build_f9_circuit.py`.
 
 ---
 
@@ -585,6 +642,45 @@ aconteceu na F4 original). **Isto fecha a cadeia sensor→circuito→
 comportamento pro `bristle`**, mesmo nível de evidência que `phototaxis`
 já tinha — ver `docs/03-roadmap-fases.md` F7,
 `plugin/src/main/java/.../TouchLesionExperiment.java`.
+
+**F9/AD-20 (24/09/2026) — terceira forma de curadoria: identidade de tipo celular
+direto da literatura, sem BFS de sinal nem cluster BANC.** O circuito `escape`
+(fuga por looming) não usa `topology.group_outputs_by_predicted_sign` (mecanismo do
+`hygrotaxis`/`startle`) nem cluster de conectividade do BANC (mecanismo do `bristle`
+acima). O canal `escape_drive` lê só `DNp01` (Giant Fiber) + `DNp02`, os dois únicos
+dos 31 descendentes alcançados em 1 salto que a literatura (Ache et al. 2019; von Reyn
+et al. 2017) identifica como saída direta de looming — confirmado neste subcircuito
+extraído, não assumido: há aresta sináptica direta LC4/LPLC2→DNp01/DNp02 com syn forte
+(até 962 agregadas). É a forma de curadoria mais forte das três disponíveis no projeto
+(identidade celular com função publicada e conectividade EM direta, não inferência de
+sinal nem cluster), mas cobre só 2 dos 31 descendentes — os outros 29 (outras DNs que
+LC4/LPLC2 também alcançam, vias paralelas não confirmadas contra looming
+especificamente) ficam de fora do canal, não agregados sem checar identidade (mesma
+disciplina de RN-08/RN-09 documentada em `CONVENCOES.md`). RN-09 validado
+(`tools/escape_calibration_check.py`): diff média=63,07, desvio=1,31, t=258,3,
+p≈0,00000, N=30 sementes — efeito grande e extremamente consistente. Sem lesão em
+servidor real ainda (`escape_drive` é telemetria pura, não entra em
+`MotorMapping.java`) — mesma disciplina que manteve `hygrotaxis`/`startle`/`grooming`
+como telemetria até a lesão fechar. Ver `sim/src/flywire_sim/escape_motor.py`.
+
+**Recalibração real (25/09/2026) — escala genérica não serve pra grupo de 4 neurônios.**
+Depois de `escape_drive` virar comportamento real (mesma sessão), usuário reportou em
+servidor real: a abelha entrava em "fuga" (prioridade máxima) o tempo todo, mesmo sem
+`looming_threat` nenhum, atropelando teste de outros circuitos. Isolado (sem Minecraft):
+`C.MOTOR_RATE_SCALE=30` (calibrado pro ocelar inteiro, ~25-30 Hz/neurônio) aplicado ao
+grupo de só 4 neurônios (DNp01+DNp02) dava baseline tanh média=0,830 (73% das amostras já
+acima de um limiar de 0,8 SEM estímulo nenhum) — não era o limiar que estava errado
+(mesmo erro que já aconteceu com `GROOMING_THRESHOLD`), era a ESCALA: grupo pequeno e
+muito convergente tem taxa basal muito mais alta que a média da rede (medido: baseline
+38,3 Hz ± 10,0, p95=55,0 Hz; estimulado satura em 340 Hz, ~68% do teto teórico do
+refratário de 2 ms). Corrigido com `ESCAPE_MOTOR_RATE_SCALE=150` (constante própria, não
+reaproveita `MOTOR_RATE_SCALE`) — separa bem as duas distribuições: tanh baseline
+média=0,249 (p95=0,351), tanh estimulado=0,979. `ESCAPE_THRESHOLD` recalibrado de 0,8
+para 0,6 (bem acima do p95 de baseline, bem abaixo da saturação). **Lição generalizável:**
+uma constante de normalização calibrada pra um grupo de saída GRANDE (92 descendentes do
+ocelar) não necessariamente serve pra um grupo pequeno e curado por identidade — checar a
+distribuição de baseline de QUALQUER canal novo antes de fixar limiar, não assumir que a
+escala genérica se aplica.
 
 ---
 

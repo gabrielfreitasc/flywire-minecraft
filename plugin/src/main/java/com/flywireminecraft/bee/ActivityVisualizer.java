@@ -36,6 +36,13 @@ import org.bukkit.entity.Bee;
  *       fraca) fica de fora pelo mesmo motivo dos grupos do ocelar.</li>
  *   <li>{@code hygro} — {@code hygrotaxis} (único canal que existe, telemetria
  *       ainda sem lesão validando, ver `hygro_motor.py`).</li>
+ *   <li>{@code johnston} — {@code startle} (F8, vento/som; único canal que
+ *       existe, telemetria ainda sem lesão validando, ver
+ *       `johnston_motor.py`).</li>
+ *   <li>{@code escape} — {@code escape_drive} (F9/AD-20, fuga por looming;
+ *       único canal que existe, curado por identidade celular
+ *       (DNp01+DNp02), telemetria ainda sem lesão validando, ver
+ *       `escape_motor.py`).</li>
  * </ul>
  *
  * <p><b>Nota importante:</b> pegar o MAIOR |valor| entre os canais de um
@@ -57,13 +64,18 @@ public final class ActivityVisualizer {
             new CircuitVisual(Color.fromRGB(255, 230, 0), "phototaxis", "yaw_steering"),   // ocelar — amarelo (luz)
             new CircuitVisual(Color.fromRGB(139, 90, 43), "grooming"),                     // bristle — marrom (toque/limpeza)
             new CircuitVisual(Color.fromRGB(0, 128, 128), "hygrotaxis"),                   // hygro — azul-petróleo (chuva)
+            new CircuitVisual(Color.fromRGB(220, 0, 0), "startle"),                        // johnston — vermelho (alarme/som)
+            new CircuitVisual(Color.fromRGB(148, 0, 211), "escape_drive"),                 // escape — violeta (medo/fuga)
     };
 
     private static final int MAX_PARTICLES_PER_CIRCUIT = 6;
     private static final double RADIUS = 0.6;
 
     /** Roda na thread principal — spawnar partícula é chamada de World, não thread-safe fora dela. */
-    public void render(Bee bee, JsonObject motor, JsonObject bristleMotor, JsonObject hygroMotor) {
+    public void render(
+            Bee bee, JsonObject motor, JsonObject bristleMotor, JsonObject hygroMotor, JsonObject johnstonMotor,
+            JsonObject escapeMotor
+    ) {
         if (!bee.isValid()) {
             return;
         }
@@ -73,7 +85,7 @@ public final class ActivityVisualizer {
             return;
         }
 
-        JsonObject[] byCircuit = {motor, bristleMotor, hygroMotor};
+        JsonObject[] byCircuit = {motor, bristleMotor, hygroMotor, johnstonMotor, escapeMotor};
         for (int i = 0; i < CIRCUITS.length; i++) {
             renderCircuit(world, center, byCircuit[i], CIRCUITS[i]);
         }

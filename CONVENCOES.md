@@ -139,6 +139,19 @@ Minecraft. Subcircuito ocelar: 625 neurônios, 2.981 conexões.
   parece visualmente errado, suspeitar de corpo/velocidade dessincronizados
   antes de duvidar da estatística.** Ver `ControlLoop.java`,
   `docs/04-regras-de-negocio.md` RN-08.
+- **Folha de árvore reduz luz mas NÃO bloqueia chuva no Minecraft.**
+  Achado do usuário (F7, 23/09/2026): "buscar abrigo" (hygro) usava
+  `Block#getLightFromSky()` como proxy de "tem teto aqui?" — folha reduz
+  esse valor (dá sombra), então a abelha parava embaixo de árvore achando
+  que tinha se abrigado. Mecânica real do jogo: chuva atravessa folhas
+  ("goteja" através de copas desde uma atualização); existe até um
+  heightmap dedicado, `MOTION_BLOCKING_NO_LEAVES`, cujo propósito é
+  calcular exposição à chuva EXCLUINDO folhas (é o que o próprio jogo usa
+  pra decidir onde mobs em chamas se apagam, por exemplo). **Luz e chuva
+  são sinais diferentes** — não usar um como proxy do outro. Corrigido
+  usando `World#getHighestBlockYAt(x, z, HeightMap.MOTION_BLOCKING_NO_LEAVES)`
+  diretamente, a mesma métrica que o motor do jogo usa. Ver
+  `ShelterSensor.java`, `docs/03-roadmap-fases.md` F7 (bug 9).
 
 ## Papéis no projeto
 

@@ -85,7 +85,9 @@ vê intenção motora. Se o mob mudar, só L4 muda.
 ### L6 → L5 · sensores
 ```json
 {"t_ms": 12450, "light": 0.94, "dorsal_light": 0.61, "damage": false,
- "touch_contact": false, "touch_proximity": false, "raining": false}
+ "touch_contact": false, "touch_proximity": false, "raining": false,
+ "alarm_explosion": false, "alarm_hostile_mob": false, "sound_music": false,
+ "looming_threat": false}
 ```
 Dois campos opcionais, adicionados na F5 (omitidos no exemplo acima por
 serem raros — a maioria das mensagens não os inclui):
@@ -152,6 +154,45 @@ antes de RN-08 existir, ver `hygro_motor.py`) e `hygro_active_dn`. **Sem
 curadoria RN-08 equivalente ainda** (nenhuma leitura de literatura/BANC feita
 pros 41 tipos de descendente do hygro) e **sem lesão em servidor real** —
 `hygrotaxis` é telemetria/visualização, não entra em `MotorMapping.java`.
+
+**`alarm_explosion`/`alarm_hostile_mob` (F8, 23/09/2026) — quarto `Engine`,
+subcircuito `johnston` (vento/som).** Dois campos novos, deliberadamente
+mais restritos que a família de toque: `alarm_explosion` (borda,
+`EntityExplodeEvent`/`BlockExplodeEvent` num raio de 16 blocos) e
+`alarm_hostile_mob` (nível, só `Monster` do Bukkit — não qualquer mob —
+num raio de 8 blocos). Desenho baseado em achado citado pelo usuário
+(Eberl, Hardy & Kernan 2000: toque e som compartilham mecanismo de
+transdução em *Drosophila*, mas toque com objeto pequeno é inofensivo e
+não dispara fuga) — ver `AlarmSensor.java`. `SimulationServer` ganhou
+`johnston_connectome` opcional, mesmo padrão dos outros três.
+`alarm_explosion`/`alarm_hostile_mob` combinam em OR e estimulam a semente
+do órgão de Johnston com `SENSOR_ALARM_AMPLITUDE` (validado em
+`tools/johnston_calibration_check.py`, RN-09: diff média=433,87, p≈0,
+N=30 — testado também contra o container Docker real). Resposta ganha
+`johnston_motor` (canal `startle`, mesmo mecanismo de topologia de sinal)
+e `johnston_active_dn`. Sem curadoria RN-08 equivalente e sem lesão em
+servidor real — `startle` é telemetria/visualização, não entra em
+`MotorMapping.java`. (`sound_music`, mesmo campo, som AMBIENTE não só
+ameaça — jukebox tocando por perto, pedido do usuário 24/09/2026,
+combina em OR com os outros dois.)
+
+**`looming_threat` (F9/AD-20, 24/09/2026) — quinto `Engine`, subcircuito
+`escape` (fuga por looming).** Campo novo, sinal de NÍVEL — **placeholder
+de protocolo**, o sensor do lado do plugin ainda não foi implementado (F9
+em andamento). Semente do `escape` (LC4/LPLC2, detectores de looming) não é
+`super_class=="sensory"` como os outros quatro circuitos — `ingest.build`
+ganhou `sensory_cell_types` pra marcar role="sensory" por identidade de
+`cell_type` só pra este circuito (ver RN-04/AD-20 em
+`docs/04-regras-de-negocio.md`). `SimulationServer` ganhou
+`escape_connectome` opcional, mesmo padrão dos outros quatro.
+`looming_threat` estimula a semente com `SENSOR_LOOMING_AMPLITUDE`
+(validado em `tools/escape_calibration_check.py`, RN-09: diff média=63,07,
+p≈0, N=30). Resposta ganha `escape_motor` (canal `escape_drive`, curado por
+identidade de tipo celular — só `DNp01`+`DNp02`, não os outros 29
+descendentes alcançados em 1 salto, ver RN-08 em
+`docs/04-regras-de-negocio.md`) e `escape_active_dn`. Sem sensor no plugin,
+sem visualização e sem lesão em servidor real ainda — `escape_drive` é
+telemetria pura, não entra em `MotorMapping.java`.
 
 ### Protocolo da ponte
 - TCP em `localhost:8765`, JSON-lines (`\n`), UTF-8.

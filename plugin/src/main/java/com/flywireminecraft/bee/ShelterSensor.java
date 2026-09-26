@@ -1,8 +1,9 @@
 package com.flywireminecraft.bee;
 
+import org.bukkit.HeightMap;
 import org.bukkit.Location;
 import org.bukkit.World;
-import org.bukkit.block.Block;
+import org.bukkit.util.Vector;
 
 /**
  * F7/AD-17 — detecta se há um "teto" de verdade acima da abelha, pra
@@ -10,51 +11,38 @@ import org.bukkit.block.Block;
  * (decisão do usuário, 21/09/2026, ver
  * {@code MotorMapping.isSeekingShelterActive}).
  *
- * <p><b>Primeira tentativa (falhou, real, 21/09/2026):</b> varredura manual
- * de blocos acima checando {@code Material#isOccluding()}. Usuário testou
- * debaixo de cobertura real e ela continuou "vagando" — `isOccluding()` é
- * uma flag de OTIMIZAÇÃO DE RENDERIZAÇÃO (culling de face entre blocos
- * vizinhos), não de bloqueio de luz/chuva; folhas de árvore, por exemplo,
- * tipicamente retornam `false` mesmo cobrindo de verdade.
+ * <p><b>Três tentativas anteriores, todas erradas de formas diferentes:</b>
+ * <ol>
+ *   <li>{@code Material#isOccluding()} — flag de OTIMIZAÇÃO DE RENDERIZAÇÃO
+ *       (culling de face), não de bloqueio de chuva; folha tipicamente
+ *       retorna {@code false} mesmo cobrindo de verdade.</li>
+ *   <li>{@code Block#getLightFromSky()} — o mesmo sensor que gera
+ *       {@code dorsal_light} no protocolo, correto pra "tem céu visível
+ *       daqui?" mas NÃO pra "chove aqui?". Limiar frouxo (qualquer redução)
+ *       pegava difusão de sombra vizinha; apertado (≤4) ainda tinha o
+ *       problema de fundo.</li>
+ *   <li>Checar coluna + 4 vizinhas por
+ *       {@code getLightFromSky()}, exigindo maioria — melhorou a
+ *       sensibilidade a copa esparsa, mas o problema de fundo continuava:
+ *       <b>achado real, 23/09/2026 — folha reduz luz (dá sombra) mas NÃO
+ *       bloqueia chuva no Minecraft</b> (mecânica real do jogo: chuva
+ *       "goteja" através de folhas desde uma atualização; existe até um
+ *       heightmap dedicado, {@code MOTION_BLOCKING_NO_LEAVES}, cujo
+ *       propósito é justamente calcular exposição à chuva EXCLUINDO
+ *       folhas). Usar luz como proxy de chuva sempre ia estar errado pra
+ *       qualquer bioma com árvore — não era questão de limiar ou raio de
+ *       varredura, era a métrica errada desde o início.
+ * </ol>
  *
- * <p><b>Corrigido reaproveitando sensor já validado neste projeto:</b>
- * {@code Block#getLightFromSky()} (o mesmo que gera `dorsal_light` no
- * protocolo, ver `docs/02-arquitetura.md`) é o cálculo de luz do céu do
- * PRÓPRIO motor do jogo — já correto pra qualquer tipo de bloco (folha,
- * vidro, laje, etc.), porque é exatamente o que o Minecraft usa pra decidir
- * onde chove de verdade. `dorsal_light` já era documentado como confiável
- * pra "tem céu visível daqui?" (indoor/outdoor) — ver `CLAUDE.md`,
- * armadilha sobre `getLightFromSky()`. Sem varredura manual de blocos: o
- * valor já reflete tudo que está acima, até onde o céu enxerga.
- *
- * <p><b>Limiar errado na primeira versão (real, 22/09/2026):</b>
- * {@code < 15} (qualquer redução conta) — usuário relatou ela parando fora
- * de cobertura visível. Log de diagnóstico (`ControlLoop`) confirmou dois
- * casos reais no mesmo teste: {@code skylight=0} (cobertura de verdade,
- * correto) e {@code skylight=14} (só 1 ponto de atenuação — luz difundindo
- * de uma sombra vizinha, não bloco de verdade acima dela). O céu propaga
- * luz lateralmente entre colunas vizinhas no motor do jogo; ficar perto de
- * uma sombra (sem estar embaixo dela) já derruba o valor um pouco. Limiar
- * apertado pra exigir bloqueio substancial, não qualquer difusão —
- * calibração provisória com só esses dois pontos de dado, não uma
- * varredura completa; pode precisar de ajuste fino de novo.
- *
- * <p><b>Passou por árvores sem parar (real, 22/09/2026).</b> Usuário
- * perguntou se é a ALTURA da árvore/construção — provavelmente não: ar não
- * atenua luz no motor do jogo (só bloco atenua), então uma folha lá no alto
- * com ar livre até o chão já deveria abaixar o skylight embaixo dela do
- * mesmo jeito que uma cobertura baixa. Suspeita mais provável: copa de
- * árvore no Minecraft é naturalmente esparsa (blocos de folha com buracos
- * entre eles) — checar só a coluna EXATA onde a abelha está faz ela
- * "passar batido" se cruzar por um buraco da copa, mesmo estando
- * visualmente debaixo da árvore. **Corrigido:** checa a coluna dela mais
- * as 4 colunas vizinhas (padrão "mais", N/S/L/O) — conta como abrigo se
- * QUALQUER uma tiver skylight baixo, cobrindo os buracos naturais da copa
- * sem precisar de alinhamento perfeito com um bloco de folha específico.
+ * <p><b>Corrigido usando a métrica certa do próprio motor do jogo:</b>
+ * {@code World#getHighestBlockYAt(x, z, HeightMap.MOTION_BLOCKING_NO_LEAVES)}
+ * — o MESMO heightmap que o Minecraft usa internamente pra decidir onde
+ * chove de verdade (ex.: extinguir mobs em chamas), já excluindo folhas
+ * corretamente. Abelha abrigada = existe algum bloco sólido não-folha
+ * acima dela nessa coluna, não importa a que altura. Sem varredura manual,
+ * sem proxy de luz, sem vizinhas — pergunta a métrica exata que já existe.
  */
 final class ShelterSensor {
-
-    private static final int MAX_SKYLIGHT_UNDER_SHELTER = 4;
 
     private ShelterSensor() {
     }
@@ -64,16 +52,47 @@ final class ShelterSensor {
         if (world == null) {
             return false;
         }
-        int x = location.getBlockX();
+        int highestNonLeafY = world.getHighestBlockYAt(
+                location.getBlockX(), location.getBlockZ(), HeightMap.MOTION_BLOCKING_NO_LEAVES);
+        return location.getBlockY() < highestNonLeafY;
+    }
+
+    // F7/AD-17 — busca guiada (23/09/2026), pedido do usuário depois de um
+    // teste controlado (cubo com teto aberto + um mini-telhado num canto):
+    // sem isto, a busca só segue `heading` (direção do circuito OCELAR via
+    // yaw_steering — não tem relação nenhuma com onde está o abrigo), então
+    // achar um canto pequeno por "sorte" era raro; ela ficava "indo e
+    // voltando" sem se aproximar. Não é busca de caminho de verdade (sem
+    // A*/navegação por obstáculo) — só sonda 8 direções a uma distância
+    // fixa e mira na primeira que achar coberta, funcionando como um aceno
+    // simples na direção certa quando o abrigo já está por perto.
+    private static final double[][] COMPASS_OFFSETS = {
+            {1, 0}, {1, 1}, {0, 1}, {-1, 1}, {-1, 0}, {-1, -1}, {0, -1}, {1, -1},
+    };
+
+    /**
+     * @return direção horizontal (unitária) pra uma coluna coberta dentro de
+     *     {@code lookAheadBlocks}, ou {@code null} se nenhuma das 8 direções
+     *     tiver abrigo real a essa distância.
+     */
+    static Vector findNearbyShelterDirection(Location location, int lookAheadBlocks) {
+        World world = location.getWorld();
+        if (world == null) {
+            return null;
+        }
+        int baseX = location.getBlockX();
+        int baseZ = location.getBlockZ();
         int y = location.getBlockY();
-        int z = location.getBlockZ();
-        int[][] columns = {{0, 0}, {1, 0}, {-1, 0}, {0, 1}, {0, -1}};
-        for (int[] offset : columns) {
-            Block block = world.getBlockAt(x + offset[0], y, z + offset[1]);
-            if (block.getLightFromSky() <= MAX_SKYLIGHT_UNDER_SHELTER) {
-                return true;
+        for (double[] offset : COMPASS_OFFSETS) {
+            double length = Math.sqrt(offset[0] * offset[0] + offset[1] * offset[1]);
+            int dx = (int) Math.round(offset[0] / length * lookAheadBlocks);
+            int dz = (int) Math.round(offset[1] / length * lookAheadBlocks);
+            int highestNonLeafY = world.getHighestBlockYAt(
+                    baseX + dx, baseZ + dz, HeightMap.MOTION_BLOCKING_NO_LEAVES);
+            if (y < highestNonLeafY) {
+                return new Vector(offset[0], 0, offset[1]).normalize();
             }
         }
-        return false;
+        return null;
     }
 }

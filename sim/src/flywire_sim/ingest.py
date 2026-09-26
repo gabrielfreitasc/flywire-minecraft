@@ -96,11 +96,25 @@ def build(
     hops: int | None = None,
     out_dir: Path | None = None,
     circuit: str = "ocellar",
+    sensory_cell_types: set[str] | None = None,
 ) -> dict:
     """Constrói um subcircuito e grava nodes/edges/manifest em `out_dir`
     (default: `data/processed/`, o circuito ocelar da v1 — AD-06). Outros
     circuitos (AD-17, F7) passam `out_dir` próprio para não colidir com o
-    ocelar; nunca compartilham arquivo."""
+    ocelar; nunca compartilham arquivo.
+
+    `sensory_cell_types` (F9/AD-20, `escape`) — role="sensory" por padrão é
+    `super_class == "sensory"` (fotorreceptores, hygrosensory, órgão de
+    Johnston: todos primeiro estágio sensorial "cru"). O circuito `escape`
+    tem semente em LC4/LPLC2, `super_class == "visual_projection"` — já
+    alguns sinapses adiante do olho composto na ontologia do FlyWire, mas
+    ainda assim o primeiro estágio DESTE subcircuito extraído (nenhum nó
+    `super_class == "sensory"` aparece no grafo de 1 hop a partir deles) e
+    o ponto onde o estímulo de ameaça/looming é injetado — por isso passam
+    aqui, não porque a ontologia mudou. Sem isso, `Connectome.sensory` fica
+    vazio e `Engine.stimulate()` não tem onde injetar corrente (ver
+    `server.py`). `None` (default) preserva o comportamento de todos os
+    outros circuitos."""
     out_dir = C.PROCESSED if out_dir is None else out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -121,6 +135,8 @@ def build(
     nodes["is_seed"] = nodes.root_id.isin(seed)
     nodes["role"] = "interneuron"
     nodes.loc[nodes.super_class == "sensory", "role"] = "sensory"
+    if sensory_cell_types is not None:
+        nodes.loc[nodes.cell_type.isin(sensory_cell_types), "role"] = "sensory"
     nodes.loc[nodes.super_class == "descending", "role"] = "output"  # RN-04
 
     # RN-05 — nid determinístico por root_id ordenado
@@ -142,6 +158,7 @@ def build(
         "materialization": C.MATERIALIZATION,
         "syn_threshold": C.SYN_THRESHOLD,
         "hops": C.HOPS if hops is None else hops,
+        "sensory_cell_types": sorted(sensory_cell_types) if sensory_cell_types else None,
         "seed_neurons": len(seed),
         "nodes": len(nodes),
         "edges": len(sub),

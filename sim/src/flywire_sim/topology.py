@@ -86,8 +86,11 @@ def group_outputs_by_predicted_sign(
     out_dir = C.PROCESSED if out_dir is None else out_dir
     cc = cc or graph.load(out_dir)
     edges = pd.read_parquet(out_dir / "edges.parquet")
-    sign = graph.apply_serotonin_artifact_overrides(
-        cc.nodes, graph.apply_nt_overrides(cc.nodes, graph.assign_sign(cc.nodes))
+    sign = graph.apply_johnston_artifact_overrides(
+        cc.nodes,
+        graph.apply_serotonin_artifact_overrides(
+            cc.nodes, graph.apply_nt_overrides(cc.nodes, graph.assign_sign(cc.nodes))
+        ),
     )
     sign_by_nid = dict(zip(cc.nodes.nid, sign))
 

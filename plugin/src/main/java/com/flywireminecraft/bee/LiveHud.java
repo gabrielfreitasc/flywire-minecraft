@@ -25,7 +25,18 @@ import java.util.Locale;
  * (F7/AD-17, canal do `bristle` — controla comportamento real desde
  * `MotorMapping` ganhar a lógica de pouso, ver docstring de lá) e
  * `hygrotaxis` (F7/AD-17, 21/09/2026, canal do `hygro` — só telemetria,
- * RN-09 validado mas sem lesão em servidor real, ver `hygro_motor.py`).
+ * RN-09 validado mas sem lesão em servidor real, ver `hygro_motor.py`) e
+ * `startle` (F8, 23/09/2026, canal do `johnston` — vento/som, só
+ * telemetria, RN-09 validado mas sem lesão, ver `johnston_motor.py`) e
+ * `escape_drive` (F9/AD-20, 24/09/2026, canal do `escape` — fuga por
+ * looming, só telemetria, RN-09 validado mas sem lesão, ver
+ * `escape_motor.py`).
+ *
+ * <p><b>Rótulo em PT-br (F9, 25/09/2026, pedido do usuário).</b> Cada linha
+ * mostra um nome em português + o canal técnico real entre parênteses
+ * (ex.: "Toque (grooming)", "Clima (hygrotaxis)") — não é rótulo
+ * inventado, é tradução do mesmo canal que já existia; quem quiser
+ * conferir contra `docs/04-regras-de-negocio.md` acha o nome técnico ali.
  *
  * <p><b>Aparece no canto SUPERIOR DIREITO da tela</b> — é onde o Minecraft
  * renderiza a sidebar do scoreboard nativamente; não existe slot de canto
@@ -42,7 +53,7 @@ import java.util.Locale;
 final class LiveHud {
 
     private static final String OBJECTIVE_NAME = "flywirebeelive";
-    private static final String[] LINE_ENTRIES = {"§0", "§1", "§2", "§3", "§4"};
+    private static final String[] LINE_ENTRIES = {"§0", "§1", "§2", "§3", "§4", "§5", "§6"};
 
     private static Scoreboard board;
     private static Objective objective;
@@ -52,15 +63,21 @@ final class LiveHud {
 
     /** Roda na thread principal (chamado de {@code ControlLoop::onTick}). */
     static void update(
-            Plugin plugin, JsonObject motor, int activeDn, JsonObject bristleMotor, JsonObject hygroMotor
+            Plugin plugin, JsonObject motor, int activeDn, JsonObject bristleMotor, JsonObject hygroMotor,
+            JsonObject johnstonMotor, JsonObject escapeMotor
     ) {
         ensureBoard();
 
-        setLine(0, "phototaxis", formatChannel(motor, "phototaxis"));
-        setLine(1, "yaw_steering", formatChannel(motor, "yaw_steering"));
-        setLine(2, "active_dn", String.valueOf(activeDn));
-        setLine(3, "grooming", formatChannel(bristleMotor, "grooming"));
-        setLine(4, "hygrotaxis", formatChannel(hygroMotor, "hygrotaxis"));
+        // F9 (25/09/2026, pedido do usuário) — rótulo em PT-br + nome do
+        // canal real entre parênteses, ex.: "Toque (grooming)" — mesma
+        // convenção de StatusLabel.java, não é rótulo inventado, é tradução.
+        setLine(0, "Luz (phototaxis)", formatChannel(motor, "phototaxis"));
+        setLine(1, "Giro (yaw_steering)", formatChannel(motor, "yaw_steering"));
+        setLine(2, "Ativos (active_dn)", String.valueOf(activeDn));
+        setLine(3, "Toque (grooming)", formatChannel(bristleMotor, "grooming"));
+        setLine(4, "Clima (hygrotaxis)", formatChannel(hygroMotor, "hygrotaxis"));
+        setLine(5, "Som/Vento (startle)", formatChannel(johnstonMotor, "startle"));
+        setLine(6, "Medo (escape_drive)", formatChannel(escapeMotor, "escape_drive"));
 
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.getScoreboard() != board) {

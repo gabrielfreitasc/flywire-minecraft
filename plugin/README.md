@@ -793,6 +793,23 @@ por `HygroLesionExperiment`). Segunda rodada, 20 trials, mesma origem:
 Fecha `hygro`: sensor real → circuito → busca de abrigo → comportamento
 observável, mesmo padrão do ocelar (F4) e do bristle.
 
+**Polimento do ciclo planeio→mergulho (22/09/2026).** A re-descida durante
+a busca reativava o mesmo mergulho íngreme do primeiro mergulho urgente,
+daí o "pulo" mesmo em terreno plano. `ControlLoop` ganhou
+`hasTouchedThisEpisode` (diferente da janela curta de
+`ticksSinceGroundOrWaterContact`) pra diferenciar: primeiro mergulho do
+episódio continua rápido, re-descidas durante a busca usam
+`SEARCH_REDESCENT_BLOCKS_PER_TICK=0,05`, bem mais suave.
+
+**Prioridade hygro×grooming invertida (22/09/2026), achado em jogo
+livre.** Usuário observou abelha parada/estática com chuva + mob (porco)
+por perto — mesmo confundidor da lesão (`touch_proximity` do mob subia
+`grooming`, que tinha prioridade incondicional sobre `hygrotaxis`), só que
+fora de experimento, onde a supressão não se aplica. Decisão do usuário:
+`hygro` vence `grooming` quando os dois estão ativos — fugir da chuva é
+mais urgente que parar pra se limpar por um mob de passagem. Ordem de
+checagem invertida em `MotorMapping.toVelocity`.
+
 **Refinamento — abrigo de verdade exige teto (21/09/2026), pedido do
 usuário.** "Tocou chão/água em qualquer lugar" não é a mesma coisa que
 "achou abrigo" — usuário pediu que só contasse com bloco sólido pelo menos
@@ -834,6 +851,112 @@ Ver `docs/02-arquitetura.md`, `docs/03-roadmap-fases.md` F7,
 `sim/src/flywire_sim/hygro_motor.py`, `ControlLoop.java`,
 `MotorMapping.java`, `HygroLesionExperiment.java`,
 `ActivityVisualizer.java`, `LiveHud.java`.
+
+## Sensor de alarme (F8, 23/09/2026) — órgão de Johnston, vento/som
+
+Terceiro sensor multi-modal, mesmo caminho do `bristle`/`hygro`: RN-01a
+resolvida (AD-19 — 77/874 neurônios "serotonin" da semente eram artefato
+de classificador, órgão de Johnston é colinérgico de verdade — Kitamoto
+et al. 1995, Yasuyama & Salvaterra 1999) e RN-09 validada
+(`tools/johnston_calibration_check.py`) antes de tocar em plugin/simulador.
+
+**Sensor — mais restrito de propósito, não uma cópia do toque.** Usuário
+trouxe achado biológico decisivo (Eberl, Hardy & Kernan 2000): toque e som
+compartilham o mesmo mecanismo de transdução em *Drosophila* — mas toque
+com folha/objeto pequeno é evolutivamente inofensivo, não dispara fuga.
+`AlarmSensor.java` implementa só dois gatilhos que uma mosca reconheceria
+como ameaça:
+
+- **`alarm_explosion`** (borda) — `EntityExplodeEvent`/`BlockExplodeEvent`
+  num raio de 16 blocos da abelha marcada.
+- **`alarm_hostile_mob`** (nível) — só `Monster` do Bukkit (zumbi,
+  esqueleto, creeper, aranha — não qualquer `LivingEntity`, diferente de
+  `touch_proximity`), raio de 8 blocos (maior que o de toque — som viaja
+  mais longe).
+
+**Simulador — quarto `Engine`, mesmo padrão dos outros três.**
+`SimulationServer` ganhou `johnston_connectome` opcional. Os dois campos
+combinam em OR e estimulam a semente com `SENSOR_ALARM_AMPLITUDE`.
+**Testado contra o container Docker real** — checagem de manipulação:
+`alarm_hostile_mob=true` sustentado → `startle=0,973` (quase saturado, 55
+descendentes ativos); `false` → `-0,288` (ruído de fundo, RN-09).
+
+**Decoder — `johnston_motor.py`, só o canal `startle`.** Mesmo mecanismo
+de `hygro_motor.py` (topologia de sinal, sem curadoria RN-08 equivalente
+ainda). Telemetria pura — não entra em `MotorMapping.java`, falta lesão
+em servidor real pra fechar a validação.
+
+**Visualização** — `ActivityVisualizer` ganhou o circuito `johnston`
+(vermelho) e `LiveHud` uma 6ª linha, mesma composição escalável do F7 (uma
+entrada nova em `CIRCUITS`, não uma paleta nova).
+
+**Achado à parte, corrigido na mesma sessão:** primeiro teste de extração
+do subcircuito chamou `ingest.build()` sem `out_dir` explícito e quase
+sobrescreveu o circuito OCELAR canônico (`data/processed/nodes.parquet`)
+com dado de teste — detectado e restaurado na hora, ver RN-01a em
+`docs/04-regras-de-negocio.md`.
+
+**Operacional:** a partir desta sessão, redeploy do jar usa desligamento
+gracioso (`echo "stop" > mc-server/server_stdin.fifo`, servidor rodando
+com stdin ligado a um pipe nomeado) em vez de `Stop-Process -Force` — kill
+forçado não dava tempo do Minecraft salvar o mundo, fazendo abelha/jogador
+voltarem pra uma posição de minutos atrás (o último autosave) a cada
+redeploy.
+
+Ver `docs/02-arquitetura.md`, `docs/03-roadmap-fases.md` F8,
+`sim/src/flywire_sim/johnston_motor.py`, `AlarmSensor.java`.
+
+## Sensor de looming e comportamento de fuga (F9/AD-20, 24-25/09/2026)
+
+Quarto sensor multi-modal — quinto `Engine`. Diferente dos três anteriores,
+a semente (LC4/LPLC2/DNp01/DNp02, detectores de looming + Giant Fiber) não
+é `super_class=="sensory"` — `ingest.build` ganhou `sensory_cell_types`
+(AD-20) pra declarar isso só pro circuito `escape`, sem mudar o default dos
+outros. RN-09 validado (`tools/escape_calibration_check.py`, p≈0,00000,
+N=30) antes de tocar em plugin.
+
+**Sensor — proxy de engenharia pra taxa de expansão angular.** Looming de
+verdade (Schiff et al. 1962; Ache et al. 2019) é a taxa que um objeto
+CRESCE no campo visual — Bukkit não expõe isso. `LoomingSensor.java`
+aproxima: rastreia a distância até a ameaça mais próxima (`Monster`/
+`Player`, mesmo escopo de `alarm_hostile_mob`) tick a tick, sinaliza
+`looming_threat` quando ela cai rápido (>0,3 blocos/tick, ordem de
+grandeza de alguém correndo na direção da abelha). Limitação conhecida:
+rastreia a ameaça MAIS PRÓXIMA, não uma entidade específica — trocar de
+alvo entre ticks pode disparar falso positivo (não corrigido, esperando bug
+real observado antes de complicar).
+
+**Comportamento — PRIORIDADE MÁXIMA, decisão do usuário.** Quando
+`escape_drive > ESCAPE_THRESHOLD` (`MotorMapping.java`), ignora hygro/
+grooming/phototaxis e voa pra longe da ameaça
+(`LoomingSensor.fleeDirectionAwayFromNearestThreat`) mais rápido que o voo
+normal (`ESCAPE_SPEED_BLOCKS_PER_TICK=0,45` vs `MAX_SPEED=0,3`) com um
+leve componente vertical pra cima. Todas as constantes são estimativa de
+engenharia, não calibradas — mesma disciplina de `GROOMING_THRESHOLD`
+quando entrou. **Sem lesão em servidor real ainda.**
+
+**Decoder — `escape_motor.py`, canal `escape_drive`.** Diferente de
+hygro/johnston (topologia de sinal via BFS): curado por IDENTIDADE
+celular, só `DNp01`+`DNp02` (os dois tipos que a literatura liga
+diretamente a looming, confirmado com aresta sináptica direta no
+subcircuito extraído) — não os outros 29 descendentes alcançados em 1
+salto (vias paralelas não confirmadas contra looming especificamente).
+
+**Visualização** — `ActivityVisualizer` ganhou o circuito `escape` (roxo/
+violeta) e `LiveHud` uma 7ª linha.
+
+**Balão de texto acima da abelha (`StatusLabel.java`, 25/09/2026, pedido do
+usuário).** `ArmorStand` invisível/marcador seguindo a abelha, nametag em
+português explicando qual circuito REAL está no controle agora — mesma
+ordem de prioridade de `MotorMapping`, citando o canal entre parênteses
+pra quem quiser conferir contra HUD/log (não é flavor text inventado). Cor
+do texto casa com a cor da partícula do circuito correspondente. `startle`
+aparece como informativo só (verbo mais fraco — "percebendo" — porque
+ainda não controla movimento de verdade).
+
+Ver `docs/02-arquitetura.md`, `docs/03-roadmap-fases.md` F9,
+`sim/src/flywire_sim/escape_motor.py`, `LoomingSensor.java`,
+`StatusLabel.java`.
 
 ## Regra
 

@@ -76,6 +76,23 @@ def apply_serotonin_artifact_overrides(nodes: pd.DataFrame, sign: np.ndarray) ->
     return sign
 
 
+def apply_johnston_artifact_overrides(nodes: pd.DataFrame, sign: np.ndarray) -> np.ndarray:
+    """RN-01a/AD-19 — mesmo padrão de artefato de RN-02/AD-18, achado ao
+    investigar o subcircuito `johnston` (F8, vento/som): neurônios do
+    órgão de Johnston (`cell_sub_class` em {"wind_gravity", "auditory"})
+    rotulados "serotonin" pelo classificador de Eckstein et al., mas com
+    identidade colinérgica estabelecida por evidência independente
+    (Kitamoto et al. 1995; Yasuyama & Salvaterra 1999 — expressão de
+    ChAT). Ver RN-01a em docs/04-regras-de-negocio.md.
+    """
+    nt = nodes.top_nt.str.lower().fillna("")
+    is_serotonin = (nt == "serotonin").to_numpy()
+    is_johnston = nodes.cell_sub_class.fillna("").isin(["wind_gravity", "auditory"]).to_numpy()
+    sign = sign.copy()
+    sign[is_serotonin & is_johnston] = C.JOHNSTON_ORGAN_SIGN
+    return sign
+
+
 def load(out_dir: Path | None = None) -> Connectome:
     """Carrega um subcircuito extraído por `ingest.build`. `out_dir` default é
     `C.PROCESSED` (circuito ocelar, v1); outros circuitos (AD-17, F7) passam
@@ -86,6 +103,7 @@ def load(out_dir: Path | None = None) -> Connectome:
 
     sign = apply_nt_overrides(nodes, assign_sign(nodes))
     sign = apply_serotonin_artifact_overrides(nodes, sign)
+    sign = apply_johnston_artifact_overrides(nodes, sign)
 
     n = len(nodes)
     w = edges.syn.to_numpy(np.float32) * C.SYNAPTIC_GAIN

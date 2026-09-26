@@ -45,6 +45,11 @@ import java.util.logging.Level;
  *       sorteados via {@link ControlLoop#setForcedLight}, não hora do mundo;</li>
  *   <li>{@code visualize <on|off>} — partículas de atividade por grupo,
  *       critério de saída da F5 (ver {@link ActivityVisualizer});</li>
+ *   <li>{@code touchmute <on|off>} — F9, achado do usuário (25/09/2026):
+ *       toggle MANUAL (diferente de {@code touchlesion}, o experimento
+ *       automatizado) pra mascarar toque/proximidade durante teste manual
+ *       de outros sensores — sem isso, `grooming` domina o movimento toda
+ *       vez que o jogador está perto observando (ver {@link ControlLoop#setTouchLesioned});</li>
  *   <li>{@code mute <grupo>} / {@code unmute <grupo|all>} — ferramenta de
  *       lesão por comando da F5: silencia de verdade a saída sináptica do
  *       grupo no simulador (diferente do mecanismo de {@code lesion}, que só
@@ -114,7 +119,11 @@ public final class FlywireBeePlugin extends JavaPlugin {
 
         DamageTracker damageTracker = new DamageTracker();
         getServer().getPluginManager().registerEvents(damageTracker, this);
-        controlLoop = new ControlLoop(this, marker, damageTracker, host, port);
+        // F8 — sensor de "alarme" (explosão/mob hostil) pro subcircuito
+        // johnston (vento/som), ver AlarmSensor.
+        AlarmSensor alarmSensor = new AlarmSensor(marker);
+        getServer().getPluginManager().registerEvents(alarmSensor, this);
+        controlLoop = new ControlLoop(this, marker, damageTracker, alarmSensor, host, port);
     }
 
     @Override
@@ -154,6 +163,7 @@ public final class FlywireBeePlugin extends JavaPlugin {
             case "doseresponse" -> handleDoseResponse(player, args);
             case "validateyaw" -> handleValidateYaw(player, args);
             case "visualize" -> handleVisualize(player, args);
+            case "touchmute" -> handleTouchMute(player, args);
             case "mute" -> handleMute(player, args);
             case "unmute" -> handleUnmute(player, args);
             case "stimulate" -> handleStimulate(player, args);
@@ -441,6 +451,30 @@ public final class FlywireBeePlugin extends JavaPlugin {
         player.sendMessage("Visualização de atividade " + (on ? "ligada" : "desligada") + ".");
     }
 
+    /**
+     * F9 — achado do usuário (25/09/2026): testando a abelha numa área
+     * reclusa, {@code grooming} dominava o movimento o tempo todo e
+     * impedia testar QUALQUER outro sensor manualmente — {@code
+     * touch_proximity} fica permanentemente verdadeiro com o jogador perto
+     * observando (não é um estímulo ambiental real, é artefato do próprio
+     * teste). O mecanismo pra mascarar toque já existia
+     * ({@link ControlLoop#setTouchLesioned}, usado por
+     * {@link TouchLesionExperiment}), só não tinha um toggle manual simples
+     * — {@code touchlesion} é o experimento automatizado de várias
+     * rodadas, não serve pra "deixa eu testar outra coisa agora". Mesmo
+     * mecanismo de {@link #handleVisualize}: liga/desliga, não experimento.
+     */
+    private void handleTouchMute(Player player, String[] args) {
+        if (args.length < 2 || (!args[1].equalsIgnoreCase("on") && !args[1].equalsIgnoreCase("off"))) {
+            player.sendMessage("Uso: /flywirebee touchmute <on|off>");
+            return;
+        }
+        boolean on = args[1].equalsIgnoreCase("on");
+        controlLoop.setTouchLesioned(on);
+        player.sendMessage("Sensor de toque " + (on ? "mascarado (damage/touch_contact/touch_proximity "
+                + "sempre false na ponte, grooming não deveria mais dominar)" : "voltou ao normal") + ".");
+    }
+
     private void handleMute(Player player, String[] args) {
         if (args.length < 2 || !VALID_GROUPS.contains(args[1])) {
             player.sendMessage("Uso: /flywirebee mute <" + String.join("|", VALID_GROUPS) + ">");
@@ -543,7 +577,7 @@ public final class FlywireBeePlugin extends JavaPlugin {
                 + "daynight [trials] [segundos] [blind] | "
                 + "doseresponse [trials] [segundos] [x y z] | "
                 + "validateyaw [trials] [segundos] [amplitude] [x y z] | "
-                + "visualize <on|off> | "
+                + "visualize <on|off> | touchmute <on|off> | "
                 + "mute <grupo> | unmute <grupo|all> | stimulate <grupo> <amplitude> | goals off | "
                 + "goto <x> <y> <z>";
     }

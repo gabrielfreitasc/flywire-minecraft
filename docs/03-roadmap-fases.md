@@ -953,6 +953,20 @@ falhou 3 vezes por diluição (RN-09/F1, F4 primeiro experimento, RN-08/F6).
       ciclo planeio→mergulho do bug 4 (nunca flutua indefinidamente, perde
       contato e remergulha periodicamente), registrado como pendência de
       polimento, mesma categoria do escape de obstáculo lateral.
+- [x] **Polimento do ciclo planeio→mergulho (22/09/2026), pedido do
+      usuário, depois da lesão fechar.** Toda re-descida durante a busca
+      reativava o MESMO mergulho íngreme
+      (`SHELTER_DIVE_DESCENT_BLOCKS_PER_TICK=0,3`) do primeiro mergulho
+      urgente — daí o "pulo" visível mesmo em terreno plano. Diferenciado:
+      `ControlLoop` ganhou `hasTouchedThisEpisode` (fica `true` pra sempre
+      no episódio assim que toca chão/água a primeira vez, diferente da
+      janela curta de `ticksSinceGroundOrWaterContact`) — primeiro
+      mergulho do episódio continua rápido (urgência real pedida pelo
+      usuário: "voaria com mais velocidade até um abrigo"), re-descidas
+      durante a busca usam `SEARCH_REDESCENT_BLOCKS_PER_TICK=0,05`, bem
+      mais suave. Reduz a amplitude do ciclo sem mudar o mecanismo.
+      Compila limpo, jar copiado, servidor reiniciado — **reteste
+      pendente**.
 - [x] **Primeira rodada real (22/09/2026) — confundida, não conta.** 20
       trials, origem perto de árvore (necessário pro `ShelterSensor`
       achar cobertura). Mann-Whitney deu p=0,021 (direção certa: normal
@@ -1293,6 +1307,439 @@ rodada, com o bristle isolado do movimento
 p≈0,00000, Mann-Whitney U=0,0 p=0,00019** — separação perfeita, o
 resultado mais forte de qualquer lesão deste projeto (ocelar p=0,0014,
 bristle p=0,0025).
+
+**Achado em jogo livre (22/09/2026) — mesmo confundidor, fora de
+experimento.** Usuário observou: chuva ligada + porco próximo, abelha
+ficou parada e estática. Mesma causa da rodada confundida — `grooming`
+(acionado por `touch_proximity` do mob) tinha prioridade incondicional
+sobre `hygrotaxis` em `MotorMapping.toVelocity`, mascarando a busca de
+abrigo por completo fora do experimento também (a supressão da lesão só
+vale dentro do experimento). **Decisão do usuário: `hygro` vence
+`grooming`** quando os dois estão ativos — fugir da chuva é mais
+urgente/vital que parar pra se limpar por um mob de passagem. Ordem de
+checagem invertida em `MotorMapping.toVelocity` (hygro primeiro, grooming
+depois). Compila limpo, jar copiado, servidor reiniciado.
+
+**🐛 Bug real (22/09/2026) — sistema de recuperação de obstáculo não
+disparava presa entre 3 blocos.** Usuário relatou: pousada sem cobertura,
+travada por blocos nas duas laterais + na frente (retaguarda livre), nunca
+decolou pra continuar buscando. Causa: a checagem de "travou" media
+distância 3D total (`Location.distance()`); o planeio da busca
+(`SEARCH_HOVER_BLOCKS_PER_TICK`) sozinho já produz deslocamento vertical
+suficiente pra passar do limiar de 0,3 blocos, mascarando o fato de que
+ela não progredia nada na horizontal. **Corrigido:** medição trocada pra
+só X/Z (horizontal) — o que importa pra saber se está escapando de um
+cercado lateral é progresso horizontal, não altitude. Mesma correção
+beneficia o caso original de obstáculo do ocelar/bristle, não só o hygro.
+
+**Grooming vira probabilístico — "desviar" ou "pousar e limpar" (22/09/2026),
+pedido do usuário.** Hoje todo toque/proximidade acima do limiar sempre
+virava pouso — mecanicamente repetitivo, sem dado químico real da mosca
+pra justificar variação. Sorteio 50/50 a cada NOVO episódio de grooming
+(mesmo instante da folga de transição já existente): metade pousa e limpa
+(comportamento original, já validado por lesão — RN-08/RN-09 intocadas),
+metade só desvia — empurrão breve puramente horizontal
+(`DODGE_BOOST_HORIZONTAL_BLOCKS_PER_TICK=0,2`, ~1s, mesmo mecanismo do
+sistema de recuperação de obstáculo) pra longe da direção atual, depois
+`bristle_motor` é ignorado pro resto do episódio (mesma técnica da
+supressão da lesão) e `phototaxis`/`hygro` retomam o controle normal.
+Engenharia pra dar variedade comportamental, não achado biológico novo —
+deixa explícito que é uma escolha de design, não uma medição. Compila
+limpo, jar copiado, servidor reiniciado.
+
+**🐛 Bug real (22/09/2026) — abelha flutuando parada no ar, longe de
+qualquer cobertura.** Log confirmou: `hygrotaxis=0,99+`, `raining=true`,
+`onGround=false` sustentado, `vel=0,0,0` o tempo todo — ela não estava
+pousada em lugar nenhum, só flutuando imóvel. Causa: `shelterFoundThisEpisode`
+travava PRA SEMPRE assim que achava cobertura uma vez (otimização
+deliberada, "não recomputa depois de achar") — se esse achado veio de um
+toque antigo (possivelmente até um falso-positivo passageiro do sensor) e
+ela depois deixou de estar pousada de verdade, o código continuava achando
+que ela estava abrigada e forçava velocidade zero pra sempre, mesmo no ar
+e longe de qualquer teto. **Corrigido em duas camadas:** (1)
+`ControlLoop` desfaz o achado de abrigo assim que a janela de tolerância
+de "pousada" esgota — precisa pousar de novo E reconfirmar cobertura antes
+de parar outra vez; (2) `MotorMapping.toVelocity` exige `sheltered && landed`
+juntos pra parar (defesa extra, nunca parar sem estar REALMENTE tocando
+chão/água no momento). Compila limpo, jar copiado, servidor reiniciado.
+
+**🐛 Bug 7 real (22/09/2026) — regressão do fix do bug 6, mesmo dia.**
+Reteste dos três achados: ela nunca mais parava em cobertura nenhuma,
+"continua voando pelo mapa". Causa: o fix do bug 6 usava a MESMA janela
+curta (`LANDED_GRACE_TICKS`, 0,5s) pra desfazer um abrigo já achado — um
+flicker normal de `onGround` (bug 2, mesma instabilidade de sempre, agora
+batendo numa abelha PARADA embaixo de galho/folha em vez de em voo)
+bastava passar de 0,5s pra derrubar um abrigo genuíno, mandando ela voar
+de novo. **Corrigido separando as duas janelas:** `LANDED_GRACE_TICKS`
+(0,5s) continua decidindo mergulhar vs. procurar; desistir de abrigo já
+achado usa `SHELTER_ABANDON_TICKS` novo (60 ticks, ~3s) — bem mais
+tolerante a flicker, só derruba por ausência sustentada de verdade (o
+cenário do bug 6 tinha minutos flutuando, 3s ainda pega isso sem sobrar
+sensível a meio segundo de ruído). `MotorMapping.toVelocity` voltou a
+checar só `sheltered` pra parar (sem exigir `landed` junto, que era a
+causa direta da regressão). Compila limpo, jar copiado, servidor
+reiniciado.
+
+**Polimento do sistema de recuperação de obstáculo (22/09/2026), pedido do
+usuário — "vale a pena polir e afinar a questão dela travar entre
+blocos".** Detecção recalibrada de `STUCK_CHECK_TICKS=40` (2s) pra `20`
+(1s) — barra de detecção continua baixa (0,3 blocos), não deveria gerar
+falso positivo em voo livre normal. Empurrão recalibrado de
+`RECOVERY_BOOST_TICKS=20` (1s) pra `30` (1,5s) e
+`RECOVERY_BOOST_HORIZONTAL_BLOCKS_PER_TICK` de `0,10` pra `0,15` — mais
+decisivo, menos ciclos de detecção+empurrão em sequência pra escapar de
+verdade. Estimativas de engenharia, não calibradas. Compila limpo, jar
+copiado, servidor reiniciado.
+
+**🐛 Bug 8 real (23/09/2026) — abelha "sheltered" a céu aberto de verdade.**
+Chuva ligada, ela simplesmente não buscava cobertura. Log de diagnóstico
+mostrou "abrigo encontrado — skylight=15" (céu TOTALMENTE aberto na
+posição dela) três vezes seguidas — o fix do bug 6 (checar coluna + 4
+vizinhas, contando QUALQUER uma) foi longe demais: bastava uma coluna
+VIZINHA (1 bloco de distância) estar coberta pra ela se considerar
+abrigada, mesmo exposta de verdade. **Corrigido exigindo MAIORIA:**
+`ShelterSensor.MIN_COVERED_COLUMNS=3` de 5 (centro + 4 vizinhas), não
+qualquer uma — tolera 1-2 buracos de copa esparsa (problema original)
+sem deixar 1 sombra vizinha isolada contar como abrigo (problema novo).
+Compila limpo, jar copiado, servidor reiniciado.
+
+**🐛 Bug 9 real (23/09/2026) — a métrica inteira estava errada, não só o
+limiar.** Usuário perguntou: "ela considera folhas de qualquer árvore como
+cobertura?? Ou seja a chuva não pega nela?" — pergunta certeira. Confirmado
+por pesquisa: **no Minecraft, chuva atravessa folhas** (mecânica real do
+jogo desde uma atualização — "goteja" através de copas). `getLightFromSky()`
+(usado nas três tentativas anteriores) mede LUZ, não chuva — folha reduz
+luz (dá sombra) mas nunca bloqueou chuva de verdade. Não era questão de
+limiar nem raio de varredura (bugs 6/8) — era a métrica errada desde o
+início pra qualquer bioma com árvore. **Corrigido usando a métrica exata
+que o próprio Minecraft usa internamente** pra decidir onde chove
+(ex.: extinguir mobs em chamas): `World#getHighestBlockYAt(x, z,
+HeightMap.MOTION_BLOCKING_NO_LEAVES)` — heightmap dedicado que já exclui
+folhas corretamente. Abrigo = algum bloco sólido não-folha em algum lugar
+acima dela na coluna, não importa a altura — sem varredura manual, sem
+proxy de luz, sem checagem de vizinhas (RESOLVE os bugs 6 e 8 de raiz, não
+só sintoma). `ShelterSensor.java` reescrito do zero, bem mais simples.
+Compila limpo, jar copiado, servidor reiniciado — **reteste pendente**.
+Roteiro sugerido: perto de árvore (folha só) NÃO deveria parar mais;
+perto de telhado/bloco sólido real deveria continuar parando.
+
+**✅ Confirmado pelo usuário (23/09/2026)** — testou perto de árvore (folha
+só) e o comportamento bateu com o esperado (chuva atravessa folha de
+verdade agora).
+
+**Busca guiada (23/09/2026), pedido do usuário depois de um teste
+controlado.** Usuário construiu um cubo com teto aberto + um mini-telhado
+num canto, ativou chuva: ela ficou "indo e voltando" sem se aproximar do
+canto coberto, e depois saiu voando pra fora do cubo mesmo chovendo.
+Diagnóstico: a busca só seguia `heading` (circuito ocelar via
+`yaw_steering`, sem relação nenhuma com onde está o abrigo) — achar um
+canto pequeno por sorte é raro. **Implementado:**
+`ShelterSensor.findNearbyShelterDirection` sonda 8 direções (N/NE/L/SE/S/
+SO/O/NO) a `SHELTER_LOOK_AHEAD_BLOCKS=4` blocos, usando o mesmo heightmap
+`MOTION_BLOCKING_NO_LEAVES` do bug 9; se achar cobertura numa direção,
+`MotorMapping.toVelocity` mira direto nela em vez de `heading`. Não é
+busca de caminho de verdade (sem A*/desvio de obstáculo) — só um aceno
+simples quando o abrigo já está por perto. Compila limpo, jar copiado,
+servidor reiniciado com desligamento gracioso configurado (pipe stdin,
+`server_stdin.fifo`) — **reteste pendente**. Segundo achado do mesmo teste
+(ela saindo do cubo via sistema de recuperação de obstáculo) registrado
+mas não tratado ainda — decisão do usuário foi focar na busca guiada
+primeiro.
+
+**Nota operacional (23/09/2026):** até aqui todo redeploy usava
+`Stop-Process -Force` pra derrubar o servidor antes de subir o jar novo —
+isso não dá tempo do Minecraft salvar o mundo, então abelha/jogador
+podiam voltar pra uma posição de alguns minutos atrás (o último autosave)
+em vez do estado mais recente. Corrigido: servidor agora roda com stdin
+ligado a um pipe nomeado (`tail -f server_stdin.fifo | java -jar ...`),
+permitindo `echo "stop" > server_stdin.fifo` pra desligamento gracioso
+(salva o mundo antes de sair) em vez de kill forçado daqui pra frente.
+
+---
+
+## F8 — Multi-sensor v3: órgão de Johnston (vento/som) 🔶 integrado ponta a ponta (sensor+simulador+visualização) — falta validação por lesão
+
+Continuação natural do F7 (chuva, toque), pedido do usuário (23/09/2026)
+depois de compartilhar referências novas (BANC v888, MaleCNS v1.0, e
+papers incluindo Schiff et al. 1962 sobre resposta de fuga a "looming"
+visual). Duas direções possíveis — **escolhido o órgão de Johnston**
+(vento/som) por já ter dado real e rotulado neste conectoma, mesmo padrão
+de continuidade do F7. A direção de fuga a looming visual (olho composto/
+lobo óptico) ficou registrada como candidata futura, território novo
+nunca tocado neste projeto (só o ocelar foi usado até aqui).
+
+- [x] **Levantamento de literatura — achado real, não inventado.** 874
+      neurônios `cell_sub_class` em {"wind_gravity", "auditory"} (`super_class
+      =="sensory"`, `nerve=="AN"` — nervo antenal), nomenclatura JO-* bate
+      exatamente com Kamikouchi et al. 2009/Yorozu et al. 2009 (duas zonas
+      funcionais: JO-A/JO-B para som/canção de corte, JO-C/JO-E para vento/
+      gravidade via deflexão da arista). Mesmos 874 neurônios já
+      identificados e excluídos de propósito da semente do `bristle` na F7
+      (`build_f7_circuits.py`, "não confundir com órgão de Johnston").
+      **Cuidado no padrão de seleção:** prefixo `cell_type` "JO-" sozinho
+      pega 1.103 neurônios, não 874 — inclui um terceiro grupo
+      (`cell_sub_class=="grooming"` ou vazio) que não é vento/som. Usado
+      `wind_gravity|auditory` (regex OR via `select_seed`), não o prefixo.
+- [x] **Extração — `tools/build_f8_circuit.py`, 1 salto.** 1.740 nós,
+      18.688 arestas, 136 descendentes — mais que os 110 do bristle e os
+      92 do ocelar. 2 saltos deu erro técnico (`IntCastingNaNError`, não
+      investigado, irrelevante já que 1 salto basta, mesmo padrão do
+      bristle). Escreve em `data/processed/johnston/`.
+- [x] **🐛 Erro real cometido e corrigido na mesma sessão (23/09/2026) —
+      quase corrompeu o circuito ocelar canônico.** Primeiro teste de
+      extração chamou `ingest.build()` sem `out_dir` explícito — por
+      padrão isso escreve em `data/processed/` (o ocelar da v1!),
+      sobrescrevendo `nodes.parquet`/`edges.parquet`/`manifest.json` reais
+      com o dado de teste do johnston. Detectado na hora (manifesto
+      mostrando `"circuit": "johnston_test_h1"` onde devia ser
+      `"ocellar"`), restaurado rodando `ingest.build()` sem argumentos
+      (default = ocelar) e confirmado contra os números documentados no
+      `CLAUDE.md` (625 nós, 2.981 arestas) + 30/30 testes. Lição registrada
+      em RN-01a: `out_dir=None` tem default silencioso pro ocelar — sempre
+      passar `out_dir` explícito em qualquer teste exploratório de
+      subcircuito novo.
+- [x] **RN-01a/AD-19 — 77/874 neurônios "serotonin" da semente eram
+      artefato de classificador.** Órgão de Johnston é colinérgico
+      (Kitamoto et al. 1995; Yasuyama & Salvaterra 1999) — ver RN-01a em
+      `04-regras-de-negocio.md` pro relato completo. Override implementado,
+      32/32 testes passam.
+- [x] **RN-09 aplicada, sem precisar recalibrar.**
+      `tools/johnston_calibration_check.py`: 135/136 descendentes com
+      caminho previsto excitatório, N=30 sementes, grupo excitatório diff
+      média=433,87 (Welch/Wilcoxon p≈0) — efeito bem mais forte que
+      bristle/hygro, sem precisar de sweep de `BIAS_CURRENT`/`NOISE_STD`
+      novo. **Fecha L2/L3.**
+- [x] **Sensor no plugin — decidido e implementado (23/09/2026).** Usuário
+      trouxe achado biológico decisivo: Eberl, Hardy & Kernan (2000)
+      mostram que toque e som compartilham o mesmo mecanismo de
+      transdução em *Drosophila* — mas toque com objeto pequeno/folha é
+      evolutivamente inofensivo e não dispara fuga. Desenho: sensor de
+      "alarme" deliberadamente mais restrito que `touch_proximity`, só
+      dois gatilhos que uma mosca reconheceria como ameaça:
+      `alarm_explosion` (borda, `EntityExplodeEvent`/`BlockExplodeEvent`
+      num raio de 16 blocos) e `alarm_hostile_mob` (nível, `Monster` do
+      Bukkit — não qualquer `LivingEntity` — num raio de 8 blocos, maior
+      que o do toque porque som viaja mais longe). `AlarmSensor.java`
+      novo, registrado em `FlywireBeePlugin`.
+- [x] **Integração no simulador — quarto `Engine`, mesmo padrão do
+      bristle/hygro.** `SimulationServer` ganhou `johnston_connectome`
+      opcional, `johnston_motor.py` (canal `startle`, mesmo mecanismo de
+      topologia de sinal). Testado contra o container Docker real:
+      `alarm_hostile_mob=true` sustentado → `startle=0,973` (quase
+      saturado, 55 descendentes ativos); `false` → `-0,288` (ruído de
+      fundo) — checagem de manipulação limpa. 34/34 testes Python passam.
+- [x] **Visualização** — `ActivityVisualizer` ganhou o circuito `johnston`
+      (vermelho, canal `startle`) e `LiveHud` uma 6ª linha, mesmo padrão
+      escalável do F7 (uma entrada nova, não uma paleta nova).
+- [x] **Terceiro gatilho — som ambiente, não só ameaça (24/09/2026).**
+      Usuário testou perto de jukebox tocando disco: `startle` só no ruído
+      de fundo (-0,3 a +0,3), porque os dois gatilhos originais cobrem só
+      AMEAÇA. Pedido: som ambiente também deveria contar, mais fiel ao
+      órgão de Johnston responder a som em geral. `AlarmSensor.isMusicNearby`
+      varre um cubo de blocos (raio 6) procurando `Jukebox#isPlaying()` —
+      sem evento Bukkit de "tocando agora" nem busca de bloco por
+      proximidade (diferente de entidade). Campo `sound_music` novo,
+      combina em OR com os outros dois. Compila limpo, testes passam
+      (34/34), jar copiado, servidor reiniciado (desligamento gracioso).
+      **✅ Confirmado em servidor real (25/09/2026)** — usuário colocou
+      jukebox tocando, `startle` subiu beirando 1 (quase saturado, mesma
+      faixa medida isolado contra o Docker). Sensor de som ambiente
+      funcionando ponta a ponta.
+- [ ] **Validação por lesão em servidor real** — pendente, mesmo padrão
+      do bristle/hygro (`alarm_hostile_mob` mascarado/real sorteado trial
+      a trial). `startle` continua telemetria pura, não entra em
+      `MotorMapping.java` ainda.
+
+---
+
+## F9 — Circuito de fuga por looming (checklist de 7 itens, 24/09/2026) 🔶 comportamento real implantado, falta reteste em jogo + lesão
+
+**Contexto:** usuário pediu prosseguir por um checklist de 7 sistemas
+comportamentais novos (medo/fuga, ponto cego, tato+audição, paladar/fome/olfato,
+calor/água/atrativo/sono/clima, memória/integração de trajetórias, corte/agressividade),
+citando as referências que ele já tinha passado (Schiff et al. 1962 sobre resposta a
+looming, Eberl/Hardy/Kernan 2000, BANC v888, MaleCNS v1.0). **Tato e audição já estava
+feito** (bristle+johnston, F7/F8). Levantamento rápido do conectoma anotado mostrou:
+olfato (2.282 neurônios `cell_class=="olfactory"`) e paladar (334, `gustatory`) são
+extensão natural com dado já rotulado; memória/integração de trajetórias e corte/
+agressividade são circuitos centrais grandes sem semente pequena óbvia; "ponto cego"
+ficou sem definição clara do usuário. Usuário escolheu **medo/fuga (circuito de looming
+visual)** como próximo item, via `AskUserQuestion`.
+
+**Semente (achado real, não inventado):** 318 neurônios `cell_type` em {`LC4` (104),
+`LPLC2` (210), `DNp01` (2, Giant Fiber), `DNp02` (2)} — os detectores de looming
+clássicos da literatura de fuga visual em *Drosophila* (Ache et al. 2019; von Reyn et
+al. 2017; de Vries & Clandinin 2012), ligados ao Schiff et al. 1962 que o usuário já
+tinha mandado. Todos colinérgicos (`top_nt=="acetylcholine"`) — sem artefato de
+serotonina tipo RN-01a aqui. Confirmado neste subcircuito extraído: aresta sináptica
+DIRETA LC4/LPLC2→DNp01/DNp02 com syn forte (até 962 agregadas), batendo com a
+identificação de Ache et al. 2019 via conectômica EM.
+
+**Diferença estrutural em relação a bristle/hygro/johnston (AD-20):** a semente não é
+`super_class=="sensory"` (é `visual_projection`+`descending`) — `Connectome.sensory`
+ficaria vazio, sem onde `Engine.stimulate()` injetar corrente. `ingest.build` ganhou o
+parâmetro `sensory_cell_types` pra marcar role="sensory" por identidade de `cell_type`
+quando o circuito pede (default `None` preserva os outros 4 circuitos). Ver RN-04 em
+`docs/04-regras-de-negocio.md`.
+
+- [x] **Extração** (`sim/tools/build_f9_circuit.py`) — semente 318, `hops=1`,
+      `sensory_cell_types={"LC4","LPLC2"}` → 768 nós (314 sensory, 423
+      interneuron, 31 output), 10.861 arestas, 179.312 sinapses. Escrito em
+      `data/processed/escape/`, canônico ocelar confirmado intacto depois.
+- [x] **RN-04/AD-20** — mecanismo `sensory_cell_types` generalizado em
+      `ingest.build`, testado (sintético + dado real).
+- [x] **Canal motor `escape_drive`** (`sim/src/flywire_sim/escape_motor.py`) —
+      terceira forma de curadoria do projeto (identidade celular direto da
+      literatura + conectividade EM confirmada, não BFS de sinal nem cluster
+      BANC): lê só `DNp01`+`DNp02`, não os outros 29 descendentes alcançados
+      em 1 salto (vias paralelas não confirmadas contra looming
+      especificamente — não agregar sem checar identidade). Ver RN-08 em
+      `docs/04-regras-de-negocio.md`.
+- [x] **RN-09** (`sim/tools/escape_calibration_check.py`) — estimular
+      LC4+LPLC2 muda a atividade de DNp01+DNp02: diff média=63,07,
+      desvio=1,31, t=258,3, p≈0,00000, N=30 sementes. Efeito grande e
+      extremamente consistente (bem mais lopsided que hygro/johnston, que já
+      eram bem assimétricos).
+- [x] **Integração no bridge** (`server.py`) — quinto `Engine` opcional
+      (`escape_connectome`), campo `looming_threat` no protocolo,
+      `escape_motor`/`escape_active_dn` na resposta. 40/40 testes Python
+      passando.
+- [x] **Sensor no plugin (`LoomingSensor.java`, 24/09/2026)** — decisão do
+      usuário via `AskUserQuestion`: distância até mob hostil/jogador mais
+      próximo caindo rápido entre ticks (proxy de engenharia pra taxa de
+      expansão angular — Bukkit não expõe campo visual/tamanho angular de
+      entidade). Mesmo escopo de ameaça do `alarm_hostile_mob`
+      (`Monster`/`Player`, não qualquer `LivingEntity`). Limitação conhecida
+      e documentada, não corrigida: rastreia a AMEAÇA MAIS PRÓXIMA a cada
+      tick, não uma entidade específica — troca de alvo mais próximo entre
+      ticks pode gerar falso positivo. Compila limpo, Docker reconstruído (5
+      engines confirmados no log), servidor reiniciado com desligamento
+      gracioso — **reteste em jogo pendente**.
+- [x] **Visualização** (`ActivityVisualizer`/`LiveHud`) — cor própria
+      (violeta) no `CIRCUITS[]`, linha `escape_drive` no HUD.
+- [x] **`escape_drive` vira comportamento real (25/09/2026), PRIORIDADE
+      MÁXIMA — decisão do usuário.** Quando `escape_drive > ESCAPE_THRESHOLD`
+      (`MotorMapping.java`), a abelha ignora hygro/grooming/phototaxis e voa
+      pra longe da ameaça mais próxima (`LoomingSensor.
+      fleeDirectionAwayFromNearestThreat`) numa velocidade maior que o voo
+      normal (`ESCAPE_SPEED_BLOCKS_PER_TICK=0,45` vs `MAX_SPEED=0,3`) mais
+      um leve componente vertical pra cima. Constantes provisórias, não
+      calibradas — mesma disciplina de `GROOMING_THRESHOLD`/
+      `HYGROTAXIS_THRESHOLD` quando entraram. Compilado, jar deployado,
+      **reteste em jogo pendente**.
+- [x] **Balão de texto acima da abelha (`StatusLabel.java`, 25/09/2026,
+      pedido do usuário).** `ArmorStand` invisível/marcador seguindo a
+      abelha, nametag em português explicando qual circuito REAL está no
+      controle agora (mesma ordem de prioridade de `MotorMapping`, citando o
+      canal entre parênteses) — cor do texto casa com a cor da partícula do
+      circuito em `ActivityVisualizer`. `startle` (johnston) aparece como
+      informativo só (verbo mais fraco, "percebendo") porque ainda não
+      controla movimento de verdade.
+- [ ] **Validação por lesão em servidor real** — pendente, agora que o canal
+      controla comportamento de verdade. Precisa de um
+      `LoomingLesionExperiment.java` (mascarar `looming_threat`, medir se a
+      abelha realmente foge menos/menos rápido), mesmo padrão de
+      `HygroLesionExperiment`/`TouchLesionExperiment`.
+- [x] **Bug real corrigido — grooming preso em loop infinito (25/09/2026,
+      achado do usuário).** Testando numa área reclusa, `grooming` dominava
+      o movimento e impedia testar qualquer outro sensor: pouso mandava
+      velocidade PURAMENTE vertical (resquício de antes dos 9 bugs do
+      `hygro` serem corrigidos), ela nunca alcançava `onGround`, sistema de
+      recuperação empurrava numa direção sem relação com o obstáculo real
+      (oposto de `heading`, não do que estava bloqueando) — log confirmou
+      217 disparos de recuperação numa sessão, sem nunca resolver
+      ("voando pra parede infinitamente"). Corrigido dando componente
+      horizontal (`heading`) à descida do grooming, mesma receita que já
+      funcionou no `hygro`. Também adicionado `/flywirebee touchmute
+      <on|off>` — toggle MANUAL (diferente do experimento automatizado
+      `touchlesion`) pra mascarar toque durante teste isolado de outros
+      circuitos, já que o jogador observando de perto mantém
+      `touch_proximity` permanentemente verdadeiro. Deployado,
+      **reteste em jogo pendente**.
+- [x] **Dois bugs reais adicionais, mesma sessão de reteste (25/09/2026).**
+      (1) **Crash real**: `LoomingSensor.fleeDirectionAwayFromNearestThreat`
+      (usa `World#getNearbyEntities`) estava sendo chamado de dentro do
+      lambda assíncrono da ponte (thread `flywire-control-bridge`) — Paper
+      derruba com `AsyncCatcher` (só permite essa API na thread principal),
+      quebrando a troca ANTES de atualizar `latestVelocity`/
+      `latestBristleMotor` toda vez que `escape_drive` cruzava o limiar.
+      Corrigido movendo o cálculo pra dentro de `onTick` (thread principal,
+      mesmo padrão de `alarmHostileMob`/`touchProximity`), passando o
+      resultado pronto pro lambda. (2) **`ESCAPE_THRESHOLD` catastroficamente
+      mal calibrado**: log mostrou `escape_drive` oscilando 0,58-0,97 com
+      `looming=false` o tempo todo — abelha "fugindo" sem ameaça nenhuma,
+      atropelando prioridade de hygro/grooming. Causa raiz: `C.
+      MOTOR_RATE_SCALE=30` (genérico, calibrado pro ocelar) aplicado a um
+      grupo de só 4 neurônios (DNp01+DNp02) satura o tanh mesmo em repouso —
+      medido isolado, baseline=38,3±10,0 Hz (p95=55,0), estimulado satura em
+      340 Hz. Corrigido com `C.ESCAPE_MOTOR_RATE_SCALE=150` (constante
+      própria) + `ESCAPE_THRESHOLD` recalibrado 0,8→0,6 — separação limpa
+      (baseline tanh p95=0,351, estimulado=0,979). Ver RN-09 em
+      `docs/04-regras-de-negocio.md` pro relato completo e a lição
+      generalizável (escala de um grupo grande não serve pra um grupo
+      pequeno). Docker reconstruído, jar redeployado — **reteste em jogo
+      pendente**.
+- [x] **Grooming restrito ao contexto real de toque (25/09/2026, pedido do
+      usuário).** `touch_contact` (esbarrar em bloco/parede/chão) saiu do
+      OR que estimula o `bristle` — bater numa parede durante o voo não é
+      o mesmo estímulo biológico de algo pousar/tocar o corpo da mosca
+      (mesmo princípio já usado no `AlarmSensor`/johnston — Eberl, Hardy &
+      Kernan 2000). O sensor continua computado/logado (telemetria), só não
+      afeta mais `grooming`. `touch_proximity` (`TouchSensor.isNearSomething`)
+      restrito de "qualquer `LivingEntity`/`Item`" pra só `Monster`/
+      `Animals`/`NPC`/`Player` — item largado no chão não conta mais.
+      Detecção de obstáculo/travamento (`ControlLoop.STUCK_CHECK`/
+      `RECOVERY_BOOST`) é sistema separado, mede deslocamento real
+      diretamente, nunca dependeu de `touch_contact` — confirmado intacto.
+      Também: balão de texto (`StatusLabel`) perdeu os nomes técnicos de
+      canal entre parênteses (pedido do usuário) — só o texto em português
+      agora, nome do canal só no HUD/log. 39/39 testes Python passando
+      (novo teste de regressão: `touch_contact` isolado não estimula mais o
+      bristle). Docker reconstruído, jar redeployado.
+- [x] **Trava temporal da fuga (25/09/2026, pedido do usuário).**
+      `escape_drive`/`looming_threat` são sinais de nível que podem cair
+      rápido (ameaça sai do raio de busca, distância para de fechar) —
+      sem trava, a fuga podia durar menos que uma troca, curto demais pra
+      observar visualmente. `ControlLoop.ESCAPE_LATCH_TICKS=50` (~2,5s,
+      dentro do pedido de "2 a 3 segundos"): uma vez que o circuito real
+      cruza `ESCAPE_THRESHOLD`, garante pelo menos esse tempo de fuga
+      visível, recarregando a contagem (e a direção capturada) enquanto a
+      ameaça continuar de verdade. `MotorMapping.toVelocity` e o balão de
+      texto (`StatusLabel`) passam a receber a decisão JÁ ESTABILIZADA do
+      `ControlLoop`, não mais o valor cru de `escape_motor` — mesma
+      disciplina de `landed`/`sheltered`. Compilado, jar redeployado.
+- [x] **Recalibração do limiar de looming, dois ciclos (25/09/2026, achado
+      do usuário em teste real).** `CLOSING_SPEED_THRESHOLD_BLOCKS_PER_TICK`
+      original (0,3) estava ACIMA da velocidade de sprint do próprio
+      Minecraft (~5,6 blocos/s = 0,28/tick) — usuário correu direto na
+      direção dela de fora do raio e nunca disparou, matematicamente
+      impossível disparar. Baixado pra 0,15 — usuário testou e reportou
+      oposto: andar um passo já disparava (sensível demais, virou ruído).
+      Recalibrado pra 0,25 (entre andar ~0,22 e correr ~0,28) a pedido do
+      usuário — exige aproximação de verdade sem cair em nenhum dos dois
+      extremos anteriores.
+- [x] **`damage` (hit real) também estimula `escape`, não só
+      `looming_threat` (25/09/2026, pedido do usuário).** Levar um hit de
+      verdade é sinal de ameaça mais forte que taxa de aproximação —
+      deveria escalar pra fuga plena, não só toque/grooming. Mesmo `damage`
+      que já estimula `bristle` (um hit real dispara os dois circuitos, não
+      é exclusivo). `server.py::on_sensor` — `looming = looming_threat OR
+      damage`. 40/40 testes Python passando. Docker reconstruído.
+      **✅ Confirmado em servidor real (25/09/2026)** — usuário deu um hit
+      nela, modo fuga ativou.
+- [x] **Recuperação mecânica escala a estratégia depois da 1ª falha
+      (25/09/2026, achado ao vivo no log).** `horizontalOpposite(heading)`
+      assume que o obstáculo está na direção que ela tentava seguir — só
+      vale a PRIMEIRA tentativa. Log real mostrou o mesmo vetor de empurrão
+      (variação de ~0,001) se repetindo por dezenas de segundos numa área
+      reclusa, sem nunca liberar — `heading` (yaw_steering) gira devagar
+      demais pra diversificar a direção entre tentativas. Corrigido:
+      `consecutiveStuckCount` conta falhas seguidas no mesmo travamento;
+      1ª falha usa a heurística original (barata, funciona pra obstáculo
+      único), 2ª+ sorteia direção horizontal aleatória a cada nova
+      tentativa — explora em vez de insistir numa hipótese já refutada.
+      Reseta assim que ela volta a se mover de verdade. Compilado, jar
+      redeployado — **reteste em jogo pendente**.
 
 ---
 

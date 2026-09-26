@@ -43,10 +43,13 @@ public final class BridgeClient implements AutoCloseable {
     /** Sem alterar mute/stimulate atuais — ver sobrecarga completa. */
     public JsonObject sendSensorAndReceiveMotor(
             double light, double dorsalLight, boolean damage,
-            boolean touchContact, boolean touchProximity, boolean raining, long tMs
+            boolean touchContact, boolean touchProximity, boolean raining,
+            boolean alarmExplosion, boolean alarmHostileMob, boolean soundMusic,
+            boolean loomingThreat, long tMs
     ) throws IOException {
         return sendSensorAndReceiveMotor(
-                light, dorsalLight, damage, touchContact, touchProximity, raining, tMs, null, null);
+                light, dorsalLight, damage, touchContact, touchProximity, raining,
+                alarmExplosion, alarmHostileMob, soundMusic, loomingThreat, tMs, null, null);
     }
 
     /**
@@ -60,17 +63,32 @@ public final class BridgeClient implements AutoCloseable {
      * {@code touchProximity} (nível, algo perto agora) são a família de
      * sensores de toque decidida pelo usuário (20/09/2026, ver
      * {@link TouchSensor}); {@code raining} (nível, {@code World#hasStorm()})
-     * é o sensor do subcircuito `hygro` (21/09/2026) — os três já são
-     * consumidos por `server.py` desde que os `Engine`s opcionais
-     * (`bristle_connectome`/`hygro_connectome`) forem passados na
-     * construção do `SimulationServer`.
+     * é o sensor do subcircuito `hygro` (21/09/2026). F8/23-09-2026 —
+     * {@code alarmExplosion} (borda), {@code alarmHostileMob} (nível) e
+     * {@code soundMusic} (nível, 24/09/2026 — jukebox tocando) são o sensor
+     * do subcircuito `johnston` (vento/som, ver {@link AlarmSensor}):
+     * `alarmExplosion`/`alarmHostileMob` deliberadamente mais restritos que
+     * `touchProximity` (só explosão e mob HOSTIL, não qualquer proximidade)
+     * — achado do usuário citando Eberl, Hardy &amp; Kernan 2000 (toque e
+     * som compartilham mecanismo de transdução em Drosophila, mas toque com
+     * objeto pequeno/inofensivo não dispara fuga); `soundMusic` cobre som
+     * AMBIENTE, não só ameaça, pedido do usuário depois de testar perto de
+     * uma jukebox. F9/AD-20 (24/09/2026) — {@code loomingThreat} (nível,
+     * {@link LoomingSensor}): distância até ameaça mais próxima caindo
+     * rápido, proxy de engenharia pra taxa de expansão angular (looming de
+     * verdade). Todos já são consumidos por `server.py` desde que os
+     * `Engine`s opcionais (`bristle_connectome`/`hygro_connectome`/
+     * `johnston_connectome`/`escape_connectome`) forem passados na
+     * construção do {@code SimulationServer}.
      *
      * @throws IOException se a conexão cair — quem chama decide se reconecta
      *     ou segue sem atuar neste tick; nunca esperar aqui.
      */
     public JsonObject sendSensorAndReceiveMotor(
             double light, double dorsalLight, boolean damage,
-            boolean touchContact, boolean touchProximity, boolean raining, long tMs,
+            boolean touchContact, boolean touchProximity, boolean raining,
+            boolean alarmExplosion, boolean alarmHostileMob, boolean soundMusic,
+            boolean loomingThreat, long tMs,
             Collection<String> mute, StimulateSpec stimulate
     ) throws IOException {
         JsonObject sensor = new JsonObject();
@@ -81,6 +99,10 @@ public final class BridgeClient implements AutoCloseable {
         sensor.addProperty("touch_contact", touchContact);
         sensor.addProperty("touch_proximity", touchProximity);
         sensor.addProperty("raining", raining);
+        sensor.addProperty("alarm_explosion", alarmExplosion);
+        sensor.addProperty("alarm_hostile_mob", alarmHostileMob);
+        sensor.addProperty("sound_music", soundMusic);
+        sensor.addProperty("looming_threat", loomingThreat);
         if (mute != null) {
             JsonArray muteArray = new JsonArray();
             mute.forEach(muteArray::add);

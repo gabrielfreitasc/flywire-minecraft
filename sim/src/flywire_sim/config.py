@@ -55,6 +55,15 @@ PHOTORECEPTOR_SIGN = -1
 OLFACTORY_RECEPTOR_SIGN = 1
 ANTENNAL_LOBE_LOCAL_NEURON_SIGN = -1
 
+# RN-01a/AD-19 — mesmo padrão de artefato, achado ao investigar o
+# subcircuito `johnston` (F8, vento/som): neurônios do órgão de Johnston
+# (`cell_sub_class` em {"wind_gravity", "auditory"}) são colinérgicos —
+# estabelecido via expressão de ChAT (Kitamoto et al. 1995, J Neurobiol
+# 28:70-81; Yasuyama & Salvaterra 1999 — mesmos autores que já confirmam
+# identidade colinérgica dos ORNs em RN-01a/AD-18). Ver RN-01a em
+# docs/04-regras-de-negocio.md.
+JOHNSTON_ORGAN_SIGN = 1
+
 # ------------------------------------------------------------ modelo (RN-07)
 DT_MS = 1.0                # passo de integração
 V_REST = 0.0               # potencial de repouso (normalizado)
@@ -119,6 +128,23 @@ SENSOR_TOUCH_AMPLITUDE = 2.0
 # calibrado contra dinâmica real de chuva no Minecraft ainda.
 SENSOR_RAIN_AMPLITUDE = 2.0
 
+# F8 — amplitude de estímulo na semente do subcircuito `johnston` quando
+# `alarm_explosion`/`alarm_hostile_mob` indicam alarme (ligado/desligado,
+# mesma lógica de SENSOR_TOUCH_AMPLITUDE — evento discreto, não nível
+# contínuo). MESMO valor usado em `tools/johnston_calibration_check.py`,
+# onde já foi validado (RN-09: diff média=433,87 no grupo excitatório,
+# p≈0, N=30) — mesma disciplina das duas constantes acima. Não calibrado
+# contra dinâmica real de alarme no Minecraft ainda.
+SENSOR_ALARM_AMPLITUDE = 2.0
+
+# F9 — amplitude de estímulo na semente do subcircuito `escape` (LC4/LPLC2,
+# detectores de looming — ver AD-20) quando o sensor de ameaça no jogo
+# indica aproximação rápida (ligado/desligado, mesma lógica das três
+# constantes acima). MESMO valor usado em `tools/escape_calibration_check.py`
+# — mesma disciplina, não recalibrado contra dinâmica real de looming no
+# Minecraft ainda (nem o sensor do lado do plugin existe ainda).
+SENSOR_LOOMING_AMPLITUDE = 2.0
+
 # ------------------------------------------------------------------ RN-08
 # Escala usada para normalizar taxa de disparo (Hz) em (-1, 1) via tanh.
 # Ordem de grandeza da taxa basal observada no subcircuito v1 (RN-09) com
@@ -128,3 +154,19 @@ SENSOR_RAIN_AMPLITUDE = 2.0
 # topologia de sinal validada — ver motor.py e RN-08/RN-09 em
 # docs/04-regras-de-negocio.md).
 MOTOR_RATE_SCALE = 30.0
+
+# F9 (25/09/2026) — escala PRÓPRIA do canal `escape_drive` (DNp01+DNp02, só
+# 4 neurônios — ver `escape_motor.py`). Achado real, servidor real: com
+# MOTOR_RATE_SCALE genérico (30, calibrado pro ocelar inteiro), a taxa
+# BASAL desse grupo pequeno e muito convergente já satura o tanh — medido
+# isolado (`tools/escape_calibration_check.py`-style, sem estímulo): média
+# 38,3 Hz, desvio 10,0, p95=55,0 Hz. Com escala 30, isso vira tanh
+# média=0,830 (73% das amostras já acima de um limiar de 0,8 SEM nenhum
+# estímulo) — mesmo tipo de erro de calibração que já aconteceu com
+# `GROOMING_THRESHOLD` (F7: baseline perto demais do limiar), mas aqui a
+# causa é a ESCALA, não o limiar. Estimulado (`SENSOR_LOOMING_AMPLITUDE`):
+# 340 Hz, desvio 0,0 (satura, ~68% do teto teórico de 500 Hz dado o
+# refratário de 2 ms). Escala 150 separa bem as duas distribuições: tanh
+# baseline média=0,249 (p95=0,351), tanh estimulado=0,979 — gap de quase
+# 0,63 entre as duas, bem mais folgado que o do grooming original.
+ESCAPE_MOTOR_RATE_SCALE = 150.0

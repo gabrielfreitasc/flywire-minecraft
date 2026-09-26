@@ -42,6 +42,8 @@ public final class ControlLoop {
     private final FlywireBeeMarker marker;
     private final DamageTracker damageTracker;
     private final TouchSensor touchSensor = new TouchSensor();
+    private final AlarmSensor alarmSensor; // F8 — vento/som (johnston)
+    private final LoomingSensor loomingSensor = new LoomingSensor(); // F9/AD-20 — looming (escape)
     private final String bridgeHost;
     private final int bridgePort;
 
@@ -50,6 +52,7 @@ public final class ControlLoop {
     private static final int HUD_EVERY_TICKS = 4;    // 5Hz — F6, painel "Flywire Bee Live"
 
     private final ActivityVisualizer visualizer = new ActivityVisualizer();
+    private final StatusLabel statusLabel = new StatusLabel(); // F9 — balão de texto acima da abelha
 
     private BridgeClient bridge;
     private ExecutorService bridgeExecutor;
@@ -70,6 +73,14 @@ public final class ControlLoop {
     // tiver hygro_connectome carregado). Só o canal `hygrotaxis`, telemetria
     // pura — ver hygro_motor.py, não entra em MotorMapping.java ainda.
     private volatile JsonObject latestHygroMotor = new JsonObject();
+    // F8 — telemetria do subcircuito johnston (vazio se server.py não tiver
+    // johnston_connectome carregado). Só o canal `startle`, telemetria pura.
+    private volatile JsonObject latestJohnstonMotor = new JsonObject();
+    // F9/AD-20 — telemetria do subcircuito escape (vazio se server.py não
+    // tiver escape_connectome carregado). Só o canal `escape_drive`,
+    // telemetria pura — ver escape_motor.py, não entra em MotorMapping.java
+    // ainda (sem sensor calibrado/lesão em servidor real).
+    private volatile JsonObject latestEscapeMotor = new JsonObject();
     // F7/AD-17 — achado em servidor real (20/09/2026): pausar TouchSensor só
     // ENQUANTO grooming está ativo não bastava. Toda vez que grooming CRUZA
     // o limiar (subindo OU descendo), a velocidade comandada muda de direção
@@ -98,10 +109,19 @@ public final class ControlLoop {
     // de engenharia. Não fabrica sinal nenhum do circuito — é só robustez
     // de física de embodiment, mesma categoria do achado de `setVelocity()`
     // vencendo a IA nativa (ver "Risco investigado" no plugin/README.md).
-    private static final int STUCK_CHECK_TICKS = 40; // 2s a 20Hz
+    // F7/AD-17 — polimento (22/09/2026), pedido do usuário: "travar entre
+    // blocos" (cercada em vários lados) ficava perceptível demais — 2s só
+    // pra DETECTAR que travou, mais um empurrão de força moderada que às
+    // vezes não bastava pra escapar de vez, exigindo vários ciclos de
+    // detecção+empurrão em sequência. Recalibrado: detecção mais rápida
+    // (1s em vez de 2s — ainda uma barra baixa, 0.3 blocos, fácil de
+    // passar em voo livre normal, então não deveria gerar mais falso
+    // positivo) e empurrão mais longo/decisivo (1,5s em vez de 1s,
+    // horizontal maior). Estimativas de engenharia, não calibradas.
+    private static final int STUCK_CHECK_TICKS = 20; // 1s a 20Hz
     private static final double STUCK_DISPLACEMENT_THRESHOLD_BLOCKS = 0.3;
     private static final double RECOVERY_BOOST_BLOCKS_PER_TICK = 0.15;
-    private static final int RECOVERY_BOOST_TICKS = 20; // 1s de empurrão
+    private static final int RECOVERY_BOOST_TICKS = 30; // 1,5s de empurrão
     // F7 — polimento (pendência registrada em docs/03-roadmap-fases.md,
     // 20/09/2026): o empurrão era só vertical, sem componente horizontal pra
     // longe do obstáculo nem giro do corpo, por isso parecia um solavanco em
@@ -110,11 +130,65 @@ public final class ControlLoop {
     // — é a direção que a abelha estava tentando seguir quando esbarrou,
     // logo o obstáculo está aproximadamente nela. Estimativa de engenharia,
     // não calibrada, mesma categoria das constantes acima.
-    private static final double RECOVERY_BOOST_HORIZONTAL_BLOCKS_PER_TICK = 0.10;
+    private static final double RECOVERY_BOOST_HORIZONTAL_BLOCKS_PER_TICK = 0.15;
+    // F9 — bug real, achado do usuário (25/09/2026): "oposto de heading"
+    // parte de uma suposição que só vale na PRIMEIRA tentativa — que o
+    // obstáculo está aproximadamente na direção que ela tentava seguir.
+    // Numa área reclusa/cercada por vários lados, isso pode simplesmente
+    // estar ERRADO (o obstáculo real pode estar em qualquer direção), e
+    // como `heading` (yaw_steering do ocelar) gira muito devagar
+    // (MAX_YAW_RADIANS_PER_TICK=0,01), tentativas consecutivas usavam
+    // quase a MESMA direção — log real mostrou o mesmo vetor de empurrão
+    // (~variação de 0,001) se repetindo por dezenas de segundos, sem nunca
+    // liberar. Corrigido escalando a estratégia: a PRIMEIRA falha ainda usa
+    // a heurística original (barata, funciona na maioria dos casos — morro/
+    // degrau únicos); a partir da SEGUNDA falha consecutiva no mesmo
+    // episódio de travamento, sorteia uma direção horizontal aleatória a
+    // cada nova tentativa — explora em vez de insistir numa hipótese que já
+    // provou estar errada. Reseta assim que ela volta a se mover de verdade.
+    private static final java.util.Random STUCK_RECOVERY_RNG = new java.util.Random();
     private Location stuckCheckAnchor = null;
     private int stuckCheckTicksLeft = STUCK_CHECK_TICKS;
     private int recoveryBoostTicksLeft = 0;
     private Vector recoveryEscapeDirection = new Vector(0, 0, 0);
+    private int consecutiveStuckCount = 0;
+
+    // F7/AD-17 — pedido do usuário (22/09/2026): nem todo toque/proximidade
+    // deveria virar pouso-e-limpeza — sem dado químico real da mosca pra
+    // decidir quando, sorteia 50/50 a cada NOVO episódio de grooming
+    // (mesmo instante em que a folga de transição já existente detecta a
+    // subida do limiar): metade das vezes pousa e se limpa (comportamento
+    // original, já validado por lesão), metade só DESVIA — empurrão breve
+    // pra longe da direção atual (mesmo mecanismo/escala do sistema de
+    // recuperação de obstáculo acima, reaproveitado) e depois volta a voar
+    // normal (phototaxis/hygro), ignorando esse episódio de grooming por
+    // completo. Engenharia pra dar variedade de comportamento, NÃO é
+    // achado biológico novo — RN-08/RN-09 e a validação por lesão do
+    // grooming continuam intocadas, isto só decide QUANDO deixar o sinal
+    // já validado controlar o movimento.
+    private static final java.util.Random GROOMING_DODGE_RNG = new java.util.Random();
+    private static final int DODGE_BOOST_TICKS = 20; // ~1s, mesma escala do RECOVERY_BOOST_TICKS
+    private static final double DODGE_BOOST_HORIZONTAL_BLOCKS_PER_TICK = 0.2;
+    private volatile boolean groomingEpisodeIsDodge = false;
+    private int dodgeBoostTicksLeft = 0;
+    private Vector dodgeDirection = new Vector(0, 0, 0);
+
+    // F9 — pedido do usuário (25/09/2026): escape_drive/looming_threat são
+    // sinais de NÍVEL que podem cair rápido (a ameaça mais próxima sai do
+    // raio de busca, ou a distância para de fechar) — sem isto, a fuga
+    // podia durar só 1-2 trocas (menos de 100ms), tempo curto demais pra
+    // observar visualmente o comportamento. Mesmo mecanismo de "trava
+    // temporal" já usado em LANDED_GRACE_TICKS/SHELTER_ABANDON_TICKS: uma
+    // vez que o circuito REAL cruza o limiar, garante pelo menos
+    // ESCAPE_LATCH_TICKS de fuga visível, recarregando a contagem enquanto
+    // a ameaça continuar de verdade (não é um tempo fixo desde o disparo —
+    // se a ameaça persistir, a fuga persiste). Direção é capturada uma vez
+    // por recarga (não recalculada a cada tick do latch) — estável o
+    // bastante pra dar pra acompanhar visualmente, mesmo se a ameaça saltar
+    // de posição entre trocas.
+    private static final int ESCAPE_LATCH_TICKS = 50; // ~2,5s a 20Hz, dentro do pedido de "2 a 3 segundos"
+    private int escapeLatchTicksLeft = 0;
+    private Vector escapeLatchDirection = new Vector(0, 0, 0);
     // F7/AD-17 — bug 2 real (21/09/2026, ver MotorMapping.toVelocity):
     // bee.isOnGround()/isInWater() não são estáveis tick a tick na
     // superfície da água (física de boiar do jogo + leitura fora da thread
@@ -133,6 +207,27 @@ public final class ControlLoop {
     // LANDED_GRACE_TICKS depois do último toque confirmado — absorve
     // flicker de 1 tick (bug 2) sem perder decolagem de verdade (bug 3).
     private static final int LANDED_GRACE_TICKS = 10; // ~0,5s a 20Hz, mesma ordem de GROOMING_TRANSITION_GRACE_TICKS
+    // F7/AD-17 — bug 7 real (22/09/2026), regressão do fix do bug 6 (abelha
+    // flutuando parada): usar a MESMA janela curta (LANDED_GRACE_TICKS,
+    // 0,5s) pra desfazer um abrigo já achado fez ela abandonar cobertura
+    // real toda vez que um flicker normal de onGround (bug 2, mesma
+    // instabilidade de sempre, agora batendo numa abelha PARADA embaixo de
+    // galho/folha em vez de em voo) durasse um pouco mais que 0,5s — saía
+    // voando de novo achando que tinha perdido o abrigo, mesmo continuando
+    // no mesmo lugar. Corrigido separando os dois: LANDED_GRACE_TICKS
+    // continua decidindo mergulhar vs. procurar (precisa ser curto, senão
+    // ela demora pra reagir de verdade a ficar no ar), mas desistir de um
+    // abrigo já achado usa uma janela bem mais tolerante
+    // (SHELTER_ABANDON_TICKS, poucos segundos) — flicker de meio segundo
+    // não derruba mais uma abelha genuinamente descansando; só ausência
+    // sustentada de verdade (o cenário do bug 6, minutos flutuando) derruba.
+    private static final int SHELTER_ABANDON_TICKS = 60; // ~3s a 20Hz
+    // F7/AD-17 — busca guiada (23/09/2026, ver ShelterSensor.findNearbyShelterDirection
+    // e docstring do parâmetro shelterDirectionHint em MotorMapping.toVelocity):
+    // distância de sondagem, em blocos. Estimativa de engenharia — pequena o
+    // bastante pra ser barata (8 lookups de heightmap por troca), grande o
+    // bastante pra alcançar um abrigo pequeno perto antes dela passar batido.
+    private static final int SHELTER_LOOK_AHEAD_BLOCKS = 4;
     private volatile int ticksSinceGroundOrWaterContact = LANDED_GRACE_TICKS;
     // F7/AD-17 — decisão do usuário (21/09/2026): "abrigo" só conta com
     // teto de verdade acima (ShelterSensor), não só ter tocado chão/água
@@ -140,6 +235,13 @@ public final class ControlLoop {
     // real; só destrava quando o canal do hygro desativa. Sem conceito
     // equivalente pro grooming (toque não tem noção de "abrigo").
     private volatile boolean shelterFoundThisEpisode = false;
+    // F7/AD-17 — polimento (22/09/2026): diferente de ticksSinceGroundOrWaterContact
+    // (janela CURTA, esquece depois de LANDED_GRACE_TICKS no ar), este fica
+    // true PRA SEMPRE dentro do episódio assim que ela toca chão/água pela
+    // primeira vez — usado só pra MotorMapping saber se o próximo mergulho
+    // é o primeiro do episódio (rápido) ou uma re-descida durante a busca
+    // (suave, ver SEARCH_REDESCENT_BLOCKS_PER_TICK).
+    private volatile boolean hasTouchedThisEpisode = false;
 
     private volatile long exchangeCount = 0;
     private volatile long exchangeFailures = 0;
@@ -288,12 +390,14 @@ public final class ControlLoop {
             Plugin plugin,
             FlywireBeeMarker marker,
             DamageTracker damageTracker,
+            AlarmSensor alarmSensor,
             String bridgeHost,
             int bridgePort
     ) {
         this.plugin = plugin;
         this.marker = marker;
         this.damageTracker = damageTracker;
+        this.alarmSensor = alarmSensor;
         this.bridgeHost = bridgeHost;
         this.bridgePort = bridgePort;
     }
@@ -315,14 +419,22 @@ public final class ControlLoop {
         lastAppliedVelocity = new Vector(0, 0, 0);
         heading = null; // F6/AD-16 — começa do zero, da orientação real da abelha
         touchSensor.reset(); // F7/AD-17 — sem posição anterior pra comparar ainda
+        loomingSensor.reset(); // F9/AD-20 — sem distância anterior pra comparar ainda
         wasGroomingActive = false;
         groomingGraceTicksLeft = 0;
         stuckCheckAnchor = null;
         stuckCheckTicksLeft = STUCK_CHECK_TICKS;
         recoveryBoostTicksLeft = 0;
         recoveryEscapeDirection = new Vector(0, 0, 0);
+        consecutiveStuckCount = 0;
+        groomingEpisodeIsDodge = false;
+        dodgeBoostTicksLeft = 0;
+        dodgeDirection = new Vector(0, 0, 0);
+        escapeLatchTicksLeft = 0;
+        escapeLatchDirection = new Vector(0, 0, 0);
         ticksSinceGroundOrWaterContact = LANDED_GRACE_TICKS;
         shelterFoundThisEpisode = false;
+        hasTouchedThisEpisode = false;
         tickTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::onTick, 0L, 1L);
     }
 
@@ -332,6 +444,7 @@ public final class ControlLoop {
             tickTask = null;
         }
         LiveHud.clear(plugin);
+        statusLabel.remove(); // F9 — não deixa o marcador do balão de texto sobrando no mundo
         if (bridgeExecutor != null) {
             bridgeExecutor.shutdownNow();
             bridgeExecutor = null;
@@ -365,6 +478,18 @@ public final class ControlLoop {
             // Acabou de cruzar o limiar (subindo ou descendo) — folga, ver
             // docstring do campo acima.
             groomingGraceTicksLeft = GROOMING_TRANSITION_GRACE_TICKS;
+            if (groomingActive) {
+                // F7/AD-17 — novo episódio começando: sorteia pousar vs
+                // desviar (ver docstring de groomingEpisodeIsDodge).
+                groomingEpisodeIsDodge = GROOMING_DODGE_RNG.nextBoolean();
+                if (groomingEpisodeIsDodge) {
+                    dodgeBoostTicksLeft = DODGE_BOOST_TICKS;
+                    Vector awayFrom = heading != null ? heading : bee.getLocation().getDirection();
+                    dodgeDirection = horizontalOpposite(awayFrom);
+                }
+                plugin.getLogger().info("[ControlLoop] episódio de grooming — sorteio: "
+                        + (groomingEpisodeIsDodge ? "desvio" : "pouso e limpeza"));
+            }
         }
         wasGroomingActive = groomingActive;
 
@@ -380,6 +505,10 @@ public final class ControlLoop {
             touchSensor.recordTick(bee, lastAppliedVelocity);
         }
 
+        // F9/AD-20 — sem interação com grooming/pouso (diferente do touch
+        // acima) — só rastreia distância até ameaça mais próxima, todo tick.
+        loomingSensor.recordTick(bee);
+
         // F7/AD-17 — recuperação mecânica de obstáculo lateral, independente
         // da decisão do circuito (ver docstring do campo). Mede a cada
         // STUCK_CHECK_TICKS; não reseta o relógio durante um empurrão em
@@ -389,7 +518,21 @@ public final class ControlLoop {
         } else if (recoveryBoostTicksLeft == 0) {
             stuckCheckTicksLeft--;
             if (stuckCheckTicksLeft <= 0) {
-                double moved = bee.getLocation().distance(stuckCheckAnchor);
+                // F7/AD-17 — achado real (22/09/2026): abelha presa entre
+                // blocos nas duas laterais + na frente (retaguarda livre)
+                // durante a busca de abrigo, sistema de recuperação NUNCA
+                // disparou. Causa: distance() mede 3D total, e o planeio da
+                // busca (SEARCH_HOVER_BLOCKS_PER_TICK) sozinho já produz
+                // deslocamento vertical suficiente pra passar do limiar de
+                // 0,3 blocos — o detector achava "não travou" só por ela
+                // estar subindo/descendo, mesmo presa na horizontal.
+                // Corrigido medindo só X/Z: o que importa pra saber se ela
+                // está escapando de um cercado lateral é progresso
+                // horizontal, não altitude.
+                Location current = bee.getLocation();
+                double dx = current.getX() - stuckCheckAnchor.getX();
+                double dz = current.getZ() - stuckCheckAnchor.getZ();
+                double moved = Math.sqrt(dx * dx + dz * dz);
                 // F7/AD-17 — pouso do grooming é sempre intencional dentro da
                 // janela de tolerância (ticksSinceGroundOrWaterContact, bug 3
                 // em ControlLoop). Busca de abrigo (hygro) só conta como
@@ -404,12 +547,27 @@ public final class ControlLoop {
                         || (shelterFoundThisEpisode
                                 && MotorMapping.isSeekingShelterActive(latestHygroMotor));
                 if (moved < STUCK_DISPLACEMENT_THRESHOLD_BLOCKS && !intentionalLanding) {
+                    consecutiveStuckCount++;
                     recoveryBoostTicksLeft = RECOVERY_BOOST_TICKS;
-                    Vector commandedDirection = heading != null ? heading : bee.getLocation().getDirection();
-                    recoveryEscapeDirection = horizontalOpposite(commandedDirection);
+                    if (consecutiveStuckCount == 1) {
+                        // Primeira falha: heurística barata, funciona na
+                        // maioria dos casos (obstáculo único na direção que
+                        // ela tentava seguir).
+                        Vector commandedDirection = heading != null ? heading : bee.getLocation().getDirection();
+                        recoveryEscapeDirection = horizontalOpposite(commandedDirection);
+                    } else {
+                        // F9 — 2ª+ falha consecutiva: a heurística acima já
+                        // provou estar errada pra este travamento — explora
+                        // em vez de repetir a mesma direção (ver docstring
+                        // do campo STUCK_RECOVERY_RNG).
+                        recoveryEscapeDirection = randomHorizontalDirection();
+                    }
                     plugin.getLogger().info(String.format(Locale.ROOT,
-                            "[ControlLoop] recuperação: só %.2f blocos em %d ticks — empurrão pra cima e pra longe (%s)",
-                            moved, STUCK_CHECK_TICKS, recoveryEscapeDirection));
+                            "[ControlLoop] recuperação (tentativa %d): só %.2f blocos em %d ticks — "
+                                    + "empurrão pra cima e pra longe (%s)",
+                            consecutiveStuckCount, moved, STUCK_CHECK_TICKS, recoveryEscapeDirection));
+                } else {
+                    consecutiveStuckCount = 0;
                 }
                 stuckCheckAnchor = bee.getLocation();
                 stuckCheckTicksLeft = STUCK_CHECK_TICKS;
@@ -426,6 +584,15 @@ public final class ControlLoop {
                     RECOVERY_BOOST_BLOCKS_PER_TICK,
                     recoveryEscapeDirection.getZ() * RECOVERY_BOOST_HORIZONTAL_BLOCKS_PER_TICK);
             recoveryBoostTicksLeft--;
+        } else if (dodgeBoostTicksLeft > 0) {
+            // F7/AD-17 — episódio de grooming sorteado como "desvio" (ver
+            // groomingEpisodeIsDodge): empurrão breve pra longe, puramente
+            // horizontal, mesmo mecanismo do sistema de recuperação acima.
+            velocityToApply = new Vector(
+                    dodgeDirection.getX() * DODGE_BOOST_HORIZONTAL_BLOCKS_PER_TICK,
+                    0,
+                    dodgeDirection.getZ() * DODGE_BOOST_HORIZONTAL_BLOCKS_PER_TICK);
+            dodgeBoostTicksLeft--;
         } else {
             velocityToApply = latestVelocity;
         }
@@ -452,10 +619,18 @@ public final class ControlLoop {
         }
 
         if (visualize && tickCount % VISUALIZE_EVERY_TICKS == 0) {
-            visualizer.render(bee, latestMotor, latestBristleMotor, latestHygroMotor);
+            visualizer.render(bee, latestMotor, latestBristleMotor, latestHygroMotor, latestJohnstonMotor,
+                    latestEscapeMotor);
+            // F9 — mesma cadência das partículas, texto não precisa de 20Hz.
+            // escapeLatchTicksLeft é campo (não local), seguro de ler aqui
+            // mesmo computado mais abaixo nesta troca — reflete o valor do
+            // FIM do tick anterior, defasagem de 1 tick (50ms), imperceptível.
+            statusLabel.update(bee, latestBristleMotor, latestHygroMotor, latestJohnstonMotor,
+                    groomingEpisodeIsDodge, shelterFoundThisEpisode, escapeLatchTicksLeft > 0);
         }
         if (tickCount % HUD_EVERY_TICKS == 0) {
-            LiveHud.update(plugin, latestMotor, latestActiveDn, latestBristleMotor, latestHygroMotor);
+            LiveHud.update(plugin, latestMotor, latestActiveDn, latestBristleMotor, latestHygroMotor,
+                    latestJohnstonMotor, latestEscapeMotor);
         }
 
         double realLight = bee.getLocation().getBlock().getLightLevel() / 15.0;
@@ -476,11 +651,19 @@ public final class ControlLoop {
             String hygrotaxis = latestHygroMotor.has("hygrotaxis")
                     ? String.format(Locale.ROOT, "%.3f", latestHygroMotor.get("hygrotaxis").getAsDouble())
                     : "-";
+            String startle = latestJohnstonMotor.has("startle")
+                    ? String.format(Locale.ROOT, "%.3f", latestJohnstonMotor.get("startle").getAsDouble())
+                    : "-";
+            String escapeDrive = latestEscapeMotor.has("escape_drive")
+                    ? String.format(Locale.ROOT, "%.3f", latestEscapeMotor.get("escape_drive").getAsDouble())
+                    : "-";
             plugin.getLogger().info(String.format(Locale.ROOT,
                     "[ControlLoop] light=%.2f (real=%.2f, forçado=%s) vel=%s trocas=%d falhas=%d "
-                            + "proximity=%s grooming=%s onGround=%s raining=%s hygrotaxis=%s",
+                            + "proximity=%s grooming=%s onGround=%s raining=%s hygrotaxis=%s "
+                            + "hostileMob=%s startle=%s looming=%s escapeDrive=%s",
                     light, realLight, forced, latestVelocity, exchangeCount, exchangeFailures,
-                    touchSensor.isNearSomething(bee), grooming, bee.isOnGround(), raining, hygrotaxis));
+                    touchSensor.isNearSomething(bee), grooming, bee.isOnGround(), raining, hygrotaxis,
+                    alarmSensor.isHostileMobNearby(bee), startle, loomingSensor.isLoomingThreat(), escapeDrive));
         }
         tickCount++;
 
@@ -501,11 +684,49 @@ public final class ControlLoop {
             plugin.getLogger().info("[TouchSensor] touch_contact = true "
                     + "(deslocamento real bem abaixo do esperado pela velocidade comandada)");
         }
+        // F8 — sensor de "som" (ver AlarmSensor): explosão é borda, mob
+        // hostil e música são nível, mesma dualidade da família de toque
+        // acima. Música: achado do usuário (24/09/2026) — som ambiente
+        // também conta, não só ameaça.
+        boolean alarmExplosion = alarmSensor.consumeExplosion();
+        boolean alarmHostileMob = alarmSensor.isHostileMobNearby(bee);
+        boolean soundMusic = alarmSensor.isMusicNearby(bee);
+        if (alarmExplosion) {
+            plugin.getLogger().info("[AlarmSensor] alarm_explosion = true (explosão perto da abelha)");
+        }
+        // F9/AD-20 — sensor do subcircuito escape (ver LoomingSensor): nível,
+        // resultado do recordTick já rodado nesta chamada de onTick, acima.
+        boolean loomingThreat = loomingSensor.isLoomingThreat();
+        // F9 — bug real, servidor real (25/09/2026): World#getNearbyEntities
+        // (usado por fleeDirectionAwayFromNearestThreat) só pode ser chamado
+        // na thread principal — Paper derruba com AsyncCatcher se chamado de
+        // dentro do lambda do bridgeExecutor (thread "flywire-control-bridge"),
+        // travando a troca ANTES de atualizar latestVelocity/latestBristleMotor
+        // (grooming/etc. congelavam no último valor bem-sucedido). Corrigido
+        // computando aqui, sempre (mesmo padrão de alarmHostileMob/
+        // touchProximity acima), e só USANDO o resultado lá embaixo se
+        // escape estiver ativo — nunca chamar Bukkit API de dentro do lambda.
+        Vector nearestThreatFleeDirection = loomingSensor.fleeDirectionAwayFromNearestThreat(bee);
         long tMs = System.currentTimeMillis();
         // F6/AD-16: heading é a direção COMANDADA da troca anterior, não a
         // orientação real da abelha — só cai pra getDirection() se ainda não
         // tem estado (início do controle ou depois de resetHeading()).
         Vector currentHeading = heading != null ? heading : bee.getLocation().getDirection();
+
+        // F9 — trava temporal da fuga (ver docstring de ESCAPE_LATCH_TICKS):
+        // usa latestEscapeMotor (estado real do último frame recebido, já
+        // na thread principal — mesmo padrão de groomingActive no topo de
+        // onTick), não o que vier na resposta desta troca (ainda em
+        // andamento). Recarrega a contagem E a direção capturada sempre que
+        // o circuito real está acima do limiar; só deixa a contagem cair
+        // quando o circuito real já desativou.
+        if (MotorMapping.isEscapeActive(latestEscapeMotor)) {
+            escapeLatchTicksLeft = ESCAPE_LATCH_TICKS;
+            escapeLatchDirection = nearestThreatFleeDirection != null ? nearestThreatFleeDirection : currentHeading;
+        } else if (escapeLatchTicksLeft > 0) {
+            escapeLatchTicksLeft--;
+        }
+        boolean escapeLatched = escapeLatchTicksLeft > 0;
 
         // Só marca muteDirty=false DEPOIS do envio ter sucesso (dentro do try
         // abaixo) — se a troca falhar, a mudança de mute não pode se perder
@@ -526,6 +747,9 @@ public final class ControlLoop {
         // F7/AD-17 — experimento de lesão do hygro: mascara o que é ENVIADO,
         // não o que é detectado (mesma lógica das linhas acima).
         boolean rainingToSend = hygroLesioned ? false : raining;
+        // F8 — ainda sem experimento de lesão pro johnston (mesma sequência
+        // do hygro: sensor → protocolo → simulador antes de qualquer
+        // experimento) — envia sempre o valor real, sem máscara ainda.
 
         bridgeExecutor.submit(() -> {
             try {
@@ -534,7 +758,8 @@ public final class ControlLoop {
                 }
                 JsonObject response = bridge.sendSensorAndReceiveMotor(
                         light, dorsalLight, damageToSend, touchContactToSend, touchProximityToSend,
-                        rainingToSend, tMs, muteToSend, stimulateToSend);
+                        rainingToSend, alarmExplosion, alarmHostileMob, soundMusic, loomingThreat, tMs,
+                        muteToSend, stimulateToSend);
                 if (sendMuteThisTime) {
                     muteDirty = false;
                 }
@@ -551,8 +776,12 @@ public final class ControlLoop {
                 // movimento é suprimido, pra não deixar grooming (acionado
                 // por estar perto da árvore que dá abrigo) mascarar a busca
                 // de abrigo do hygro.
+                // F7/AD-17 — episódio de grooming sorteado como "desvio" (ver
+                // groomingEpisodeIsDodge): mesma técnica, ignora bristle_motor
+                // pro resto do episódio inteiro (não só durante o empurrão),
+                // pra deixar phototaxis/hygro retomarem o controle normal.
                 JsonObject responseForMotor = response;
-                if (bristleSuppressedForExperiment) {
+                if (bristleSuppressedForExperiment || groomingEpisodeIsDodge) {
                     responseForMotor = response.deepCopy();
                     responseForMotor.remove("bristle_motor");
                 }
@@ -570,8 +799,10 @@ public final class ControlLoop {
                 if (!(groomingActiveNow || shelterActiveNow)) {
                     ticksSinceGroundOrWaterContact = LANDED_GRACE_TICKS; // próximo episódio começa "no ar"
                     shelterFoundThisEpisode = false;
+                    hasTouchedThisEpisode = false;
                 } else if (touchingGroundOrWater) {
                     ticksSinceGroundOrWaterContact = 0;
+                    hasTouchedThisEpisode = true;
                     // F7/AD-17 — decisão do usuário: só conta abrigo com
                     // teto de verdade acima (ver ShelterSensor). Só checa
                     // geometria quando já tocou algo (barato: não varre
@@ -580,24 +811,57 @@ public final class ControlLoop {
                     if (shelterActiveNow && !shelterFoundThisEpisode
                             && ShelterSensor.hasShelterAbove(bee.getLocation())) {
                         shelterFoundThisEpisode = true;
-                        // F7/AD-17 — diagnóstico (22/09/2026, usuário relatou
-                        // parar sem cobertura visível): loga o valor bruto de
-                        // getLightFromSky() e a posição no instante exato da
-                        // decisão, pra confirmar se é o sensor errando (ex.:
-                        // chuva mexendo no valor) ou um bloco isolado real
-                        // (folha/borda) que não parece "abrigo" a olho nu.
+                        // F7/AD-17 — diagnóstico (22/09/2026, mantido após a
+                        // troca pro heightmap MOTION_BLOCKING_NO_LEAVES —
+                        // ver ShelterSensor): loga a posição e a altura do
+                        // teto mais próximo detectado, pra facilitar
+                        // conferir no mundo se bateu com um lugar real.
                         Location loc = bee.getLocation();
                         plugin.getLogger().info(String.format(Locale.ROOT,
-                                "[ControlLoop] abrigo encontrado — skylight=%d em (%.1f, %.1f, %.1f)",
-                                loc.getBlock().getLightFromSky(), loc.getX(), loc.getY(), loc.getZ()));
+                                "[ControlLoop] abrigo encontrado em (%.1f, %.1f, %.1f)",
+                                loc.getX(), loc.getY(), loc.getZ()));
                     }
-                } else if (ticksSinceGroundOrWaterContact < LANDED_GRACE_TICKS) {
+                } else {
+                    // F7/AD-17 — bugs 6 e 7 (ver docstring de
+                    // SHELTER_ABANDON_TICKS): cresce sem teto enquanto não
+                    // toca nada, pra alimentar as DUAS janelas separadas
+                    // abaixo (curta pra decisão de voo, longa pra desistir
+                    // de abrigo já achado) — antes tinha um teto em
+                    // LANDED_GRACE_TICKS que impedia alcançar o limiar maior.
                     ticksSinceGroundOrWaterContact++;
+                    if (ticksSinceGroundOrWaterContact >= SHELTER_ABANDON_TICKS && shelterFoundThisEpisode) {
+                        shelterFoundThisEpisode = false;
+                    }
                 }
                 boolean landed = ticksSinceGroundOrWaterContact < LANDED_GRACE_TICKS;
+                // F7/AD-17 — bug 7: `sheltered` NÃO depende de `landed` aqui
+                // (janela curta demais, flicker normal derrubava abrigo
+                // genuíno) — confia na trava, que só se desfaz sozinha após
+                // SHELTER_ABANDON_TICKS de ausência sustentada (bem mais
+                // tolerante). MotorMapping.toVelocity para só com
+                // `sheltered` (voltou a checar só isso, sem exigir `landed`
+                // no mesmo instante).
                 boolean sheltered = shelterFoundThisEpisode;
 
-                latestVelocity = MotorMapping.toVelocity(responseForMotor, newHeading, landed, sheltered);
+                // F7/AD-17 — busca guiada (23/09/2026, pedido do usuário):
+                // só sonda quando ainda procurando (senão gasta lookup à
+                // toa) — ver docstring de MotorMapping.toVelocity.
+                Vector shelterDirectionHint = (shelterActiveNow && !sheltered)
+                        ? ShelterSensor.findNearbyShelterDirection(bee.getLocation(), SHELTER_LOOK_AHEAD_BLOCKS)
+                        : null;
+
+                // F9 — usa a trava temporal já computada na thread principal
+                // (escapeLatched/escapeLatchDirection, ver onTick) — nunca
+                // chamar Bukkit API aqui dentro (thread errada, bug real
+                // corrigido 25/09/2026) nem reagir só ao estado bruto desta
+                // troca (sinal cai rápido demais pra dar pra ver a fuga,
+                // pedido do usuário).
+                Vector escapeDirectionHint = escapeLatched ? escapeLatchDirection : null;
+
+                latestVelocity = MotorMapping.toVelocity(
+                        responseForMotor, newHeading, landed, sheltered, hasTouchedThisEpisode,
+                        escapeLatched,
+                        shelterDirectionHint, escapeDirectionHint);
                 heading = newHeading;
                 JsonObject motor = response.getAsJsonObject("motor");
                 if (motor != null) {
@@ -613,6 +877,14 @@ public final class ControlLoop {
                 JsonObject hygroMotor = response.getAsJsonObject("hygro_motor");
                 if (hygroMotor != null) {
                     latestHygroMotor = hygroMotor;
+                }
+                JsonObject johnstonMotor = response.getAsJsonObject("johnston_motor");
+                if (johnstonMotor != null) {
+                    latestJohnstonMotor = johnstonMotor;
+                }
+                JsonObject escapeMotor = response.getAsJsonObject("escape_motor");
+                if (escapeMotor != null) {
+                    latestEscapeMotor = escapeMotor;
                 }
                 exchangeCount++;
             } catch (IOException e) {
@@ -640,6 +912,18 @@ public final class ControlLoop {
             return new Vector(0, 0, 0);
         }
         return horizontal.normalize().multiply(-1);
+    }
+
+    /**
+     * F9 — direção horizontal (unitária, Y=0) aleatória, usada pela
+     * recuperação mecânica a partir da 2ª falha consecutiva no mesmo
+     * travamento (ver docstring de {@code STUCK_RECOVERY_RNG}) — explora em
+     * vez de repetir uma heurística que já provou estar errada pra este
+     * obstáculo específico.
+     */
+    private static Vector randomHorizontalDirection() {
+        double angle = STUCK_RECOVERY_RNG.nextDouble() * 2 * Math.PI;
+        return new Vector(Math.cos(angle), 0, Math.sin(angle));
     }
 
     private void closeQuietly() {
