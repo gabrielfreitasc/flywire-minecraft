@@ -44,6 +44,8 @@ public final class ControlLoop {
     private final TouchSensor touchSensor = new TouchSensor();
     private final AlarmSensor alarmSensor; // F8 — vento/som (johnston)
     private final LoomingSensor loomingSensor = new LoomingSensor(); // F9/AD-20 — looming (escape)
+    private final TasteSensor tasteSensor = new TasteSensor(); // F10 — comida (taste)
+    private volatile boolean tasteTargetHeldByPlayer = false; // F10 — ver StatusLabel
     private final String bridgeHost;
     private final int bridgePort;
 
@@ -81,6 +83,10 @@ public final class ControlLoop {
     // telemetria pura — ver escape_motor.py, não entra em MotorMapping.java
     // ainda (sem sensor calibrado/lesão em servidor real).
     private volatile JsonObject latestEscapeMotor = new JsonObject();
+    // F10 — telemetria do subcircuito taste (vazio se server.py não tiver
+    // taste_connectome carregado). Só o canal `appetite`, telemetria pura —
+    // ver taste_motor.py, não entra em MotorMapping.java ainda.
+    private volatile JsonObject latestTasteMotor = new JsonObject();
     // F7/AD-17 — achado em servidor real (20/09/2026): pausar TouchSensor só
     // ENQUANTO grooming está ativo não bastava. Toda vez que grooming CRUZA
     // o limiar (subindo OU descendo), a velocidade comandada muda de direção
@@ -432,6 +438,7 @@ public final class ControlLoop {
         dodgeDirection = new Vector(0, 0, 0);
         escapeLatchTicksLeft = 0;
         escapeLatchDirection = new Vector(0, 0, 0);
+        tasteTargetHeldByPlayer = false;
         ticksSinceGroundOrWaterContact = LANDED_GRACE_TICKS;
         shelterFoundThisEpisode = false;
         hasTouchedThisEpisode = false;
@@ -620,17 +627,18 @@ public final class ControlLoop {
 
         if (visualize && tickCount % VISUALIZE_EVERY_TICKS == 0) {
             visualizer.render(bee, latestMotor, latestBristleMotor, latestHygroMotor, latestJohnstonMotor,
-                    latestEscapeMotor);
+                    latestEscapeMotor, latestTasteMotor);
             // F9 — mesma cadência das partículas, texto não precisa de 20Hz.
             // escapeLatchTicksLeft é campo (não local), seguro de ler aqui
             // mesmo computado mais abaixo nesta troca — reflete o valor do
             // FIM do tick anterior, defasagem de 1 tick (50ms), imperceptível.
-            statusLabel.update(bee, latestBristleMotor, latestHygroMotor, latestJohnstonMotor,
-                    groomingEpisodeIsDodge, shelterFoundThisEpisode, escapeLatchTicksLeft > 0);
+            statusLabel.update(bee, latestBristleMotor, latestHygroMotor, latestJohnstonMotor, latestTasteMotor,
+                    groomingEpisodeIsDodge, shelterFoundThisEpisode, escapeLatchTicksLeft > 0,
+                    tasteTargetHeldByPlayer);
         }
         if (tickCount % HUD_EVERY_TICKS == 0) {
             LiveHud.update(plugin, latestMotor, latestActiveDn, latestBristleMotor, latestHygroMotor,
-                    latestJohnstonMotor, latestEscapeMotor);
+                    latestJohnstonMotor, latestEscapeMotor, latestTasteMotor);
         }
 
         double realLight = bee.getLocation().getBlock().getLightLevel() / 15.0;
@@ -657,13 +665,17 @@ public final class ControlLoop {
             String escapeDrive = latestEscapeMotor.has("escape_drive")
                     ? String.format(Locale.ROOT, "%.3f", latestEscapeMotor.get("escape_drive").getAsDouble())
                     : "-";
+            String appetite = latestTasteMotor.has("appetite")
+                    ? String.format(Locale.ROOT, "%.3f", latestTasteMotor.get("appetite").getAsDouble())
+                    : "-";
             plugin.getLogger().info(String.format(Locale.ROOT,
                     "[ControlLoop] light=%.2f (real=%.2f, forçado=%s) vel=%s trocas=%d falhas=%d "
                             + "proximity=%s grooming=%s onGround=%s raining=%s hygrotaxis=%s "
-                            + "hostileMob=%s startle=%s looming=%s escapeDrive=%s",
+                            + "hostileMob=%s startle=%s looming=%s escapeDrive=%s food=%s appetite=%s",
                     light, realLight, forced, latestVelocity, exchangeCount, exchangeFailures,
                     touchSensor.isNearSomething(bee), grooming, bee.isOnGround(), raining, hygrotaxis,
-                    alarmSensor.isHostileMobNearby(bee), startle, loomingSensor.isLoomingThreat(), escapeDrive));
+                    alarmSensor.isHostileMobNearby(bee), startle, loomingSensor.isLoomingThreat(), escapeDrive,
+                    tasteSensor.findNearestFood(bee) != null, appetite));
         }
         tickCount++;
 
@@ -707,6 +719,18 @@ public final class ControlLoop {
         // touchProximity acima), e só USANDO o resultado lá embaixo se
         // escape estiver ativo — nunca chamar Bukkit API de dentro do lambda.
         Vector nearestThreatFleeDirection = loomingSensor.fleeDirectionAwayFromNearestThreat(bee);
+        // F10 — sensor do subcircuito taste (ver TasteSensor): nível,
+        // mesmo cuidado de thread do looming acima (varre blocos e usa
+        // getNearbyEntities internamente) — sempre computado na thread
+        // principal. A localização (não só sim/não) é reaproveitada mais
+        // abaixo pra decidir a velocidade de busca de comida.
+        TasteSensor.FoodTarget nearestFoodTarget = tasteSensor.findNearestFood(bee);
+        boolean foodContact = nearestFoodTarget != null;
+        // F10 — campo (não local), pra StatusLabel poder ler no início do
+        // PRÓXIMO tick (o balão atualiza antes deste trecho rodar de novo
+        // nesta mesma troca) — mesma defasagem de 1 tick já aceita em
+        // escapeLatchTicksLeft, imperceptível a 20Hz.
+        tasteTargetHeldByPlayer = nearestFoodTarget != null && nearestFoodTarget.heldByPlayer();
         long tMs = System.currentTimeMillis();
         // F6/AD-16: heading é a direção COMANDADA da troca anterior, não a
         // orientação real da abelha — só cai pra getDirection() se ainda não
@@ -758,8 +782,8 @@ public final class ControlLoop {
                 }
                 JsonObject response = bridge.sendSensorAndReceiveMotor(
                         light, dorsalLight, damageToSend, touchContactToSend, touchProximityToSend,
-                        rainingToSend, alarmExplosion, alarmHostileMob, soundMusic, loomingThreat, tMs,
-                        muteToSend, stimulateToSend);
+                        rainingToSend, alarmExplosion, alarmHostileMob, soundMusic, loomingThreat,
+                        foodContact, tMs, muteToSend, stimulateToSend);
                 if (sendMuteThisTime) {
                     muteDirty = false;
                 }
@@ -858,10 +882,24 @@ public final class ControlLoop {
                 // pedido do usuário).
                 Vector escapeDirectionHint = escapeLatched ? escapeLatchDirection : null;
 
+                // F10 — pedido do usuário: vetor CRU (não normalizado) da
+                // abelha até a fonte de comida, recalculado a cada troca
+                // com a posição ATUAL dela (bee.getLocation() aqui dentro é
+                // seguro, mesmo padrão já usado por bee.isOnGround() logo
+                // abaixo — só getNearbyEntities/varredura de bloco exigem
+                // thread principal, não getLocation() de uma entidade já
+                // conhecida). nearestFoodTarget já foi computado na thread
+                // principal (ver onTick) — usa só a localização congelada
+                // dali, nunca chama TasteSensor de novo aqui.
+                Vector tasteDisplacementHint = nearestFoodTarget != null
+                        ? nearestFoodTarget.location().toVector().subtract(bee.getLocation().toVector())
+                        : null;
+
                 latestVelocity = MotorMapping.toVelocity(
                         responseForMotor, newHeading, landed, sheltered, hasTouchedThisEpisode,
                         escapeLatched,
-                        shelterDirectionHint, escapeDirectionHint);
+                        shelterDirectionHint, escapeDirectionHint, tasteDisplacementHint,
+                        nearestFoodTarget != null && nearestFoodTarget.heldByPlayer());
                 heading = newHeading;
                 JsonObject motor = response.getAsJsonObject("motor");
                 if (motor != null) {
@@ -885,6 +923,10 @@ public final class ControlLoop {
                 JsonObject escapeMotor = response.getAsJsonObject("escape_motor");
                 if (escapeMotor != null) {
                     latestEscapeMotor = escapeMotor;
+                }
+                JsonObject tasteMotor = response.getAsJsonObject("taste_motor");
+                if (tasteMotor != null) {
+                    latestTasteMotor = tasteMotor;
                 }
                 exchangeCount++;
             } catch (IOException e) {

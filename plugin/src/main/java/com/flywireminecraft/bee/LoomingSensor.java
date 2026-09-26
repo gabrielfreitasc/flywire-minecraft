@@ -1,8 +1,8 @@
 package com.flywireminecraft.bee;
 
+import org.bukkit.Location;
 import org.bukkit.entity.Bee;
 import org.bukkit.entity.Entity;
-import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Monster;
 import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
@@ -18,8 +18,9 @@ import java.util.Comparator;
  * decisão do usuário (24/09/2026, escolhido entre 3 opções via
  * {@code AskUserQuestion}): pra um objeto de tamanho aproximadamente fixo
  * (mob, jogador), taxa de expansão angular ≈ taxa de aproximação — rastreia
- * a distância até a ameaça mais próxima tick a tick e sinaliza quando ela
- * está caindo rápido, não só "perto" (isso já é {@code alarm_hostile_mob} do
+ * o DESLOCAMENTO DA AMEAÇA (não a distância bruta, ver bug real abaixo)
+ * tick a tick e sinaliza quando ela mesma está vindo rápido na direção da
+ * abelha, não só "perto" (isso já é {@code alarm_hostile_mob} do
  * `johnston`, sinal de NÍVEL de distância absoluta — este é de VELOCIDADE de
  * aproximação, distinção deliberada).
  *
@@ -28,12 +29,29 @@ import java.util.Comparator;
  * {@code LivingEntity}; um mob passivo (vaca, aldeão) se aproximando não é
  * plausível biologicamente como estímulo de fuga.
  *
- * <p><b>Limitação conhecida, não corrigida ainda:</b> rastreia a distância
- * até a ameaça MAIS PRÓXIMA a cada tick, não uma entidade específica
- * perseguida entre ticks. Se a ameaça mais próxima TROCAR de um tick pro
- * outro (ex.: mob A a 9 blocos vira mob B a 3 blocos, sem nenhum dos dois
- * ter se movido rápido de verdade), a "distância mais próxima" cai de
- * repente e dispara um falso positivo de looming. Mesma disciplina de
+ * <p><b>Bug real, achado do usuário (26/09/2026) — distância bruta não
+ * distingue QUEM está se aproximando.</b> Primeira versão media só a queda
+ * de distância entre ticks — funciona quando a AMEAÇA vem até a abelha, mas
+ * dispara IGUAL quando é a PRÓPRIA abelha que voa rápido até um jogador
+ * parado (ex.: perseguindo comida na mão dele pro `taste`, F10) — a
+ * distância cai rápido nos dois casos, e o sensor não tinha como saber
+ * qual lado se moveu. Biologicamente, um animal real distingue expansão
+ * visual AUTOGERADA (seu próprio movimento) de expansão causada por algo
+ * vindo até ele — mecanismo de cópia eferente, ausente aqui até esta
+ * correção. Corrigido rastreando a POSIÇÃO da ameaça mais próxima (não só
+ * a distância) entre ticks: {@link #recordTick} agora mede quanto a
+ * AMEAÇA se deslocou na direção da abelha, ignorando o quanto a abelha
+ * mesma se moveu. Se a ameaça estiver parada (jogador parado segurando
+ * comida) e a abelha voar até ela, o deslocamento da ameaça é ~0 —
+ * looming não dispara, só o `appetite`/`taste` correto.
+ *
+ * <p><b>Limitação conhecida, não corrigida ainda:</b> rastreia a ameaça
+ * MAIS PRÓXIMA a cada tick, não uma entidade específica perseguida entre
+ * ticks — usa a POSIÇÃO ANTERIOR da "mais próxima de antes" mesmo que a
+ * mais próxima de agora seja uma entidade DIFERENTE (mob A a 9 blocos vira
+ * mob B a 3 blocos). Nesse caso o "deslocamento" comparado é entre duas
+ * entidades diferentes, não uma perseguida no tempo — pode gerar falso
+ * positivo/negativo ocasional. Mesma disciplina de
  * {@link AlarmSensor}/{@link ShelterSensor}: raio e limiar são estimativa de
  * engenharia, primeira tentativa, não calibrados contra nada — corrigir a
  * partir de bug real observado em servidor, não especular agora.
@@ -44,50 +62,59 @@ public final class LoomingSensor {
     private static final double SEARCH_RADIUS_BLOCKS = 12.0;
 
     /**
-     * Queda de distância acima disto, num tick (0,05s a 20Hz), conta como
-     * looming.
+     * Deslocamento da AMEAÇA (não da abelha) na direção da abelha, acima
+     * disto num tick (0,05s a 20Hz), conta como looming.
      *
-     * <p><b>Bug real, dois testes em servidor real (25/09/2026):</b> valor
-     * original (0,3) era MAIOR que a velocidade de sprint do próprio
-     * Minecraft (~5,6 blocos/s = 0,28 blocos/tick) — usuário correu direto
-     * na direção dela, de fora do raio de busca, e nunca disparou, porque
-     * matematicamente não tinha como (nem no sprint mais rápido em linha
-     * reta a distância cai mais que isso por tick). Erro de direção na
-     * calibração original: a docstring já citava 0,28 como referência, mas
-     * o valor final ficou ACIMA, não abaixo.
-     *
-     * <p>Andar (~4,3 blocos/s ≈ 0,22 blocos/tick) e correr (~0,28) ficam
-     * perto um do outro. Testado 0,15 (abaixo dos dois) — usuário reportou
-     * que andar um único passo já disparava looming, sensível demais pra
-     * ser "aproximação com intenção", virou ruído. Recalibrado pro usuário
-     * pra 0,25 — entre andar e correr, exige aproximação de verdade (correr
-     * ou quase) sem cair no extremo oposto (0,3 original, acima até do
-     * sprint, nunca disparava). PROVISÓRIO, mesma disciplina dos outros
+     * <p><b>Histórico de recalibração (25/09/2026, servidor real):</b>
+     * valor original (0,3) era MAIOR que a velocidade de sprint do próprio
+     * Minecraft (~5,6 blocos/s = 0,28 blocos/tick) — nunca disparava, nem
+     * no sprint mais rápido em linha reta. Testado 0,15 (abaixo de
+     * andar~0,22 e correr~0,28) — sensível demais, andar um passo já
+     * disparava. Recalibrado pra 0,25 — entre andar e correr, exige
+     * aproximação de verdade. PROVISÓRIO, mesma disciplina dos outros
      * raios — ajustar de novo a partir de bug real observado.
      */
     private static final double CLOSING_SPEED_THRESHOLD_BLOCKS_PER_TICK = 0.25;
 
-    private double lastDistance = Double.POSITIVE_INFINITY;
+    private Location lastThreatLocation = null;
     private volatile boolean loomingNow = false;
 
     /**
-     * Chamar uma vez por tick. Compara a distância até a ameaça mais
-     * próxima agora contra a distância gravada na chamada anterior — só
-     * sinaliza looming quando as duas leituras encontraram ameaça (evita
-     * falso positivo de "distância caiu de infinito pra 5" só por uma
-     * ameaça ter acabado de entrar no raio de busca).
+     * Chamar uma vez por tick. Mede quanto a ameaça mais próxima se
+     * deslocou NA DIREÇÃO da abelha desde a chamada anterior — não a queda
+     * de distância bruta (ver bug real na docstring da classe: isso
+     * confundia a PRÓPRIA abelha se aproximando de um alvo parado com o
+     * alvo vindo até ela). {@code null}/ameaça ausente em qualquer uma das
+     * duas leituras zera o sinal (evita falso positivo de "acabou de
+     * entrar no raio").
      */
     public void recordTick(Bee bee) {
-        double currentDistance = nearestThreatDistance(bee);
-        boolean bothFinite = Double.isFinite(lastDistance) && Double.isFinite(currentDistance);
-        double closingSpeed = bothFinite ? lastDistance - currentDistance : 0.0;
-        loomingNow = bothFinite && closingSpeed > CLOSING_SPEED_THRESHOLD_BLOCKS_PER_TICK;
-        lastDistance = currentDistance;
+        Entity nearest = nearestThreat(bee);
+        Location currentThreatLocation = nearest != null ? nearest.getLocation() : null;
+
+        if (lastThreatLocation != null && currentThreatLocation != null) {
+            Location beeLocation = bee.getLocation();
+            Vector towardBee = beeLocation.toVector().subtract(lastThreatLocation.toVector());
+            if (towardBee.lengthSquared() > 1.0E-6) {
+                Vector threatDisplacement = currentThreatLocation.toVector().subtract(lastThreatLocation.toVector());
+                // Componente do deslocamento da AMEAÇA na direção da abelha
+                // — positivo significa que ela veio pra cá; negativo/zero
+                // significa que se afastou ou não se moveu (a abelha pode
+                // ter se movido pra perto dela, isso não conta aqui).
+                double approachSpeed = threatDisplacement.dot(towardBee.normalize());
+                loomingNow = approachSpeed > CLOSING_SPEED_THRESHOLD_BLOCKS_PER_TICK;
+            } else {
+                loomingNow = false;
+            }
+        } else {
+            loomingNow = false;
+        }
+        lastThreatLocation = currentThreatLocation;
     }
 
-    /** Reinicia o rastreamento de distância — chamar em {@code start()}, mesmo padrão de {@code TouchSensor.reset()}. */
+    /** Reinicia o rastreamento de posição — chamar em {@code start()}, mesmo padrão de {@code TouchSensor.reset()}. */
     public void reset() {
-        lastDistance = Double.POSITIVE_INFINITY;
+        lastThreatLocation = null;
         loomingNow = false;
     }
 
@@ -96,14 +123,13 @@ public final class LoomingSensor {
         return loomingNow;
     }
 
-    private double nearestThreatDistance(Bee bee) {
+    private Entity nearestThreat(Bee bee) {
         return bee.getWorld()
                 .getNearbyEntities(bee.getLocation(), SEARCH_RADIUS_BLOCKS, SEARCH_RADIUS_BLOCKS, SEARCH_RADIUS_BLOCKS)
                 .stream()
                 .filter(e -> e instanceof Monster || e instanceof Player)
-                .mapToDouble(e -> ((LivingEntity) e).getLocation().distance(bee.getLocation()))
-                .min()
-                .orElse(Double.POSITIVE_INFINITY);
+                .min(Comparator.comparingDouble(e -> e.getLocation().distanceSquared(bee.getLocation())))
+                .orElse(null);
     }
 
     /**
@@ -116,12 +142,7 @@ public final class LoomingSensor {
      * volta pra {@code heading}, mesma convenção do hint de abrigo.
      */
     public Vector fleeDirectionAwayFromNearestThreat(Bee bee) {
-        Entity nearest = bee.getWorld()
-                .getNearbyEntities(bee.getLocation(), SEARCH_RADIUS_BLOCKS, SEARCH_RADIUS_BLOCKS, SEARCH_RADIUS_BLOCKS)
-                .stream()
-                .filter(e -> e instanceof Monster || e instanceof Player)
-                .min(Comparator.comparingDouble(e -> e.getLocation().distanceSquared(bee.getLocation())))
-                .orElse(null);
+        Entity nearest = nearestThreat(bee);
         if (nearest == null) {
             return null;
         }

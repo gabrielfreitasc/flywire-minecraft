@@ -87,7 +87,7 @@ vê intenção motora. Se o mob mudar, só L4 muda.
 {"t_ms": 12450, "light": 0.94, "dorsal_light": 0.61, "damage": false,
  "touch_contact": false, "touch_proximity": false, "raining": false,
  "alarm_explosion": false, "alarm_hostile_mob": false, "sound_music": false,
- "looming_threat": false}
+ "looming_threat": false, "food_contact": false}
 ```
 Dois campos opcionais, adicionados na F5 (omitidos no exemplo acima por
 serem raros — a maioria das mensagens não os inclui):
@@ -176,23 +176,38 @@ servidor real — `startle` é telemetria/visualização, não entra em
 ameaça — jukebox tocando por perto, pedido do usuário 24/09/2026,
 combina em OR com os outros dois.)
 
-**`looming_threat` (F9/AD-20, 24/09/2026) — quinto `Engine`, subcircuito
-`escape` (fuga por looming).** Campo novo, sinal de NÍVEL — **placeholder
-de protocolo**, o sensor do lado do plugin ainda não foi implementado (F9
-em andamento). Semente do `escape` (LC4/LPLC2, detectores de looming) não é
-`super_class=="sensory"` como os outros quatro circuitos — `ingest.build`
-ganhou `sensory_cell_types` pra marcar role="sensory" por identidade de
-`cell_type` só pra este circuito (ver RN-04/AD-20 em
-`docs/04-regras-de-negocio.md`). `SimulationServer` ganhou
-`escape_connectome` opcional, mesmo padrão dos outros quatro.
-`looming_threat` estimula a semente com `SENSOR_LOOMING_AMPLITUDE`
-(validado em `tools/escape_calibration_check.py`, RN-09: diff média=63,07,
-p≈0, N=30). Resposta ganha `escape_motor` (canal `escape_drive`, curado por
+**`looming_threat`/`damage` (F9/AD-20, 24-25/09/2026) — quinto `Engine`,
+subcircuito `escape` (fuga por looming).** Semente do `escape` (LC4/LPLC2,
+detectores de looming) não é `super_class=="sensory"` como os outros
+circuitos — `ingest.build` ganhou `sensory_cell_types` pra marcar
+role="sensory" por identidade de `cell_type` só pra este circuito (ver
+RN-04/AD-20 em `docs/04-regras-de-negocio.md`). `SimulationServer` ganhou
+`escape_connectome` opcional. `looming_threat` (`LoomingSensor.java` —
+distância até ameaça mais próxima caindo rápido, limiar recalibrado duas
+vezes em teste real) OU `damage` (hit real, sinal de ameaça mais forte que
+aproximação) estimulam a semente com `SENSOR_LOOMING_AMPLITUDE` (validado
+em `tools/escape_calibration_check.py`, RN-09: diff média=63,07, p≈0,
+N=30). Resposta ganha `escape_motor` (canal `escape_drive`, curado por
 identidade de tipo celular — só `DNp01`+`DNp02`, não os outros 29
 descendentes alcançados em 1 salto, ver RN-08 em
-`docs/04-regras-de-negocio.md`) e `escape_active_dn`. Sem sensor no plugin,
-sem visualização e sem lesão em servidor real ainda — `escape_drive` é
-telemetria pura, não entra em `MotorMapping.java`.
+`docs/04-regras-de-negocio.md`) e `escape_active_dn`. **Virou
+comportamento real** (prioridade máxima sobre hygro/grooming/phototaxis,
+com trava temporal de ~2,5s) — confirmado em servidor real.
+
+**`food_contact` (F10/AD-21, 25/09/2026) — sexto `Engine`, subcircuito
+`taste` (paladar apetitivo).** Semente = 129 GRNs `cell_sub_class ==
+"sugar/water"` (`super_class=="sensory"`, sem precisar de
+`sensory_cell_types` — diferente do escape). `SimulationServer` ganhou
+`taste_connectome` opcional. `food_contact` (`TasteSensor.java` — contato
+com bloco de comida como mel/melancia/abóbora/bolo/plantação madura, item
+comestível largado no chão, ou jogador segurando comida por perto, pedido
+do usuário: mosca prova com o corpo todo) estimula a semente com
+`SENSOR_TASTE_AMPLITUDE` (validado em `tools/taste_calibration_check.py`,
+RN-09: diff média=120,73, p≈0, N=30). Resposta ganha `taste_motor` (canal
+`appetite`, topologia de sinal — mesmo mecanismo de `hygrotaxis`/`startle`)
+e `taste_active_dn`. Sem lesão em servidor real ainda — `appetite` é
+telemetria pura, não entra em `MotorMapping.java` (decisão do usuário:
+só telemetria por enquanto, sem mudar comportamento de voo).
 
 ### Protocolo da ponte
 - TCP em `localhost:8765`, JSON-lines (`\n`), UTF-8.

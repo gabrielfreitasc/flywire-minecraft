@@ -25,10 +25,11 @@ Decisões com consequência arquitetural. Uma ADR nunca é editada depois de ace
 | AD-18 | RN-01a — override de 358/373 neurônios "serotonin" do hygro (artefato de classificador): ORN→colinérgico (Yasuyama & Salvaterra 1999), lLN1/lLN2→GABAérgico (Schlegel et al. 2021) | 2026-09-21 | Aceita |
 | AD-19 | RN-01a — override de 77/874 neurônios "serotonin" do johnston (F8, vento/som): órgão de Johnston→colinérgico (Kitamoto et al. 1995; Yasuyama & Salvaterra 1999) | 2026-09-23 | Aceita |
 | AD-20 | Circuito `escape` (F9, fuga por looming): semente LC4/LPLC2/DNp01/DNp02 fora de `super_class == "sensory"` — `ingest.build` ganha `sensory_cell_types` pra declarar o primeiro estágio de UM subcircuito específico sem mudar o default dos outros; canal `escape_drive` curado por identidade de tipo celular (DNp01+DNp02), não por `topology.group_outputs_by_predicted_sign` | 2026-09-24 | Aceita |
+| AD-21 | RN-01a — override de 27/129 neurônios "serotonin" do taste (F10, paladar apetitivo): GRNs de açúcar/água→colinérgico (Yasuyama & Salvaterra 1999); escala própria `TASTE_MOTOR_RATE_SCALE` pro grupo de saída pequeno (mesma lição do escape) | 2026-09-25 | Aceita |
 
 AD-01 a AD-05 estão detalhadas em [`../01-camada-de-dados.md`](../01-camada-de-dados.md).
 AD-07 a AD-10 e AD-17 estão detalhadas em [`../02-arquitetura.md`](../02-arquitetura.md).
-AD-13, AD-14, AD-15, AD-16, AD-18, AD-19, AD-20 estão detalhadas em
+AD-13, AD-14, AD-15, AD-16, AD-18, AD-19, AD-20, AD-21 estão detalhadas em
 [`../04-regras-de-negocio.md`](../04-regras-de-negocio.md) como RN-09, RN-08, RN-01a, RN-04.
 
 ## Formato para novas ADRs

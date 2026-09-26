@@ -948,15 +948,62 @@ violeta) e `LiveHud` uma 7ª linha.
 **Balão de texto acima da abelha (`StatusLabel.java`, 25/09/2026, pedido do
 usuário).** `ArmorStand` invisível/marcador seguindo a abelha, nametag em
 português explicando qual circuito REAL está no controle agora — mesma
-ordem de prioridade de `MotorMapping`, citando o canal entre parênteses
-pra quem quiser conferir contra HUD/log (não é flavor text inventado). Cor
-do texto casa com a cor da partícula do circuito correspondente. `startle`
-aparece como informativo só (verbo mais fraco — "percebendo" — porque
-ainda não controla movimento de verdade).
+ordem de prioridade de `MotorMapping` (não é flavor text inventado, quem
+quiser o nome técnico do canal usa o HUD/log). Cor do texto casa com a cor
+da partícula do circuito correspondente. `startle` aparece como
+informativo só (verbo mais fraco — "percebendo" — porque ainda não
+controla movimento de verdade). **Atualização (25/09/2026, pedido do
+usuário):** nomes técnicos de canal entre parênteses removidos da
+mensagem — só o texto em português.
 
 Ver `docs/02-arquitetura.md`, `docs/03-roadmap-fases.md` F9,
 `sim/src/flywire_sim/escape_motor.py`, `LoomingSensor.java`,
 `StatusLabel.java`.
+
+## Sensor de paladar (F10/AD-21, 25/09/2026) — paladar apetitivo
+
+Quinto sensor multi-modal — sexto `Engine`. Semente = 129 GRNs
+(`cell_sub_class == "sugar/water"`, `super_class=="sensory"`, sem precisar
+de `sensory_cell_types` — diferente do escape). RN-01a/AD-21 resolvida
+(27/129 neurônios "serotonin" da semente eram artefato de classificador —
+achado notável: heterogêneo DENTRO do mesmo `cell_type` LB3, mesmo padrão
+já visto em ORN/johnston) e RN-09 validada antes de tocar em plugin.
+
+**Sensor — três gatilhos, pedido explícito do usuário: "caso tenha item de
+fruta/alimento dropado no chão ou o player esteja segurando, deve
+disparar".** `TasteSensor.java`:
+
+- **Bloco de comida** — mel, melancia, abóbora, bolo, ou plantação madura
+  (`Ageable#getAge() == getMaximumAge()`, curadoria manual — Bukkit não
+  tem flag "isFood" pra bloco).
+- **Item comestível largado no chão** — `Material#isEdible()`, flag nativa
+  do Bukkit (cobre maçã/pão/carne/fatia de melancia/cenoura/batata/
+  biscoito/torta automaticamente, sem lista manual).
+- **Jogador segurando comida** — mesma checagem `isEdible()` na mão
+  principal/secundária, raio de 4 blocos.
+
+**Escopo:** só valência APETITIVA (doce/água) — decisão do usuário via
+`AskUserQuestion`, Minecraft não tem bloco "amargo" óbvio pra mapear
+aversivo ainda.
+
+**Simulador — sexto `Engine`, mesmo padrão dos outros cinco.**
+`SimulationServer` ganhou `taste_connectome` opcional. `food_contact`
+estimula a semente com `SENSOR_TASTE_AMPLITUDE`. **Achado preventivo,
+lição do F9 aplicada ANTES de qualquer bug real:** escala genérica de
+normalização saturava o canal `appetite` em repouso (grupo de saída
+pequeno, 12 neurônios) — `TASTE_MOTOR_RATE_SCALE=60` dedicado, checado
+antes de fixar qualquer limiar.
+
+**Decoder — `taste_motor.py`, só o canal `appetite`.** Mesmo mecanismo de
+`hygro_motor.py`/`johnston_motor.py` (topologia de sinal). **Telemetria
+pura, decisão do usuário** — não entra em `MotorMapping.java`, sem mudar
+comportamento de voo por enquanto (diferente do escape/grooming/hygro).
+
+**Visualização** — `ActivityVisualizer` ganhou o circuito `taste` (rosa,
+canal `appetite`) e `LiveHud` uma 8ª linha ("Paladar (appetite)").
+
+Ver `docs/02-arquitetura.md`, `docs/03-roadmap-fases.md` F10,
+`sim/src/flywire_sim/taste_motor.py`, `TasteSensor.java`.
 
 ## Regra
 

@@ -13,7 +13,9 @@ import org.bukkit.entity.EntityType;
  * nametag sempre visível, seguindo a abelha e mostrando em português qual
  * circuito REAL está no controle agora — não é flavor text inventado, é a
  * tradução direta da mesma prioridade que {@link MotorMapping#toVelocity}
- * usa (escape > hygro > grooming > phototaxis). O nome técnico do canal (ex.:
+ * usa (escape > hygro > grooming > taste > phototaxis — EXCETO quando o
+ * alvo do taste é um jogador segurando comida, aí taste vence grooming,
+ * ver bug real de 26/09/2026 na docstring de {@code pickMessage}). O nome técnico do canal (ex.:
  * "grooming", "hygrotaxis") NÃO aparece na mensagem (pedido do usuário,
  * 25/09/2026 — só o texto em português, sem parênteses) — quem quiser
  * conferir o canal real usa o HUD ("Flywire Bee Live") ou o log.
@@ -46,14 +48,15 @@ final class StatusLabel {
     /** Roda na thread principal (chamado de {@code ControlLoop::onTick}). */
     void update(
             Bee bee, JsonObject bristleMotor, JsonObject hygroMotor, JsonObject johnstonMotor,
-            boolean groomingEpisodeIsDodge, boolean sheltered, boolean escapeActive
+            JsonObject tasteMotor, boolean groomingEpisodeIsDodge, boolean sheltered, boolean escapeActive,
+            boolean tasteFollowingPlayer
     ) {
         if (stand == null || !stand.isValid()) {
             spawn(bee);
         }
         stand.teleport(bee.getLocation().add(0, HEIGHT_OFFSET_BLOCKS, 0));
-        stand.setCustomName(pickMessage(bristleMotor, hygroMotor, johnstonMotor,
-                groomingEpisodeIsDodge, sheltered, escapeActive));
+        stand.setCustomName(pickMessage(bristleMotor, hygroMotor, johnstonMotor, tasteMotor,
+                groomingEpisodeIsDodge, sheltered, escapeActive, tasteFollowingPlayer));
     }
 
     /** Chamar em {@code ControlLoop::stop} — não deixa o marcador sobrando no mundo. */
@@ -76,8 +79,8 @@ final class StatusLabel {
     }
 
     private String pickMessage(
-            JsonObject bristleMotor, JsonObject hygroMotor, JsonObject johnstonMotor,
-            boolean groomingEpisodeIsDodge, boolean sheltered, boolean escapeActive
+            JsonObject bristleMotor, JsonObject hygroMotor, JsonObject johnstonMotor, JsonObject tasteMotor,
+            boolean groomingEpisodeIsDodge, boolean sheltered, boolean escapeActive, boolean tasteFollowingPlayer
     ) {
         // F9/AD-20 — mesma ordem de prioridade de MotorMapping.toVelocity:
         // o texto tem que bater com o que está REALMENTE no controle.
@@ -92,10 +95,27 @@ final class StatusLabel {
                     ? ChatColor.DARK_AQUA + "Abrigada da chuva"
                     : ChatColor.DARK_AQUA + "Não gosta de chuva — buscando abrigo";
         }
+        boolean tasteActive = MotorMapping.isTasteSeekingActive(tasteMotor);
+        if (tasteActive && tasteFollowingPlayer) {
+            // F10 — bug real, achado do usuário (26/09/2026): o balão
+            // ainda checava grooming ANTES de taste incondicionalmente,
+            // sem saber que MotorMapping.toVelocity já inverte essa
+            // ordem quando o alvo é o jogador segurando comida (mesmo
+            // conflito inerente de touch_proximity, ver docstring de lá)
+            // — o texto mostrava "Incomodada" enquanto ela na verdade
+            // seguia a comida. Movido pra ANTES de grooming, mesma
+            // ordem exata de MotorMapping.
+            return ChatColor.LIGHT_PURPLE + "Com fome — seguindo a comida";
+        }
         if (MotorMapping.isGroomingActive(bristleMotor)) {
             return groomingEpisodeIsDodge
                     ? ChatColor.GOLD + "Incomodada — desviando"
                     : ChatColor.GOLD + "Incomodada — parando pra se limpar";
+        }
+        if (tasteActive) {
+            // Caso bloco/item parado — grooming já teve prioridade acima,
+            // mesma ordem de MotorMapping.
+            return ChatColor.LIGHT_PURPLE + "Com fome — indo comer";
         }
         if (johnstonMotor != null && johnstonMotor.has("startle")
                 && johnstonMotor.get("startle").getAsDouble() > STARTLE_LABEL_THRESHOLD) {

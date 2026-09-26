@@ -43,6 +43,9 @@ import org.bukkit.entity.Bee;
  *       único canal que existe, curado por identidade celular
  *       (DNp01+DNp02), telemetria ainda sem lesão validando, ver
  *       `escape_motor.py`).</li>
+ *   <li>{@code taste} — {@code appetite} (F10, paladar apetitivo; único
+ *       canal que existe, telemetria ainda sem lesão validando, ver
+ *       `taste_motor.py`).</li>
  * </ul>
  *
  * <p><b>Nota importante:</b> pegar o MAIOR |valor| entre os canais de um
@@ -66,6 +69,7 @@ public final class ActivityVisualizer {
             new CircuitVisual(Color.fromRGB(0, 128, 128), "hygrotaxis"),                   // hygro — azul-petróleo (chuva)
             new CircuitVisual(Color.fromRGB(220, 0, 0), "startle"),                        // johnston — vermelho (alarme/som)
             new CircuitVisual(Color.fromRGB(148, 0, 211), "escape_drive"),                 // escape — violeta (medo/fuga)
+            new CircuitVisual(Color.fromRGB(255, 105, 180), "appetite"),                   // taste — rosa (paladar/doce)
     };
 
     private static final int MAX_PARTICLES_PER_CIRCUIT = 6;
@@ -74,7 +78,7 @@ public final class ActivityVisualizer {
     /** Roda na thread principal — spawnar partícula é chamada de World, não thread-safe fora dela. */
     public void render(
             Bee bee, JsonObject motor, JsonObject bristleMotor, JsonObject hygroMotor, JsonObject johnstonMotor,
-            JsonObject escapeMotor
+            JsonObject escapeMotor, JsonObject tasteMotor
     ) {
         if (!bee.isValid()) {
             return;
@@ -85,7 +89,7 @@ public final class ActivityVisualizer {
             return;
         }
 
-        JsonObject[] byCircuit = {motor, bristleMotor, hygroMotor, johnstonMotor, escapeMotor};
+        JsonObject[] byCircuit = {motor, bristleMotor, hygroMotor, johnstonMotor, escapeMotor, tasteMotor};
         for (int i = 0; i < CIRCUITS.length; i++) {
             renderCircuit(world, center, byCircuit[i], CIRCUITS[i]);
         }

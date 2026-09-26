@@ -23,10 +23,13 @@ __all__ = ["build_adjacency", "group_outputs_by_predicted_sign", "main", "signed
 def main() -> None:
     cc = graph.load()
     edges = pd.read_parquet(C.PROCESSED / "edges.parquet")
-    sign = graph.apply_johnston_artifact_overrides(
+    sign = graph.apply_gustatory_artifact_overrides(
         cc.nodes,
-        graph.apply_serotonin_artifact_overrides(
-            cc.nodes, graph.apply_nt_overrides(cc.nodes, graph.assign_sign(cc.nodes))
+        graph.apply_johnston_artifact_overrides(
+            cc.nodes,
+            graph.apply_serotonin_artifact_overrides(
+                cc.nodes, graph.apply_nt_overrides(cc.nodes, graph.assign_sign(cc.nodes))
+            ),
         ),
     )
     sign_by_nid = dict(zip(cc.nodes.nid, sign))

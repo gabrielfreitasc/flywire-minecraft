@@ -93,6 +93,30 @@ def apply_johnston_artifact_overrides(nodes: pd.DataFrame, sign: np.ndarray) -> 
     return sign
 
 
+def apply_gustatory_artifact_overrides(nodes: pd.DataFrame, sign: np.ndarray) -> np.ndarray:
+    """RN-01a/AD-21 — mesmo padrão de artefato de RN-02/AD-18/AD-19, achado
+    ao investigar o subcircuito `taste` (F10, paladar): GRNs de açúcar/água
+    (`cell_sub_class == "sugar/water"`) rotuladas "serotonin" pelo
+    classificador de Eckstein et al., mesmo DENTRO do mesmo `cell_type`
+    (LB3: 84 acetilcolina, 27 serotonin, 11 glutamato — heterogeneidade de
+    rótulo numa população geneticamente homogênea, mesmo padrão de
+    artefato já visto em ORN/órgão de Johnston). Identidade colinérgica de
+    neurônios quimiossensoriais primários é estabelecida por evidência
+    independente (Yasuyama & Salvaterra 1999 — expressão de ChAT em
+    neurônios sensoriais periféricos, mesma fonte já usada pra ORN/AD-18).
+    Não cobre os 11 glutamato do mesmo `cell_type` (LB3) nem os 6 glutamato
+    de LB2d — sem fonte pra afirmar que também são artefato, ficam como o
+    classificador rotulou (sign real, não incerteza). Ver RN-01a em
+    docs/04-regras-de-negocio.md.
+    """
+    nt = nodes.top_nt.str.lower().fillna("")
+    is_serotonin = (nt == "serotonin").to_numpy()
+    is_sugar_water = (nodes.cell_sub_class.fillna("") == "sugar/water").to_numpy()
+    sign = sign.copy()
+    sign[is_serotonin & is_sugar_water] = C.GUSTATORY_RECEPTOR_SIGN
+    return sign
+
+
 def load(out_dir: Path | None = None) -> Connectome:
     """Carrega um subcircuito extraído por `ingest.build`. `out_dir` default é
     `C.PROCESSED` (circuito ocelar, v1); outros circuitos (AD-17, F7) passam
@@ -104,6 +128,7 @@ def load(out_dir: Path | None = None) -> Connectome:
     sign = apply_nt_overrides(nodes, assign_sign(nodes))
     sign = apply_serotonin_artifact_overrides(nodes, sign)
     sign = apply_johnston_artifact_overrides(nodes, sign)
+    sign = apply_gustatory_artifact_overrides(nodes, sign)
 
     n = len(nodes)
     w = edges.syn.to_numpy(np.float32) * C.SYNAPTIC_GAIN

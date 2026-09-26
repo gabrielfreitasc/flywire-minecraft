@@ -297,6 +297,54 @@ def test_bridge_with_escape_exposes_escape_drive():
             sock.close()
 
 
+def test_bridge_without_taste_omits_taste_fields():
+    """F10 — sem taste_connectome (default None), resposta idêntica a antes
+    desta mudança: sem 'taste_motor'/'taste_active_dn'."""
+    cc = graph.load()
+    with SimulationServer(cc, host="127.0.0.1", port=0) as srv:
+        time.sleep(0.1)
+        sock = socket.create_connection(("127.0.0.1", srv.port), timeout=5.0)
+        sock_file = sock.makefile("rwb")
+        try:
+            sensor = {"t_ms": 0, "light": 0.5, "dorsal_light": 0.0, "damage": False}
+            sock_file.write((json.dumps(sensor) + "\n").encode("utf-8"))
+            sock_file.flush()
+            payload = json.loads(sock_file.readline().decode("utf-8"))
+            assert "taste_motor" not in payload
+            assert "taste_active_dn" not in payload
+        finally:
+            sock.close()
+
+
+def test_bridge_with_taste_exposes_appetite():
+    """F10 — com taste_connectome, a resposta ganha 'taste_motor'
+    (telemetria só, canal 'appetite' de topologia de sinal, RN-09 validado
+    mas sem lesão em servidor real) e 'taste_active_dn'. 'food_contact'
+    dispara a semente do taste via SENSOR_TASTE_AMPLITUDE."""
+    cc = graph.load()
+    taste_cc = graph.load(C.PROCESSED / "taste")
+    with SimulationServer(cc, taste_connectome=taste_cc, host="127.0.0.1", port=0) as srv:
+        time.sleep(0.1)
+        sock = socket.create_connection(("127.0.0.1", srv.port), timeout=5.0)
+        sock_file = sock.makefile("rwb")
+        try:
+            for i in range(5):
+                sensor = {
+                    "t_ms": i * 50, "light": 0.0, "dorsal_light": 0.0,
+                    "damage": False, "food_contact": True,
+                }
+                sock_file.write((json.dumps(sensor) + "\n").encode("utf-8"))
+                sock_file.flush()
+                payload = json.loads(sock_file.readline().decode("utf-8"))
+                time.sleep(0.05)
+            assert "taste_motor" in payload
+            assert "appetite" in payload["taste_motor"]
+            assert all(-1.0 < v < 1.0 for v in payload["taste_motor"].values())
+            assert isinstance(payload["taste_active_dn"], int)
+        finally:
+            sock.close()
+
+
 def test_bridge_survives_client_disconnect():
     """Se o plugin cair, o simulador continua rodando (não deve travar/crashar)."""
     cc = graph.load()

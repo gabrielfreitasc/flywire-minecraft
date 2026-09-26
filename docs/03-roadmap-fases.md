@@ -1743,6 +1743,111 @@ quando o circuito pede (default `None` preserva os outros 4 circuitos). Ver RN-0
 
 ---
 
+## F10 — Paladar apetitivo (checklist "Paladar, fome", 25/09/2026) 🔶 sensor+simulador+visualização integrados, telemetria só (decisão do usuário)
+
+**Contexto:** segundo item do checklist de 7 sistemas comportamentais
+(ver F9). Usuário trouxe achado biológico decisivo: diferente de humanos
+(papilas gustativas só na boca), a mosca prova com o CORPO TODO —
+pousaria em blocos de comida (mel, melancia, abóbora, bolo, plantas).
+Levantamento do conectoma confirmou: **408 GRNs (neurônios gustativos
+receptores)** já categorizados por sabor (`sugar/water`=129,
+`bitter`=65, `low-salt`=19, sensilas de perna `SA_VTV_pro_meso_meta`=74,
+`taste peg`=71, faríngeo=48) — bate exatamente com a descrição do
+usuário. Decisão do usuário via `AskUserQuestion`: só a valência
+APETITIVA (doce/água) por enquanto — Minecraft não tem bloco "amargo"
+óbvio pra mapear aversivo; telemetria só, sem mudar comportamento de voo
+(mesma disciplina que `hygrotaxis`/`startle` tiveram antes de decisões
+posteriores).
+
+- [x] **Extração** (`sim/tools/build_f10_circuit.py`) — semente 129 GRNs
+      `cell_sub_class=="sugar/water"`, `hops=1` → 278 nós (132 sensory,
+      132 interneuron, 14 output), 2.736 arestas, 41.549 sinapses.
+- [x] **RN-01a/AD-21** — achado notável: dentro do MESMO `cell_type`
+      (`LB3`, 122/129 da semente), 84 acetilcolina/27 serotonin/11
+      glutamato — mesmo padrão de artefato de classificador já visto em
+      ORN (AD-18) e órgão de Johnston (AD-19). Override via Yasuyama &
+      Salvaterra 1999 (mesma fonte, cobre quimiorreceptores em geral, não
+      só ORN). `test_gustatory_artifact_override`/`_real_data` passando.
+- [x] **RN-09** (`sim/tools/taste_calibration_check.py`) — diff
+      média=120,73 (excitatório, 12/14), -0,20 (inibitório, 2/14), p≈0
+      nos dois, N=30.
+- [x] **Lição do F9 aplicada preventivamente** — checado ANTES de fixar
+      qualquer limiar: `MOTOR_RATE_SCALE` genérico saturava `appetite` em
+      repouso (baseline 22,2Hz, tanh p95=0,762). `TASTE_MOTOR_RATE_SCALE=60`
+      dedicado corrigiu (baseline tanh média=0,352, estimulado=0,999) —
+      não repetiu o erro de descobrir isso só depois de um bug em
+      servidor real.
+- [x] **Sensor no plugin (`TasteSensor.java`)** — três gatilhos em OR,
+      pedido explícito do usuário: bloco de comida (mel/melancia/abóbora/
+      bolo/plantação madura via `Ageable`), item comestível largado no
+      chão (`Material#isEdible()`, cobre automaticamente maçã/pão/carne/
+      fatia de melancia/cenoura/batata/biscoito/torta), jogador segurando
+      comida por perto (mesma checagem `isEdible()` na mão principal/
+      secundária).
+- [x] **Integração no bridge** (`server.py`) — sexto `Engine` opcional
+      (`taste_connectome`), campo `food_contact` no protocolo,
+      `taste_motor`/`taste_active_dn` na resposta. 44/44 testes Python
+      passando.
+- [x] **Visualização** — `ActivityVisualizer` ganhou o circuito `taste`
+      (rosa, canal `appetite`) e `LiveHud` uma 8ª linha ("Paladar
+      (appetite)").
+- [x] **✅ Confirmado em servidor real (25/09/2026)** — usuário testou,
+      `appetite` chegou a +0,999 perto de comida.
+- [x] **Vira comportamento real (25/09/2026), pedido do usuário** —
+      diferente da decisão original ("só telemetria por enquanto"): "nos
+      blocos e items dropados ela deve pousar acima deles. Em caso de
+      items segurados pelo player ela deve seguir o player enquanto o
+      item estiver sendo segurado." `TasteSensor.findNearestFood` agora
+      localiza ONDE a comida está (bloco/item: desloca pra ficar 1 bloco
+      ACIMA; jogador: idem, acima da cabeça), não só sim/não.
+      `MotorMapping` ganha um mecanismo só que cobre os dois pedidos: voa
+      até o alvo e para perto (`TASTE_ARRIVAL_THRESHOLD_BLOCKS=1,0`),
+      recalculado a cada troca — alvo PARADO (bloco/item) vira "pousa e
+      fica", alvo se MOVENDO (jogador andando) vira "segue"
+      automaticamente, sem caso especial pra jogador. Prioridade ABAIXO
+      de escape/hygro/grooming (fome não é sobrevivência urgente).
+      `TASTE_THRESHOLD=0,7` (mesma disciplina do F9: checado contra a
+      distribuição real ANTES de fixar). Balão de texto ganhou "Com fome
+      — indo comer"/"— seguindo a comida". Compilado, jar redeployado —
+      **reteste em jogo pendente**.
+- [x] **Recalibração de alvo/distância (25/09/2026), pedido do usuário.**
+      Item largado reaproveitava o mesmo deslocamento Y do bloco (+1,0) —
+      item fica rente ao chão, então o alvo ficava um bloco inteiro alto
+      demais. Separado em `BLOCK_TOP_SURFACE_Y_OFFSET`/`ITEM_HOVER_Y_OFFSET`/
+      `PLAYER_HOVER_Y_OFFSET`. `TASTE_ARRIVAL_THRESHOLD_BLOCKS` apertado de
+      1,0 pra 0,3 (parava até um bloco inteiro longe do alvo, parecia
+      flutuar por perto em vez de encostada).
+- [x] **Bug real corrigido — fuga disparava perseguindo comida (26/09/2026,
+      achado do usuário).** `LoomingSensor` media só a distância caindo,
+      sem saber SE era a ameaça vindo ou a PRÓPRIA abelha voando rápido até
+      um jogador parado (ex.: seguindo comida na mão dele) — os dois casos
+      derrubam a distância igual. Corrigido rastreando a POSIÇÃO da ameaça
+      entre ticks (não só a distância): mede quanto a AMEAÇA se deslocou na
+      direção da abelha, ignorando quanto a abelha se moveu — mesmo
+      princípio de "cópia eferente" biológica (distinguir expansão visual
+      autogerada de causada por algo vindo até você). Ameaça parada +
+      abelha se aproximando = looming não dispara mais, só `appetite`.
+      Compilado, jar redeployado.
+- [x] **Bug real corrigido — grooming mascarava seguir jogador (26/09/2026,
+      achado do usuário).** Confirmado no log: `appetite` e `grooming`
+      saturavam JUNTOS (ambos ~0,999) sempre que o jogador segurando
+      comida ficava perto — inerente ao pedido de "seguir", já que chegar
+      perto do jogador também aciona `touch_proximity`. Grooming tinha
+      prioridade, mascarando a busca de comida por completo (parecia
+      "travada" nos logs — na real estava sendo comandada pelo pouso do
+      grooming, não pela busca). Corrigido invertendo a ordem SÓ pro caso
+      jogador-segurando-comida (`tasteTargetHeldByPlayer`): bloco/item
+      parado continua com grooming vencendo (sem conflito inerente ali).
+      Compilado, jar redeployado — **reteste em jogo pendente**.
+- [ ] **Fome (endocrine — IPC/Hugin-RG/DH44, pars_intercerebralis)** —
+      próximo item do checklist "Paladar, fome". Diferente do paladar,
+      fome é estado INTERNO (energia gasta voando/funções, não estímulo
+      do mundo) — precisa de design próprio pro "sensor" (proxy de
+      energia gasta computado no plugin, não algo que já existe no
+      Minecraft), ainda não iniciado.
+
+---
+
 ## Fora de escopo (candidatos a v2+)
 
 | Item | Fase provável |

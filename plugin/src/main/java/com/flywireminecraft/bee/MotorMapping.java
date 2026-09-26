@@ -132,6 +132,20 @@ import org.bukkit.util.Vector;
  * o valor original (0,8) deixava a abelha "fugindo" o tempo todo mesmo sem
  * ameaça nenhuma. O experimento de lesão (mascarar {@code looming_threat},
  * medir se ela realmente foge menos) é o próximo passo, não feito aqui.
+ *
+ * <p><b>Busca de comida (F10, 25/09/2026, pedido do usuário).</b> Quando
+ * {@code taste_motor.appetite} passa de {@link #TASTE_THRESHOLD}, ela voa
+ * até a fonte de comida mais próxima detectada por {@link TasteSensor}
+ * (bloco, item largado, ou jogador segurando comida) e para perto —
+ * {@code tasteDisplacementHint} é recalculado a cada troca, então um alvo
+ * PARADO (bloco/item) vira "pousa em cima e fica" e um alvo se MOVENDO
+ * (jogador andando) vira "segue" automaticamente, mesmo mecanismo pros
+ * dois pedidos do usuário, sem caso especial. Prioridade ABAIXO de
+ * escape/hygro/grooming (fome não é sobrevivência urgente como fuga,
+ * chuva ou toque). Sem lesão em servidor real ainda — decisão do usuário:
+ * telemetria virou comportamento aqui (diferente de `startle`, que segue
+ * telemetria pura), mas sem validação estatística de que afeta o
+ * resultado observável.
  */
 public final class MotorMapping {
 
@@ -234,6 +248,26 @@ public final class MotorMapping {
     // Componente vertical leve durante a fuga — subir também afasta de
     // ameaça terrestre. PROVISÓRIO, não calibrado.
     private static final double ESCAPE_VERTICAL_BOOST_BLOCKS_PER_TICK = 0.2;
+
+    // F10 — mesma disciplina de ESCAPE_THRESHOLD: checado ANTES de fixar
+    // (lição do F9, ver ESCAPE_MOTOR_RATE_SCALE/config.py) — baseline tanh
+    // média=0,352 (p95=0,462), estimulado=0,999 (escala própria,
+    // TASTE_MOTOR_RATE_SCALE=60). 0,7 fica bem acima do p95 de baseline e
+    // bem abaixo da saturação.
+    private static final double TASTE_THRESHOLD = 0.7;
+    // Velocidade de aproximação até a comida — mesma ordem de
+    // MAX_SPEED_BLOCKS_PER_TICK (voo calmo, não é fuga urgente). PROVISÓRIO.
+    private static final double TASTE_APPROACH_SPEED_BLOCKS_PER_TICK = 0.3;
+    // Distância (3D) abaixo desta conta como "chegou". Recalibrado
+    // (25/09/2026, pedido do usuário) de 1,0 pra 0,3 — o valor original
+    // deixava ela parar até um bloco INTEIRO longe do alvo, parecendo
+    // flutuar por perto em vez de "encostada"; 0,3 é a mesma ordem de
+    // grandeza já usada como "praticamente parado" em
+    // STUCK_DISPLACEMENT_THRESHOLD_BLOCKS (ControlLoop). Combinado com o
+    // alvo já ficar exatamente na superfície de cima do bloco/item (ver
+    // TasteSensor), isso é o suficiente pra ela ficar visivelmente em
+    // cima, não um bloco acima.
+    private static final double TASTE_ARRIVAL_THRESHOLD_BLOCKS = 0.3;
 
     private MotorMapping() {
     }
@@ -339,11 +373,28 @@ public final class MotorMapping {
      *     nenhuma ameaça esteve no raio de busca. Mesma convenção de
      *     {@code shelterDirectionHint}: substitui {@code heading} quando
      *     presente, cai pra {@code heading} quando não.
+     * @param tasteDisplacementHint só usado pela busca de comida: vetor de
+     *     deslocamento CRU (não normalizado — {@code MotorMapping} precisa
+     *     do comprimento pra saber se já chegou perto) da abelha até a
+     *     fonte de comida mais próxima
+     *     ({@link TasteSensor#findNearestFood}, já com deslocamento pra
+     *     ficar ACIMA do bloco/item/jogador), ou {@code null} se nenhuma
+     *     fonte está no raio de busca agora. Recalculado a cada troca —
+     *     é isso que faz "pousar em cima" (alvo parado) e "seguir o
+     *     jogador" (alvo se movendo) funcionarem com o MESMO mecanismo,
+     *     sem caso especial pra jogador.
+     * @param tasteTargetHeldByPlayer {@code true} só quando a fonte de
+     *     comida atual é um jogador segurando comida
+     *     ({@link TasteSensor.FoodTarget#heldByPlayer}) — bug real, achado
+     *     do usuário (26/09/2026): seguir o jogador exige ficar perto
+     *     dele, o que também acende {@code touch_proximity}/`grooming` (os
+     *     dois saturavam juntos); inverte a prioridade só pra esse caso
+     *     específico (taste vence grooming), ver docstring do branch.
      */
     public static Vector toVelocity(
             JsonObject bridgeResponse, Vector heading, boolean landed, boolean sheltered,
             boolean hasTouchedThisEpisode, boolean escapeActive, Vector shelterDirectionHint,
-            Vector escapeDirectionHint
+            Vector escapeDirectionHint, Vector tasteDisplacementHint, boolean tasteTargetHeldByPlayer
     ) {
         if (escapeActive) {
             // F9/AD-20 — prioridade máxima, ignora tudo mais (ver docstring
@@ -410,6 +461,22 @@ public final class MotorMapping {
             dive.setY(-descent);
             return dive;
         }
+        boolean tasteActive = isTasteSeekingActive(bridgeResponse.getAsJsonObject("taste_motor"));
+        if (tasteActive && tasteTargetHeldByPlayer) {
+            // F10 — bug real, achado do usuário (26/09/2026): jogador
+            // segurando comida fica perto o bastante da abelha (ela
+            // precisa se aproximar pra "seguir") pra também contar como
+            // `touch_proximity` — os dois canais saturavam juntos
+            // (grooming E appetite em ~0,999 ao mesmo tempo), e grooming
+            // tinha prioridade, mascarando a busca de comida por completo
+            // (ela parecia "travada" — na real estava sendo comandada pelo
+            // pouso do grooming, não pela busca de comida). Diferente do
+            // caso bloco/item (abaixo, DEPOIS de grooming): aqui o
+            // conflito é INERENTE ao comportamento pedido (seguir o
+            // jogador exige ficar perto dele), não incidental — inverte a
+            // ordem só pra esse caso específico.
+            return computeTasteVelocity(tasteDisplacementHint);
+        }
         if (isGroomingActive(bridgeResponse.getAsJsonObject("bristle_motor"))) {
             // F7/AD-17 — grooming vence phototaxis (mas não hygro, ver
             // acima): para de avançar, desce até pousar, fica parada uma vez
@@ -442,6 +509,19 @@ public final class MotorMapping {
             Vector descending = heading.clone().multiply(GROOMING_DESCENT_HORIZONTAL_BLOCKS_PER_TICK);
             descending.setY(-LANDING_DESCENT_BLOCKS_PER_TICK);
             return descending;
+        }
+        if (tasteActive) {
+            // F10 — pedido do usuário (25/09/2026): "nos blocos e items
+            // dropados ela deve pousar acima deles" — caso NÃO envolvendo
+            // jogador (esse já foi tratado ACIMA, antes de grooming, ver
+            // bug real na docstring de lá). Aqui grooming já teve
+            // prioridade — bloco/item de comida não move sozinho, sem
+            // conflito inerente com toque. Prioridade ABAIXO de
+            // escape/hygro/grooming — buscar comida não é sobrevivência
+            // urgente. Sem lesão em servidor real ainda; decisão do
+            // usuário: telemetria vira comportamento aqui, mas ainda sem
+            // validação estatística de que afeta o resultado observável.
+            return computeTasteVelocity(tasteDisplacementHint);
         }
 
         JsonObject motor = bridgeResponse.getAsJsonObject("motor");
@@ -500,7 +580,40 @@ public final class MotorMapping {
         return escapeMotor.get("escape_drive").getAsDouble() > ESCAPE_THRESHOLD;
     }
 
+    /**
+     * F10 — mesmo motivo de {@link #isEscapeActive}: exposto público
+     * porque {@code ControlLoop} também usa (pra saber se precisa computar
+     * {@code tasteDisplacementHint} antes de chamar {@link #toVelocity}).
+     */
+    public static boolean isTasteSeekingActive(JsonObject tasteMotor) {
+        if (tasteMotor == null || !tasteMotor.has("appetite")) {
+            return false; // sem Engine do taste rodando — sem efeito, comportamento antigo
+        }
+        return tasteMotor.get("appetite").getAsDouble() > TASTE_THRESHOLD;
+    }
+
     private static double clamp(double value, double min, double max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    /**
+     * F10 — extraído pra um método só porque agora tem DOIS pontos de
+     * entrada pra busca de comida (antes e depois de grooming, ver
+     * docstring de {@code tasteTargetHeldByPlayer}), mesma lógica nos
+     * dois: vai até o alvo, para perto.
+     */
+    private static Vector computeTasteVelocity(Vector tasteDisplacementHint) {
+        if (tasteDisplacementHint == null) {
+            // Fonte de comida saiu do raio entre a leitura do sensor e a
+            // resposta da ponte chegar — mesma convenção de "sem hint
+            // disponível" do escape: fica parada, mais seguro que voar
+            // sem destino conhecido.
+            return new Vector(0, 0, 0);
+        }
+        double distance = tasteDisplacementHint.length();
+        if (distance < TASTE_ARRIVAL_THRESHOLD_BLOCKS) {
+            return new Vector(0, 0, 0); // chegou — pousa/paira
+        }
+        return tasteDisplacementHint.clone().normalize().multiply(TASTE_APPROACH_SPEED_BLOCKS_PER_TICK);
     }
 }

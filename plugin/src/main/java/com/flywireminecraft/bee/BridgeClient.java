@@ -45,11 +45,11 @@ public final class BridgeClient implements AutoCloseable {
             double light, double dorsalLight, boolean damage,
             boolean touchContact, boolean touchProximity, boolean raining,
             boolean alarmExplosion, boolean alarmHostileMob, boolean soundMusic,
-            boolean loomingThreat, long tMs
+            boolean loomingThreat, boolean foodContact, long tMs
     ) throws IOException {
         return sendSensorAndReceiveMotor(
                 light, dorsalLight, damage, touchContact, touchProximity, raining,
-                alarmExplosion, alarmHostileMob, soundMusic, loomingThreat, tMs, null, null);
+                alarmExplosion, alarmHostileMob, soundMusic, loomingThreat, foodContact, tMs, null, null);
     }
 
     /**
@@ -76,10 +76,15 @@ public final class BridgeClient implements AutoCloseable {
      * uma jukebox. F9/AD-20 (24/09/2026) — {@code loomingThreat} (nível,
      * {@link LoomingSensor}): distância até ameaça mais próxima caindo
      * rápido, proxy de engenharia pra taxa de expansão angular (looming de
-     * verdade). Todos já são consumidos por `server.py` desde que os
-     * `Engine`s opcionais (`bristle_connectome`/`hygro_connectome`/
-     * `johnston_connectome`/`escape_connectome`) forem passados na
-     * construção do {@code SimulationServer}.
+     * verdade). F10 (25/09/2026) — {@code foodContact} (nível,
+     * {@link TasteSensor}): contato com bloco de comida (mel, melancia,
+     * abóbora, bolo, plantação madura), item comestível largado no chão, ou
+     * jogador segurando comida por perto — pedido do usuário, mosca prova
+     * com o corpo todo, não só ingestão. Todos já são consumidos por
+     * `server.py` desde que os `Engine`s opcionais
+     * (`bristle_connectome`/`hygro_connectome`/`johnston_connectome`/
+     * `escape_connectome`/`taste_connectome`) forem passados na construção
+     * do {@code SimulationServer}.
      *
      * @throws IOException se a conexão cair — quem chama decide se reconecta
      *     ou segue sem atuar neste tick; nunca esperar aqui.
@@ -88,7 +93,7 @@ public final class BridgeClient implements AutoCloseable {
             double light, double dorsalLight, boolean damage,
             boolean touchContact, boolean touchProximity, boolean raining,
             boolean alarmExplosion, boolean alarmHostileMob, boolean soundMusic,
-            boolean loomingThreat, long tMs,
+            boolean loomingThreat, boolean foodContact, long tMs,
             Collection<String> mute, StimulateSpec stimulate
     ) throws IOException {
         JsonObject sensor = new JsonObject();
@@ -103,6 +108,7 @@ public final class BridgeClient implements AutoCloseable {
         sensor.addProperty("alarm_hostile_mob", alarmHostileMob);
         sensor.addProperty("sound_music", soundMusic);
         sensor.addProperty("looming_threat", loomingThreat);
+        sensor.addProperty("food_contact", foodContact);
         if (mute != null) {
             JsonArray muteArray = new JsonArray();
             mute.forEach(muteArray::add);

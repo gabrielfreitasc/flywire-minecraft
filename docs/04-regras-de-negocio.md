@@ -143,6 +143,46 @@ silencioso pro ocelar — sempre passar `out_dir` explícito em qualquer
 teste exploratório de subcircuito novo, nunca confiar no default fora do
 circuito ocelar de verdade.
 
+**RN-01a/AD-21 — mesmo padrão de artefato no subcircuito `taste` (F10,
+paladar apetitivo, 25/09/2026).** Semente = 129 GRNs (neurônios gustativos
+receptores) `cell_sub_class == "sugar/water"` (`super_class=="sensory"`,
+`cell_class=="gustatory"`) — achado real: bate com a descrição do usuário
+de que a mosca prova com o corpo todo (sensilas de perna, boca e faringe
+no `cell_class` completo, embora a semente aqui seja só a categoria
+apetitiva doce/água). **27 desses 129 vinham rotulados "serotonin"** —
+achado notável: TODOS dentro do MESMO `cell_type` (`LB3`, 122/129 da
+semente): 84/122 acetilcolina, 27/122 serotonin, 11/122 glutamato —
+heterogeneidade de rótulo numa população geneticamente homogênea, mesmo
+padrão de artefato já visto em ORN (AD-18) e órgão de Johnston (AD-19).
+Literatura independente estabelece identidade colinérgica de
+quimiorreceptores primários via expressão de ChAT: **Yasuyama & Salvaterra
+1999** (mesma fonte já usada em AD-18/AD-19, não específica de ORN — cobre
+neurônios sensoriais periféricos em geral). Override em
+`graph.py::apply_gustatory_artifact_overrides` (aplicado também em
+`topology.group_outputs_by_predicted_sign` e `tools/signal_topology.py`).
+Os 11 glutamato de LB3 e os 6 de LB2d ficam como o classificador rotulou —
+sem fonte pra afirmar que também são artefato. `GUSTATORY_RECEPTOR_SIGN=1`
+em `config.py`. Testes: `test_gustatory_artifact_override` (sintético) e
+`test_gustatory_artifact_override_real_data` (dado real, 44/44 passam).
+
+**RN-09 aplicada ao taste, sem precisar recalibrar (25/09/2026) —
+`tools/taste_calibration_check.py`.** Topologia de sinal: 12/14
+descendentes com caminho previsto excitatório, 2/14 inibitório. N=30
+sementes pareadas: grupo excitatório diff média=120,73 (t-test e Wilcoxon
+p≈0), grupo inibitório diff média=-0,20 (p=0,012/0,014) — em 278
+neurônios. **Achado à parte, mesma lição do F9/escape:** a escala genérica
+de normalização (`MOTOR_RATE_SCALE=30`, calibrada pro ocelar inteiro)
+satura o canal `appetite` mesmo em repouso pro grupo excitatório de 12
+neurônios (baseline 22,2 Hz ± 4,3, tanh p95=0,762 — perigosamente perto de
+qualquer limiar de 0,8) — checado ANTES de qualquer limiar ser fixado
+desta vez, não depois de um bug real em servidor. `TASTE_MOTOR_RATE_SCALE=60`
+em `config.py` separa bem as duas distribuições (baseline tanh
+média=0,352, estimulado=0,999). **Isto fecha o bloqueio de L2/L3 do
+`taste`** — falta sensor no plugin (feito, `TasteSensor.java` — bloco de
+comida, item largado, jogador segurando comida), integração no simulador
+(feita, sexto `Engine`) e validação por lesão, não código de sinal/
+calibração.
+
 **Achado (17/09/2026) — `DNp27` provavelmente é erro de classificador, não
 neurônio serotonérgico de verdade.** Cruzando nossos 168 tipos celulares contra
 `gt_data.csv` (flyconnectome/drosophila_neurotransmitters — dado de literatura,

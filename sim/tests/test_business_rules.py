@@ -129,6 +129,36 @@ def test_johnston_artifact_override_real_data():
     assert (sign[is_serotonin & is_johnston] == 1).all()
 
 
+def test_gustatory_artifact_override():
+    """RN-01a/AD-21 — GRNs de açúcar/água (cell_sub_class == "sugar/water")
+    rotuladas "serotonin" viram +1 (colinérgico); outros tipos rotulados
+    "serotonin" ficam em 0."""
+    synthetic = pd.DataFrame(
+        {
+            "top_nt": ["serotonin", "serotonin", "acetylcholine"],
+            "cell_sub_class": ["sugar/water", "bitter", "sugar/water"],
+        }
+    )
+    sign = graph.apply_gustatory_artifact_overrides(synthetic, graph.assign_sign(synthetic))
+    np.testing.assert_array_equal(sign, [1, 0, 1])
+
+
+def test_gustatory_artifact_override_real_data():
+    """RN-01a/AD-21 — no subcircuito taste real: 27 neurônios da semente
+    (sugar/water) rotulados "serotonin" viram +1. Número medido e
+    documentado em RN-01a — se mudar, a extração do taste mudou e a doc
+    precisa ser revisada, não só este teste."""
+    taste_nodes = pd.read_parquet(C.PROCESSED / "taste" / "nodes.parquet")
+    sign = graph.apply_gustatory_artifact_overrides(taste_nodes, graph.assign_sign(taste_nodes))
+
+    nt = taste_nodes.top_nt.str.lower().fillna("")
+    is_serotonin = (nt == "serotonin").to_numpy()
+    is_sugar_water = (taste_nodes.cell_sub_class.fillna("") == "sugar/water").to_numpy()
+
+    assert (is_serotonin & is_sugar_water).sum() == 27
+    assert (sign[is_serotonin & is_sugar_water] == 1).all()
+
+
 def test_sensory_cell_types_override_role():
     """F9/AD-20 — `ingest.build(sensory_cell_types=...)` marca role="sensory"
     pra tipos celulares fora de `super_class == "sensory"` (caso do `escape`:

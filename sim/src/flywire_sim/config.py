@@ -64,6 +64,29 @@ ANTENNAL_LOBE_LOCAL_NEURON_SIGN = -1
 # docs/04-regras-de-negocio.md.
 JOHNSTON_ORGAN_SIGN = 1
 
+# RN-01a/AD-21 — mesmo padrão de artefato, achado ao investigar o
+# subcircuito `taste` (F10, paladar): GRNs de açúcar/água (`cell_sub_class
+# == "sugar/water"`) são colinérgicas — mesma evidência independente de
+# ChAT já usada em RN-01a/AD-18/AD-19 (Yasuyama & Salvaterra 1999, expressão
+# de ChAT em neurônios sensoriais periféricos, não específica de ORN — se
+# aplica a quimiorreceptores em geral). Achado real: dentro do MESMO
+# cell_type (LB3), 84/122 acetilcolina, 27/122 serotonin, 11/122 glutamato
+# — heterogeneidade de rótulo numa população geneticamente homogênea, igual
+# ao padrão já visto em ORN/órgão de Johnston. Ver RN-01a em
+# docs/04-regras-de-negocio.md.
+GUSTATORY_RECEPTOR_SIGN = 1
+
+# F10 — escala PRÓPRIA do canal `appetite` (grupo excitatório de 12
+# descendentes do `taste` — ver `taste_motor.py`). Mesma disciplina de
+# `ESCAPE_MOTOR_RATE_SCALE`: checado ANTES de fixar limiar nenhum (lição do
+# F9 — não repetir o erro de assumir que a escala genérica serve). Medido
+# isolado, sem estímulo: baseline 22,2 Hz ± 4,3, p95=30,0 Hz — mais perto
+# do esperado que o escape, mas ainda satura demais com `MOTOR_RATE_SCALE`
+# genérico (tanh p95=0,762, perigosamente perto de qualquer limiar de
+# 0,8). Estimulado: 219,3 Hz. Escala 60 separa bem: tanh baseline
+# média=0,352 (p95=0,462), tanh estimulado=0,999.
+TASTE_MOTOR_RATE_SCALE = 60.0
+
 # ------------------------------------------------------------ modelo (RN-07)
 DT_MS = 1.0                # passo de integração
 V_REST = 0.0               # potencial de repouso (normalizado)
@@ -144,6 +167,14 @@ SENSOR_ALARM_AMPLITUDE = 2.0
 # — mesma disciplina, não recalibrado contra dinâmica real de looming no
 # Minecraft ainda (nem o sensor do lado do plugin existe ainda).
 SENSOR_LOOMING_AMPLITUDE = 2.0
+
+# F10 — amplitude de estímulo na semente do subcircuito `taste` (GRNs de
+# açúcar/água — ver AD-21) quando o sensor de comida no jogo indica contato
+# com bloco/item comestível (ligado/desligado, mesma lógica das constantes
+# acima). MESMO valor usado em `tools/taste_calibration_check.py` — mesma
+# disciplina, não calibrado contra dinâmica real de alimentação no
+# Minecraft ainda.
+SENSOR_TASTE_AMPLITUDE = 2.0
 
 # ------------------------------------------------------------------ RN-08
 # Escala usada para normalizar taxa de disparo (Hz) em (-1, 1) via tanh.

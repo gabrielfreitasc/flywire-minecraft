@@ -30,7 +30,9 @@ import java.util.Locale;
  * telemetria, RN-09 validado mas sem lesão, ver `johnston_motor.py`) e
  * `escape_drive` (F9/AD-20, 24/09/2026, canal do `escape` — fuga por
  * looming, só telemetria, RN-09 validado mas sem lesão, ver
- * `escape_motor.py`).
+ * `escape_motor.py`) e `appetite` (F10, 25/09/2026, canal do `taste` —
+ * paladar apetitivo, só telemetria, RN-09 validado mas sem lesão, ver
+ * `taste_motor.py`).
  *
  * <p><b>Rótulo em PT-br (F9, 25/09/2026, pedido do usuário).</b> Cada linha
  * mostra um nome em português + o canal técnico real entre parênteses
@@ -53,7 +55,7 @@ import java.util.Locale;
 final class LiveHud {
 
     private static final String OBJECTIVE_NAME = "flywirebeelive";
-    private static final String[] LINE_ENTRIES = {"§0", "§1", "§2", "§3", "§4", "§5", "§6"};
+    private static final String[] LINE_ENTRIES = {"§0", "§1", "§2", "§3", "§4", "§5", "§6", "§7"};
 
     private static Scoreboard board;
     private static Objective objective;
@@ -64,7 +66,7 @@ final class LiveHud {
     /** Roda na thread principal (chamado de {@code ControlLoop::onTick}). */
     static void update(
             Plugin plugin, JsonObject motor, int activeDn, JsonObject bristleMotor, JsonObject hygroMotor,
-            JsonObject johnstonMotor, JsonObject escapeMotor
+            JsonObject johnstonMotor, JsonObject escapeMotor, JsonObject tasteMotor
     ) {
         ensureBoard();
 
@@ -78,6 +80,7 @@ final class LiveHud {
         setLine(4, "Clima (hygrotaxis)", formatChannel(hygroMotor, "hygrotaxis"));
         setLine(5, "Som/Vento (startle)", formatChannel(johnstonMotor, "startle"));
         setLine(6, "Medo (escape_drive)", formatChannel(escapeMotor, "escape_drive"));
+        setLine(7, "Paladar (appetite)", formatChannel(tasteMotor, "appetite"));
 
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.getScoreboard() != board) {
