@@ -37,11 +37,19 @@ import org.bukkit.entity.EntityType;
  * ({@code ESCAPE_LATCH_TICKS}, ~2,5s), não o valor cru de {@code escape_drive}
  * — pedido do usuário (25/09/2026): o sinal pode cair rápido demais pra dar
  * pra ler "Medo — fugindo!" no balão antes de sumir.
+ *
+ * <p><b>"Faminta!" (F11, 26/09/2026) é informativo, não vem de canal
+ * nenhum do simulador</b> — usa {@link EnergyTracker} (proxy de
+ * engenharia, ver docstring de lá: neurônios de fome/saciedade sinalizam
+ * por hormônio, sem saída sináptica no conectoma). Prioridade BAIXA (só
+ * abaixo do texto padrão) — energia baixa não é uma decisão de
+ * comportamento ainda, só um aviso.
  */
 final class StatusLabel {
 
     private static final double HEIGHT_OFFSET_BLOCKS = 1.0;
     private static final double STARTLE_LABEL_THRESHOLD = 0.5; // só cosmético, ver docstring
+    private static final double LOW_ENERGY_LABEL_THRESHOLD = 0.2; // só cosmético, ver docstring
 
     private ArmorStand stand;
 
@@ -49,14 +57,14 @@ final class StatusLabel {
     void update(
             Bee bee, JsonObject bristleMotor, JsonObject hygroMotor, JsonObject johnstonMotor,
             JsonObject tasteMotor, boolean groomingEpisodeIsDodge, boolean sheltered, boolean escapeActive,
-            boolean tasteFollowingPlayer
+            boolean tasteFollowingPlayer, double energyLevel
     ) {
         if (stand == null || !stand.isValid()) {
             spawn(bee);
         }
         stand.teleport(bee.getLocation().add(0, HEIGHT_OFFSET_BLOCKS, 0));
         stand.setCustomName(pickMessage(bristleMotor, hygroMotor, johnstonMotor, tasteMotor,
-                groomingEpisodeIsDodge, sheltered, escapeActive, tasteFollowingPlayer));
+                groomingEpisodeIsDodge, sheltered, escapeActive, tasteFollowingPlayer, energyLevel));
     }
 
     /** Chamar em {@code ControlLoop::stop} — não deixa o marcador sobrando no mundo. */
@@ -80,7 +88,8 @@ final class StatusLabel {
 
     private String pickMessage(
             JsonObject bristleMotor, JsonObject hygroMotor, JsonObject johnstonMotor, JsonObject tasteMotor,
-            boolean groomingEpisodeIsDodge, boolean sheltered, boolean escapeActive, boolean tasteFollowingPlayer
+            boolean groomingEpisodeIsDodge, boolean sheltered, boolean escapeActive, boolean tasteFollowingPlayer,
+            double energyLevel
     ) {
         // F9/AD-20 — mesma ordem de prioridade de MotorMapping.toVelocity:
         // o texto tem que bater com o que está REALMENTE no controle.
@@ -122,6 +131,12 @@ final class StatusLabel {
             // Informativo só — startle ainda não controla o movimento
             // (telemetria pura), verbo mais fraco de propósito.
             return ChatColor.RED + "Percebendo som/vibração por perto";
+        }
+        if (energyLevel < LOW_ENERGY_LABEL_THRESHOLD) {
+            // F11 — informativo só, prioridade mais baixa de todas (ver
+            // docstring da classe) — energia baixa ainda não muda
+            // comportamento de voo, só avisa.
+            return ChatColor.DARK_GRAY + "Faminta!";
         }
         return ChatColor.YELLOW + "Buscando luz";
     }

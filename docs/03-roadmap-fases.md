@@ -1839,12 +1839,52 @@ posteriores).
       jogador-segurando-comida (`tasteTargetHeldByPlayer`): bloco/item
       parado continua com grooming vencendo (sem conflito inerente ali).
       Compilado, jar redeployado — **reteste em jogo pendente**.
-- [ ] **Fome (endocrine — IPC/Hugin-RG/DH44, pars_intercerebralis)** —
-      próximo item do checklist "Paladar, fome". Diferente do paladar,
-      fome é estado INTERNO (energia gasta voando/funções, não estímulo
-      do mundo) — precisa de design próprio pro "sensor" (proxy de
-      energia gasta computado no plugin, não algo que já existe no
-      Minecraft), ainda não iniciado.
+
+---
+
+## F11 — Fome/energia (checklist "Paladar, fome", conclusão, 26/09/2026) 🔶 medidor de engenharia implantado, sem circuito neural real (achado negativo)
+
+**Achado negativo real, registrado em vez de contornado.** Investigando
+IPC (células produtoras de insulina, 18 neurônios, `pars_intercerebralis`)
+como semente candidata: **zero arestas de saída acima do limiar do
+projeto** (`SYN_THRESHOLD=5`, RN-03). Checado sem limiar nenhum: IPC tem
+143 conexões de saída no conectoma INTEIRO, nenhuma passa de 3 sinapses.
+Testado também Hugin-RG (4 neurônios), DH44 (6) e ITP (8) — mesmo padrão,
+**todos com zero arestas de saída acima do limiar**. Não é peculiaridade
+de um tipo: é a biologia real — neurônios neurosecretores endócrinos em
+*Drosophila* sinalizam por HORMÔNIO (caem na hemolinfa), não por sinapse
+ponto-a-ponto. O conectoma (baseado em contagem de sinapse) não captura
+esse modo de comunicação. Não dá pra simular como circuito LIF sem
+fabricar uma conexão que não existe — o projeto não faz isso (ver
+`CONVENCOES.md`, "Encarnador... não muda a simulação pra produzir
+comportamento").
+
+**Decisão do usuário (26/09/2026, via `AskUserQuestion`, entre 3
+opções):** medidor de energia por ENGENHARIA, documentado claramente como
+proxy de jogo — diferente de TODO canal anterior (phototaxis, grooming,
+hygrotaxis, startle, escape_drive, appetite), isto não é simulação de
+neurônio real.
+
+- [x] **`EnergyTracker.java`** — puramente do lado do plugin, não passa
+      pela ponte/simulador. Energia começa cheia (1,0), cai com
+      metabolismo basal + deslocamento real (`lastAppliedVelocity.length()`,
+      mesma medida que `TouchSensor` já usa — voar custa energia de
+      verdade, achado do usuário), sobe enquanto "comendo" — reaproveita
+      o MESMO alvo/distância de chegada do `taste`
+      (`MotorMapping.TASTE_ARRIVAL_THRESHOLD_BLOCKS`, não um sensor novo).
+- [x] **HUD** — 9ª linha ("Energia: XX%"), sem canal técnico entre
+      parênteses (não vem do simulador, não tem um pra citar).
+- [x] **Balão de texto** — "Faminta!" quando energia < 20%, prioridade
+      BAIXA (informativo só, não muda comportamento de voo ainda).
+- [ ] **Sem efeito no comportamento ainda** — decisão implícita (mesma
+      disciplina de telemetria-antes-de-comportamento já usada nos
+      outros circuitos): energia baixa não força busca de comida, só
+      avisa. Virar comportamento real (ex.: taxia até comida quando
+      faminta, priorizar sobre phototaxis) é possível próximo passo, não
+      pedido ainda.
+
+Nenhum teste Python novo (mudança inteiramente do lado do plugin, sem
+protocolo/simulador envolvido) — 44/44 continuam passando.
 
 ---
 

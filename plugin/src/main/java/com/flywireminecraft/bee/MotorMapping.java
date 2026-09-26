@@ -267,7 +267,11 @@ public final class MotorMapping {
     // alvo já ficar exatamente na superfície de cima do bloco/item (ver
     // TasteSensor), isso é o suficiente pra ela ficar visivelmente em
     // cima, não um bloco acima.
-    private static final double TASTE_ARRIVAL_THRESHOLD_BLOCKS = 0.3;
+    //
+    // F11 — pacote-visível (não mais private): ControlLoop reaproveita
+    // esse mesmo limiar pra decidir "comendo" pro EnergyTracker, em vez de
+    // duplicar o número (mesmo critério de chegada, não um estado novo).
+    static final double TASTE_ARRIVAL_THRESHOLD_BLOCKS = 0.3;
 
     private MotorMapping() {
     }

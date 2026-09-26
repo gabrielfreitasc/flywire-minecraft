@@ -46,6 +46,7 @@ public final class ControlLoop {
     private final LoomingSensor loomingSensor = new LoomingSensor(); // F9/AD-20 — looming (escape)
     private final TasteSensor tasteSensor = new TasteSensor(); // F10 — comida (taste)
     private volatile boolean tasteTargetHeldByPlayer = false; // F10 — ver StatusLabel
+    private final EnergyTracker energyTracker = new EnergyTracker(); // F11 — fome/energia, proxy de engenharia
     private final String bridgeHost;
     private final int bridgePort;
 
@@ -439,6 +440,7 @@ public final class ControlLoop {
         escapeLatchTicksLeft = 0;
         escapeLatchDirection = new Vector(0, 0, 0);
         tasteTargetHeldByPlayer = false;
+        energyTracker.reset();
         ticksSinceGroundOrWaterContact = LANDED_GRACE_TICKS;
         shelterFoundThisEpisode = false;
         hasTouchedThisEpisode = false;
@@ -634,11 +636,11 @@ public final class ControlLoop {
             // FIM do tick anterior, defasagem de 1 tick (50ms), imperceptível.
             statusLabel.update(bee, latestBristleMotor, latestHygroMotor, latestJohnstonMotor, latestTasteMotor,
                     groomingEpisodeIsDodge, shelterFoundThisEpisode, escapeLatchTicksLeft > 0,
-                    tasteTargetHeldByPlayer);
+                    tasteTargetHeldByPlayer, energyTracker.level());
         }
         if (tickCount % HUD_EVERY_TICKS == 0) {
             LiveHud.update(plugin, latestMotor, latestActiveDn, latestBristleMotor, latestHygroMotor,
-                    latestJohnstonMotor, latestEscapeMotor, latestTasteMotor);
+                    latestJohnstonMotor, latestEscapeMotor, latestTasteMotor, energyTracker.level());
         }
 
         double realLight = bee.getLocation().getBlock().getLightLevel() / 15.0;
@@ -731,6 +733,14 @@ public final class ControlLoop {
         // nesta mesma troca) — mesma defasagem de 1 tick já aceita em
         // escapeLatchTicksLeft, imperceptível a 20Hz.
         tasteTargetHeldByPlayer = nearestFoodTarget != null && nearestFoodTarget.heldByPlayer();
+        // F11 — fome/energia (proxy de engenharia, ver EnergyTracker): usa
+        // o MESMO alvo/distância de chegada do taste pra decidir "comendo"
+        // agora, não um sensor novo. lastAppliedVelocity já reflete o
+        // deslocamento REAL aplicado neste tick (mesma medida que
+        // TouchSensor já usa).
+        boolean eatingNow = nearestFoodTarget != null
+                && nearestFoodTarget.location().distance(bee.getLocation()) < MotorMapping.TASTE_ARRIVAL_THRESHOLD_BLOCKS;
+        energyTracker.tick(lastAppliedVelocity.length(), eatingNow);
         long tMs = System.currentTimeMillis();
         // F6/AD-16: heading é a direção COMANDADA da troca anterior, não a
         // orientação real da abelha — só cai pra getDirection() se ainda não

@@ -152,6 +152,21 @@ Minecraft. Subcircuito ocelar: 625 neurônios, 2.981 conexões.
   usando `World#getHighestBlockYAt(x, z, HeightMap.MOTION_BLOCKING_NO_LEAVES)`
   diretamente, a mesma métrica que o motor do jogo usa. Ver
   `ShelterSensor.java`, `docs/03-roadmap-fases.md` F7 (bug 9).
+- **Neurônio neurosecretor endócrino (IPC, Hugin-RG, DH44, ITP...) não tem
+  saída sináptica utilizável no conectoma — sinaliza por HORMÔNIO, não
+  sinapse.** Achado real (F11, 26/09/2026): tentando construir um circuito
+  de "fome" a partir de IPC (células produtoras de insulina), achado que
+  ele tem só 143 conexões de saída em TODO o conectoma, nenhuma passando
+  de 3 sinapses (limiar do projeto é ≥5, RN-03). Testado também Hugin-RG,
+  DH44 e ITP — mesmo padrão, zero arestas de saída acima do limiar em
+  todos. Não é peculiaridade de um tipo: é assim que todo `super_class ==
+  "endocrine"` funciona — libera peptídeo/hormônio na hemolinfa, não faz
+  sinapse ponto-a-ponto convencional, e um conectoma baseado em contagem
+  de sinapse não captura isso. **Antes de escolher semente pra circuito
+  novo, checar `super_class`** — se for `"endocrine"`, checar arestas de
+  saída sem limiar nenhum antes de investir em extração; se vier
+  zero/quase-zero, não é caso pra circuito LIF, é caso pra medidor de
+  engenharia (ver `EnergyTracker.java`, AD-22).
 
 ## Papéis no projeto
 

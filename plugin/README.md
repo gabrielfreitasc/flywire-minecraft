@@ -1005,6 +1005,39 @@ canal `appetite`) e `LiveHud` uma 8ª linha ("Paladar (appetite)").
 Ver `docs/02-arquitetura.md`, `docs/03-roadmap-fases.md` F10,
 `sim/src/flywire_sim/taste_motor.py`, `TasteSensor.java`.
 
+**Comportamento real, dois bugs corrigidos (25-26/09/2026):** bloco/item
+parado — pousa em cima; jogador segurando comida — segue continuamente
+(mesmo mecanismo, recalculado a cada troca). Bug 1: `LoomingSensor`
+disparava fuga quando ela mesma voava rápido até o jogador (não distinguia
+ameaça vindo de abelha se aproximando) — corrigido rastreando o
+deslocamento da AMEAÇA entre ticks, não a distância bruta (cópia eferente
+biológica). Bug 2: `grooming` mascarava "seguir jogador" (os dois saturam
+juntos, jogador perto aciona `touch_proximity` também) — corrigido
+invertendo a prioridade só pro caso jogador-segurando-comida.
+
+## Fome/energia (F11/AD-22, 26/09/2026) — achado negativo real, sem circuito neural
+
+Investigando IPC (células produtoras de insulina, candidato óbvio pra
+"fome"): **zero arestas de saída acima do limiar do projeto** em todo o
+conectoma (143 conexões no total, nenhuma passa de 3 sinapses; limiar é
+≥5). Testado também Hugin-RG/DH44/ITP — mesmo padrão em todos. Não é
+peculiaridade de um tipo: neurônios neurosecretores endócrinos sinalizam
+por HORMÔNIO (hemolinfa), não sinapse ponto-a-ponto — o conectoma
+(contagem de sinapse) não captura isso. Ver "Armadilhas conhecidas" em
+`CONVENCOES.md`.
+
+**Decisão do usuário (via `AskUserQuestion`):** medidor de energia por
+ENGENHARIA (`EnergyTracker.java`), documentado como proxy de jogo — ao
+contrário de TODO canal anterior, não simula neurônio real, não passa pela
+ponte/simulador. Energia começa cheia, cai com metabolismo basal +
+deslocamento real (voar custa energia), sobe enquanto "comendo" (mesmo
+alvo/distância de chegada do `taste`, não um sensor novo). HUD ganhou uma
+9ª linha ("Energia: XX%"), balão de texto mostra "Faminta!" abaixo de 20%
+(informativo só, ainda não muda comportamento de voo).
+
+Ver `docs/03-roadmap-fases.md` F11, `docs/adr/README.md` AD-22,
+`EnergyTracker.java`.
+
 ## Regra
 
 O plugin **nunca** altera a simulação. Se o comportamento não emerge, o problema

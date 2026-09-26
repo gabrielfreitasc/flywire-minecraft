@@ -34,6 +34,14 @@ import java.util.Locale;
  * paladar apetitivo, só telemetria, RN-09 validado mas sem lesão, ver
  * `taste_motor.py`).
  *
+ * <p><b>"Energia" (F11, 26/09/2026) é DIFERENTE de todas as outras
+ * linhas</b> — não vem de canal nenhum do simulador, é o
+ * {@link EnergyTracker} (proxy de engenharia puro do lado do plugin,
+ * achado real: neurônios de fome/saciedade sinalizam por hormônio, sem
+ * saída sináptica no conectoma — ver docstring de {@code EnergyTracker}).
+ * Não tem "canal técnico" real pra citar entre parênteses, por isso não
+ * segue a convenção de tradução das outras linhas.
+ *
  * <p><b>Rótulo em PT-br (F9, 25/09/2026, pedido do usuário).</b> Cada linha
  * mostra um nome em português + o canal técnico real entre parênteses
  * (ex.: "Toque (grooming)", "Clima (hygrotaxis)") — não é rótulo
@@ -55,7 +63,7 @@ import java.util.Locale;
 final class LiveHud {
 
     private static final String OBJECTIVE_NAME = "flywirebeelive";
-    private static final String[] LINE_ENTRIES = {"§0", "§1", "§2", "§3", "§4", "§5", "§6", "§7"};
+    private static final String[] LINE_ENTRIES = {"§0", "§1", "§2", "§3", "§4", "§5", "§6", "§7", "§8"};
 
     private static Scoreboard board;
     private static Objective objective;
@@ -66,7 +74,7 @@ final class LiveHud {
     /** Roda na thread principal (chamado de {@code ControlLoop::onTick}). */
     static void update(
             Plugin plugin, JsonObject motor, int activeDn, JsonObject bristleMotor, JsonObject hygroMotor,
-            JsonObject johnstonMotor, JsonObject escapeMotor, JsonObject tasteMotor
+            JsonObject johnstonMotor, JsonObject escapeMotor, JsonObject tasteMotor, double energyLevel
     ) {
         ensureBoard();
 
@@ -81,6 +89,8 @@ final class LiveHud {
         setLine(5, "Som/Vento (startle)", formatChannel(johnstonMotor, "startle"));
         setLine(6, "Medo (escape_drive)", formatChannel(escapeMotor, "escape_drive"));
         setLine(7, "Paladar (appetite)", formatChannel(tasteMotor, "appetite"));
+        // F11 — ver docstring da classe: proxy de engenharia, não canal do simulador.
+        setLine(8, "Energia", String.format(Locale.ROOT, "%.0f%%", energyLevel * 100));
 
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.getScoreboard() != board) {
