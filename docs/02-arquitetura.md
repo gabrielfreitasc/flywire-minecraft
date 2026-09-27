@@ -209,6 +209,26 @@ e `taste_active_dn`. Sem lesão em servidor real ainda — `appetite` é
 telemetria pura, não entra em `MotorMapping.java` (decisão do usuário:
 só telemetria por enquanto, sem mudar comportamento de voo).
 
+**`thermo_heat`/`thermo_cold` (F12/AD-23, 26/09/2026) — sétimo `Engine`,
+subcircuito `thermo` (calor/frio).** Semente = 16 TRNs `cell_class ==
+"thermosensory"` (7 `heating`, 9 `cold`; `sensory_only_seed=True`, ver
+AD-23). `SimulationServer` ganhou `thermo_connectome` opcional. As duas
+flags (`ThermalSensor.java`) estimulam SEPARADAMENTE a sua semente por
+`cell_sub_class`, com `SENSOR_THERMO_AMPLITUDE` (RN-09: `tools/
+thermo_calibration_check.py`). Resposta ganha `thermo_motor` (canal
+`thermal`, `THERMO_MOTOR_RATE_SCALE=60`) e `thermo_active_dn`. O canal NÃO
+distingue calor de frio — o sensor distingue. `thermal` acima de
+`MotorMapping.THERMO_THRESHOLD` + fonte perigosa (lava/fogo/magma) por perto
+⇒ fuga (`ControlLoop`, prioridade abaixo da fuga por medo, acima de
+recuperação/desvio/fome/sono). Frio e calor sem fonte perigosa só mudam o
+balão.
+
+**Sono (F13/AD-24) NÃO é um `Engine`.** O estado sonolento é proxy de
+engenharia do lado do plugin (`SleepState.java`, relógio do mundo);
+nenhum campo novo no protocolo. Os gatilhos de despertar reaproveitam
+circuitos existentes (`johnston_motor.startle`, `escape`, `damage`). Ver
+`docs/03-roadmap-fases.md` F13 pro achado negativo.
+
 ### Protocolo da ponte
 - TCP em `localhost:8765`, JSON-lines (`\n`), UTF-8.
 - Sem handshake, sem estado de sessão. Reconexão é reinício.

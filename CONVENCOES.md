@@ -168,6 +168,24 @@ Minecraft. Subcircuito ocelar: 625 neurônios, 2.981 conexões.
   zero/quase-zero, não é caso pra circuito LIF, é caso pra medidor de
   engenharia (ver `EnergyTracker.java`, AD-22).
 
+- **Estado de sono/fome não é sinapse: neurônio "de sono" inibitório extraído
+  e testado não muda os descendentes.** Achado real (F13, 26/09/2026): semente
+  ER5 (R5) + dFB FB6A/H/I/Z (31 neurônios, todos inibitórios: GABA/glutamato)
+  estimulada em 2 saltos dá diff nulo nos 10 descendentes (p=0,083 exc,
+  p=1,0 inh); em 3 saltos são 19.130 nós, ~3% de efeito e ~1,12 ms/passo
+  (mais que o dt). Sono em mosca é modulação de ESTADO (homeostase,
+  neuromodulação), não silenciamento sináptico direto. **Antes de prometer um
+  circuito LIF pra um "estado" (fome, sono, humor), rodar RN-09 pareado na
+  semente candidata** — se o efeito nos descendentes for nulo, o estado é
+  medidor de engenharia (`SleepState.java`, `EnergyTracker.java`, AD-22/AD-24) e
+  só os GATILHOS que o mudam (som alto, medo, dano) vêm de circuito real.
+- **Neurônio sem linha em `annotations` derrubava `ingest.build`.** 8 neurônios
+  do conectoma têm arestas mas nenhuma anotação (sem neurotransmissor, sinal
+  impossível de atribuir). Subcircuitos de 1–2 saltos a partir de fora do
+  complexo central nunca os alcançavam. Agora saem do subcircuito e o manifest
+  registra `unannotated_dropped` — não é contorno da validação de totais
+  (essa roda antes, na conectividade inteira).
+
 ## Papéis no projeto
 
 | Papel | Responsabilidade | Fronteira |

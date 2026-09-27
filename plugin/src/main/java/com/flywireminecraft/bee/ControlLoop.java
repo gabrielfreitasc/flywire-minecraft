@@ -49,6 +49,17 @@ public final class ControlLoop {
     private final TasteSensor tasteSensor = new TasteSensor(); // F10 — comida (taste)
     private volatile boolean tasteTargetHeldByPlayer = false; // F10 — ver StatusLabel
     private final EnergyTracker energyTracker = new EnergyTracker(); // F11 — fome/energia, proxy de engenharia
+    private final ThermalSensor thermalSensor = new ThermalSensor(); // F12 — calor/frio (thermo)
+    private final SleepState sleepState = new SleepState(); // F13 — sonolência noturna, proxy de engenharia
+    // F12 — estado lido pelo StatusLabel/velocidade no PRÓXIMO tick (mesma
+    // defasagem de 1 tick de escapeLatchTicksLeft). heatAvoidDirection != null
+    // = fugindo de perigo térmico agora (circuito thermo ativo + fonte perigosa
+    // por perto + sem fuga por medo em curso).
+    private volatile Vector heatAvoidDirection = null;
+    private volatile boolean heatNear = false;
+    /** F13 — `startle` acima disto, com alarme real ativo, conta como "som alto" que desperta. */
+    private static final double WAKE_STARTLE_THRESHOLD = 0.5;
+    private volatile boolean coldNear = false;
     private final String bridgeHost;
     private final int bridgePort;
 
@@ -90,6 +101,9 @@ public final class ControlLoop {
     // taste_connectome carregado). Só o canal `appetite`, telemetria pura —
     // ver taste_motor.py, não entra em MotorMapping.java ainda.
     private volatile JsonObject latestTasteMotor = new JsonObject();
+    // F12 — telemetria do subcircuito thermo; canal `thermal`. Decide fuga de
+    // calor perigoso (MotorMapping.isThermalActive) e o texto do balão.
+    private volatile JsonObject latestThermoMotor = new JsonObject();
     // F7/AD-17 — achado em servidor real (20/09/2026): pausar TouchSensor só
     // ENQUANTO grooming está ativo não bastava. Toda vez que grooming CRUZA
     // o limiar (subindo OU descendo), a velocidade comandada muda de direção
@@ -443,6 +457,11 @@ public final class ControlLoop {
         escapeLatchDirection = new Vector(0, 0, 0);
         tasteTargetHeldByPlayer = false;
         energyTracker.reset();
+        thermalSensor.reset();
+        sleepState.reset();
+        heatAvoidDirection = null;
+        heatNear = false;
+        coldNear = false;
         ticksSinceGroundOrWaterContact = LANDED_GRACE_TICKS;
         shelterFoundThisEpisode = false;
         hasTouchedThisEpisode = false;
@@ -589,7 +608,15 @@ public final class ControlLoop {
         // exceto durante um empurrão de recuperação em andamento, que
         // sobrescreve por cima (ver acima).
         Vector velocityToApply;
-        if (recoveryBoostTicksLeft > 0) {
+        Vector heatAvoid = heatAvoidDirection;
+        if (heatAvoid != null) {
+            // F12 (26/09/2026, pedido do usuário) — perigo térmico (lava,
+            // magma, fogo) VENCE recuperação/desvio/fome: mandar a abelha
+            // pra "longe do que travou" perto de lava não pode ser opção.
+            // Só a fuga por medo é mais urgente (heatAvoidDirection já vem
+            // nulo enquanto ela está travada).
+            velocityToApply = MotorMapping.heatAvoidVelocity(heatAvoid);
+        } else if (recoveryBoostTicksLeft > 0) {
             velocityToApply = new Vector(
                     recoveryEscapeDirection.getX() * RECOVERY_BOOST_HORIZONTAL_BLOCKS_PER_TICK,
                     RECOVERY_BOOST_BLOCKS_PER_TICK,
@@ -609,6 +636,12 @@ public final class ControlLoop {
             velocityToApply = latestVelocity;
         } else {
             velocityToApply = applyHungerModifiers(bee, latestVelocity);
+            if (sleepState.isDrowsy()) {
+                // F13 — sonolenta: quase parada e baixa. Só neste ramo: fuga,
+                // fuga de calor, recuperação e desvio já ficam de fora.
+                velocityToApply = limitSpeedAndHeight(
+                        bee, velocityToApply, SleepState.DROWSY_SPEED_FRACTION, SleepState.DROWSY_CEILING_BLOCKS);
+            }
         }
         bee.setVelocity(velocityToApply);
         lastAppliedVelocity = velocityToApply;
@@ -634,18 +667,21 @@ public final class ControlLoop {
 
         if (visualize && tickCount % VISUALIZE_EVERY_TICKS == 0) {
             visualizer.render(bee, latestMotor, latestBristleMotor, latestHygroMotor, latestJohnstonMotor,
-                    latestEscapeMotor, latestTasteMotor);
+                    latestEscapeMotor, latestTasteMotor, latestThermoMotor);
             // F9 — mesma cadência das partículas, texto não precisa de 20Hz.
             // escapeLatchTicksLeft é campo (não local), seguro de ler aqui
             // mesmo computado mais abaixo nesta troca — reflete o valor do
             // FIM do tick anterior, defasagem de 1 tick (50ms), imperceptível.
             statusLabel.update(bee, latestBristleMotor, latestHygroMotor, latestJohnstonMotor, latestTasteMotor,
                     groomingEpisodeIsDodge, shelterFoundThisEpisode, escapeLatchTicksLeft > 0,
-                    tasteTargetHeldByPlayer, energyTracker.level());
+                    tasteTargetHeldByPlayer, energyTracker.level(),
+                    latestThermoMotor, heatNear, coldNear, heatAvoidDirection != null,
+                    sleepState.isDrowsy(), sleepState.isWokenAtNight());
         }
         if (tickCount % HUD_EVERY_TICKS == 0) {
             LiveHud.update(plugin, latestMotor, latestActiveDn, latestBristleMotor, latestHygroMotor,
-                    latestJohnstonMotor, latestEscapeMotor, latestTasteMotor, energyTracker.level());
+                    latestJohnstonMotor, latestEscapeMotor, latestTasteMotor, latestThermoMotor,
+                    energyTracker.level(), sleepLabel());
         }
 
         double realLight = bee.getLocation().getBlock().getLightLevel() / 15.0;
@@ -733,6 +769,11 @@ public final class ControlLoop {
         // abaixo pra decidir a velocidade de busca de comida.
         TasteSensor.FoodTarget nearestFoodTarget = tasteSensor.findNearestFood(bee);
         boolean foodContact = nearestFoodTarget != null;
+        // F12 — sensor do subcircuito thermo (ver ThermalSensor): varre blocos,
+        // só na thread principal; cacheado a cada 5 ticks lá dentro.
+        ThermalSensor.Reading thermal = thermalSensor.read(bee);
+        heatNear = thermal.heat();
+        coldNear = thermal.cold();
         // F10 — campo (não local), pra StatusLabel poder ler no início do
         // PRÓXIMO tick (o balão atualiza antes deste trecho rodar de novo
         // nesta mesma troca) — mesma defasagem de 1 tick já aceita em
@@ -766,6 +807,20 @@ public final class ControlLoop {
             escapeLatchTicksLeft--;
         }
         boolean escapeLatched = escapeLatchTicksLeft > 0;
+        // F13 — o que tira a abelha da sonolência (pedido do usuário, 26/09/2026):
+        // som alto (alarme/música REAL que estimula o johnston E o canal
+        // `startle` confirmando — o circuito, não só o sensor), medo em curso
+        // (escape) ou dano. O sensor sozinho não basta: `startle` sem estímulo
+        // oscila (~-0,3 a 0,35 nos logs) — o "E" evita despertar por ruído basal.
+        boolean loudSound = (alarmExplosion || alarmHostileMob || soundMusic)
+                && latestJohnstonMotor.has("startle")
+                && latestJohnstonMotor.get("startle").getAsDouble() > WAKE_STARTLE_THRESHOLD;
+        sleepState.tick(bee.getWorld(), loudSound || escapeLatched || damage);
+        // F12 — fuga de perigo térmico: circuito thermo acima do limiar E há
+        // fonte perigosa por perto E medo não está no controle.
+        heatAvoidDirection = (!escapeLatched && thermal.hazardAwayDirection() != null
+                && MotorMapping.isThermalActive(latestThermoMotor))
+                ? thermal.hazardAwayDirection() : null;
 
         // Só marca muteDirty=false DEPOIS do envio ter sucesso (dentro do try
         // abaixo) — se a troca falhar, a mudança de mute não pode se perder
@@ -798,7 +853,7 @@ public final class ControlLoop {
                 JsonObject response = bridge.sendSensorAndReceiveMotor(
                         light, dorsalLight, damageToSend, touchContactToSend, touchProximityToSend,
                         rainingToSend, alarmExplosion, alarmHostileMob, soundMusic, loomingThreat,
-                        foodContact, tMs, muteToSend, stimulateToSend);
+                        foodContact, thermal.heat(), thermal.cold(), tMs, muteToSend, stimulateToSend);
                 if (sendMuteThisTime) {
                     muteDirty = false;
                 }
@@ -943,6 +998,10 @@ public final class ControlLoop {
                 if (tasteMotor != null) {
                     latestTasteMotor = tasteMotor;
                 }
+                JsonObject thermoMotor = response.getAsJsonObject("thermo_motor");
+                if (thermoMotor != null) {
+                    latestThermoMotor = thermoMotor;
+                }
                 exchangeCount++;
             } catch (IOException e) {
                 exchangeFailures++;
@@ -973,13 +1032,35 @@ public final class ControlLoop {
         if (hunger <= 0.0) {
             return velocity;
         }
-        Vector adjusted = velocity.clone();
         double speedFraction = 1.0 - hunger * (1.0 - EnergyTracker.MIN_SPEED_FRACTION);
+        double ceiling = EnergyTracker.STARVING_CEILING_BLOCKS
+                + (1.0 - hunger) * EnergyTracker.FED_CEILING_EXTRA_BLOCKS;
+        return limitSpeedAndHeight(bee, velocity, speedFraction, ceiling);
+    }
+
+    /** Texto do painel pro estado de sono (F13) — proxy de engenharia, sem canal do simulador. */
+    private String sleepLabel() {
+        if (sleepState.isDrowsy()) {
+            return "sonolenta";
+        }
+        if (sleepState.isWokenAtNight()) {
+            return "desperta";
+        }
+        return sleepState.isNight() ? "-" : "dia";
+    }
+
+    /**
+     * Limitador de fadiga de embodiment compartilhado por fome (F11) e sono
+     * (F13): reduz a velocidade horizontal a {@code speedFraction} e limita a
+     * altura acima do chão a {@code ceiling} blocos (desce quando passa do teto,
+     * não sobe além dele). Roda na thread principal (rayTraceBlocks). Sem chão a
+     * até 16 blocos abaixo, só a redução de velocidade vale.
+     */
+    private Vector limitSpeedAndHeight(Bee bee, Vector velocity, double speedFraction, double ceiling) {
+        Vector adjusted = velocity.clone();
         adjusted.setX(adjusted.getX() * speedFraction);
         adjusted.setZ(adjusted.getZ() * speedFraction);
 
-        double ceiling = EnergyTracker.STARVING_CEILING_BLOCKS
-                + (1.0 - hunger) * EnergyTracker.FED_CEILING_EXTRA_BLOCKS;
         Location location = bee.getLocation();
         RayTraceResult ground = bee.getWorld().rayTraceBlocks(
                 location, new Vector(0, -1, 0), 16.0, FluidCollisionMode.NEVER, true);

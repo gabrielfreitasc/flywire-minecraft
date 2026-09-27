@@ -1896,6 +1896,116 @@ protocolo/simulador envolvido) — 44/44 continuam passando.
 
 ---
 
+## F12 — Calor/frio (checklist "Calor, água, atrativo, sono e clima", 26/09/2026) ✅ circuito real integrado e confirmado em servidor real (27/09/2026); falta lesão
+
+**Circuito real (`thermo`, 7º `Engine`, AD-17).** Semente: 16 neurônios
+receptores de temperatura (TRNs, `cell_class == "thermosensory"`) —
+`heating` (7, `TRN_VP2`) e `cold` (9, `TRN_VP3a/3b`); os 13 `humid` ficam de
+fora (são do `hygro`). 15/16 colinérgicos, sem artefato de serotonina.
+1 salto dá só 2 descendentes; 2 saltos dão 71, mas arrastam 1.561
+sensoriais NÃO relacionados — daí `ingest.build(sensory_only_seed=True)`
+(AD-23): só os 16 TRNs viram `role="sensory"`. Resultado: 4.852 neurônios,
+71 descendentes (47 exc / 24 inh por `group_outputs_by_predicted_sign`).
+
+- [x] **RN-09 (`tools/thermo_calibration_check.py`, 20 trials pareados).**
+      `heating`: exc +152,9 (p<1e-5), inh +38,6; `cold`: exc +79,0
+      (p<1e-5), inh +1,9 (p=0,18); ambos: exc +173,1. Efeito real e
+      mensurável.
+- [x] **Escala própria `THERMO_MOTOR_RATE_SCALE=60`** (mesma lição do
+      F9/F10: medido ANTES de fixar limiar). Canal `thermal` =
+      `tanh((exc − inh)/60)`: repouso média 0,17 (máx. 0,33), estimulado
+      0,63 (mín. 0,55) tanto por `heating` quanto por `cold`. Limiar de
+      comportamento `MotorMapping.THERMO_THRESHOLD=0,45`.
+- [x] **Limite honesto:** o canal `thermal` **não distingue calor de frio**
+      — os dois tipos de TRN excitam o mesmo grupo de saída com força
+      parecida. Quem distingue é o sensor (`ThermalSensor`: qual semente
+      foi estimulada, `thermo_heat`/`thermo_cold` no protocolo). O circuito
+      diz "há estímulo térmico relevante agora".
+- [x] **`ThermalSensor.java`** (thread principal, varredura de cubo r=3,
+      cacheada a cada 5 ticks). Calor perigoso: lava, fogo, fogo de alma,
+      magma, caldeirão de lava, fogueira acesa. Frio: gelo, gelo
+      compactado/azul, gelo fosco, bloco de neve, neve em pó. Bioma:
+      temperatura >= 1,5 = quente, <= 0,15 = frio (só informa).
+- [x] **Comportamento (pedido do usuário, 26/09/2026).** *Calor:* moscas
+      evitam perigos físicos extremamente quentes (lava, magma, fogo) —
+      circuito `thermal` acima do limiar + fonte perigosa por perto ⇒
+      fuga na direção oposta à fonte (`heatAvoidVelocity`, 0,4 blocos/tick,
+      com componente vertical), prioridade logo abaixo da fuga por medo e
+      ACIMA de recuperação/desvio/fome. *Frio:* só informa — balão
+      "Sente frio"; calor sem fonte perigosa (bioma) — "Sente muito calor";
+      fugindo — "Muito calor — fugindo do perigo!".
+- [x] **HUD** — linha "Temperatura (thermal)" com ○/● laranja.
+- [x] **Testes** — 46/46 (2 novos: sem thermo omite os campos; com thermo
+      expõe `thermal`, 7 TRNs heating / 9 cold separados).
+- [x] **Teste em jogo (27/09/2026)** — confirmado pelo usuário em servidor
+      real: fuga de calor perigoso e balões de frio/calor funcionando.
+- [ ] **Lesão** (silenciar `thermo`) validando que a fuga de calor é do
+      circuito — como todo circuito anterior, ainda não feita.
+
+---
+
+## F13 — Sono (checklist "Calor, água, atrativo, sono e clima", 26/09/2026) ✅ estado de engenharia confirmado em servidor real (27/09/2026); circuito real testado e NÃO utilizável (achado negativo)
+
+**Pedido do usuário (26/09/2026):** à noite a abelha fica sonolenta, sem
+voos altos, praticamente parada, mas não totalmente adormecida — som alto
+(sinapses do `johnston`), ameaça que ative o medo ou um hit tiram ela desse
+estado, e se tudo se acalmar ela volta a ficar sonolenta.
+
+**Achado negativo real, registrado em vez de contornado.** Extraído o
+subcircuito com as sementes da literatura de sono em *Drosophila* —
+`ER5` (21, "R5", pressão de sono) + dFB `FB6A/FB6H/FB6I/FB6Z` (10, linhagem
+"23E10", Donlea et al./Pimentel et al.) — 31 neurônios, todos INIBITÓRIOS
+(ER5 = GABA, FB6* = glutamato, inibitório em *Drosophila*, o que bate com a
+literatura). A correspondência nome-de-tipo ↔ linhagem vem da literatura,
+não foi verificada aqui. `tools/build_f13_circuit.py`,
+`tools/sleep_calibration_check.py` (RN-09, 20 trials pareados):
+
+| Alcance | Nós | Descendentes | Efeito de estimular as 31 sementes |
+|---|---|---|---|
+| 1 salto | 342 | 0 | — (sem saída) |
+| 2 saltos | 2.903 | 10 | exc −0,15 spikes/50 ms (p=0,083), inh 0,00 (p=1,0) — **nulo** |
+| 3 saltos | 19.130 | 293 | ~−3% da taxa basal; passo do engine ~1,12 ms (> dt=1 ms) — **inviável em tempo real** |
+
+Sono em mosca é modulação de ESTADO (homeostase, neuromodulação), não
+silenciamento sináptico direto dos descendentes — o conectoma por contagem
+de sinapse com LIF não captura isso. Mesmo padrão da fome (F11, AD-22).
+
+**Decisão (AD-24):** o estado sonolento é PROXY DE ENGENHARIA
+(`SleepState.java`, do lado do plugin), documentado como tal — mesmo status
+do `EnergyTracker`. O que É circuito real são os **gatilhos de despertar**.
+
+- [x] **`SleepState.java`** — noite = `World#getTime()` em [13000, 23000).
+      Sonolenta = noite E calma há >= 10 s (`CALM_TICKS_TO_RESLEEP=200`).
+- [x] **Reação:** velocidade horizontal a 12% (`DROWSY_SPEED_FRACTION`) e
+      teto de altura de 1 bloco acima do chão (`DROWSY_CEILING_BLOCKS`) —
+      mesmo limitador da fome (`ControlLoop.limitSpeedAndHeight`, extraído
+      de `applyHungerModifiers`), no mesmo ramo: fuga, fuga de calor,
+      recuperação e desvio ficam de fora.
+- [x] **Despertar (circuitos reais):** (a) som alto — alarme/música real
+      (`alarm_explosion`/`alarm_hostile_mob`/`sound_music`) **E** canal
+      `startle` do johnston > 0,5 (o "E" evita despertar por ruído basal:
+      `startle` sem estímulo oscila ~−0,3 a 0,35 nos logs); (b) medo em
+      curso (`escapeLatched`, trava de 2,5 s); (c) dano. Cada tick
+      perturbado reinicia os 10 s de calma; calma completa ⇒ volta a ficar
+      sonolenta.
+- [x] **Balão:** "Sonolenta — quase dormindo" (noite calma) e "Acordada —
+      atenta, sem sono" (noite, perturbada há pouco). **HUD:** linha "Sono"
+      (sonolenta/desperta/dia), sem bolinha (não é canal do simulador).
+- [x] **Fix de ingest (`unannotated_dropped`):** 8 neurônios do conectoma
+      têm arestas mas nenhuma linha de anotação (sem neurotransmissor —
+      sinal impossível de atribuir, RN-01). Subcircuitos pequenos nunca os
+      alcançaram; 2 saltos a partir do complexo central alcançou 1 e
+      derrubou `ingest.build`. Agora saem do subcircuito e o manifest
+      registra a contagem. Não afeta os totais validados contra o artigo
+      (feitos antes, na conectividade inteira); circuitos anteriores
+      inalterados.
+- [x] **Teste em jogo (27/09/2026)** — confirmado pelo usuário em servidor
+      real: sonolência noturna e despertar por som/medo/dano funcionando.
+- [ ] Constantes PROVISÓRIAS, sem calibração fina em jogo (velocidade/teto
+      de sonolência, janela de calma, limiar de despertar).
+
+---
+
 ## Fora de escopo (candidatos a v2+)
 
 | Item | Fase provável |

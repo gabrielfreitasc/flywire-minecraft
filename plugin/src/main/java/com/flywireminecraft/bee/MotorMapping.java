@@ -596,6 +596,39 @@ public final class MotorMapping {
         return tasteMotor.get("appetite").getAsDouble() > TASTE_THRESHOLD;
     }
 
+    /**
+     * F12 (26/09/2026) — limiar do canal {@code thermal}, medido ANTES de
+     * fixar (lição do F9/F10): com {@code THERMO_MOTOR_RATE_SCALE=60},
+     * repouso média 0,17 (máx. 0,33 em 6 sementes), estimulado 0,63 tanto
+     * pelos TRNs de aquecimento quanto pelos de frio (mín. 0,55). 0,45 fica
+     * acima do pior repouso e abaixo do pior estimulado.
+     *
+     * <p><b>Limite honesto:</b> o canal NÃO distingue calor de frio — os dois
+     * tipos de TRN excitam o mesmo grupo de saída com a mesma força. Quem
+     * distingue é o sensor ({@code ThermalSensor}: qual das duas sementes foi
+     * estimulada). O circuito diz "há estímulo térmico relevante agora".
+     */
+    private static final double THERMO_THRESHOLD = 0.45;
+    /** Fuga de calor perigoso — mais urgente que voo calmo, menos que a fuga por medo. PROVISÓRIO. */
+    private static final double HEAT_AVOID_SPEED_BLOCKS_PER_TICK = 0.4;
+
+    /** F12 — canal {@code thermal} do `thermo` acima do limiar (sem Engine rodando: falso). */
+    public static boolean isThermalActive(JsonObject thermoMotor) {
+        if (thermoMotor == null || !thermoMotor.has("thermal")) {
+            return false;
+        }
+        return thermoMotor.get("thermal").getAsDouble() > THERMO_THRESHOLD;
+    }
+
+    /**
+     * F12 — velocidade de fuga de perigo térmico (lava, magma, fogo): direção
+     * já normalizada, apontando pra longe da fonte (inclui componente
+     * vertical — fugir pra cima de lava embaixo).
+     */
+    public static Vector heatAvoidVelocity(Vector awayFromHazard) {
+        return awayFromHazard.clone().normalize().multiply(HEAT_AVOID_SPEED_BLOCKS_PER_TICK);
+    }
+
     private static double clamp(double value, double min, double max) {
         return Math.max(min, Math.min(max, value));
     }

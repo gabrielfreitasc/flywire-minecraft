@@ -66,7 +66,7 @@ import java.util.Locale;
 final class LiveHud {
 
     private static final String OBJECTIVE_NAME = "flywirebeelive";
-    private static final String[] LINE_ENTRIES = {"§0", "§1", "§2", "§3", "§4", "§5", "§6", "§7", "§8"};
+    private static final String[] LINE_ENTRIES = {"§0", "§1", "§2", "§3", "§4", "§5", "§6", "§7", "§8", "§9", "§a"};
 
     private static Scoreboard board;
     private static Objective objective;
@@ -77,7 +77,8 @@ final class LiveHud {
     /** Roda na thread principal (chamado de {@code ControlLoop::onTick}). */
     static void update(
             Plugin plugin, JsonObject motor, int activeDn, JsonObject bristleMotor, JsonObject hygroMotor,
-            JsonObject johnstonMotor, JsonObject escapeMotor, JsonObject tasteMotor, double energyLevel
+            JsonObject johnstonMotor, JsonObject escapeMotor, JsonObject tasteMotor, JsonObject thermoMotor,
+            double energyLevel, String sleepLabel
     ) {
         ensureBoard();
 
@@ -107,7 +108,11 @@ final class LiveHud {
         setLine(7, "Paladar (appetite)", formatChannel(tasteMotor, "appetite"),
                 ActivityVisualizer.COLOR_TASTE, MotorMapping.isTasteSeekingActive(tasteMotor));
         // F11 — ver docstring da classe: proxy de engenharia, não canal do simulador.
-        setLine(8, "Energia", String.format(Locale.ROOT, "%.0f%%", energyLevel * 100));
+        setLine(8, "Temperatura (thermal)", formatChannel(thermoMotor, "thermal"),
+                ActivityVisualizer.COLOR_THERMO, MotorMapping.isThermalActive(thermoMotor));
+        setLine(9, "Energia", String.format(Locale.ROOT, "%.0f%%", energyLevel * 100));
+        // F13 — proxy de engenharia (ver SleepState), sem canal do simulador, sem bolinha.
+        setLine(10, "Sono", sleepLabel);
 
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.getScoreboard() != board) {

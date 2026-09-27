@@ -97,6 +97,7 @@ def build(
     out_dir: Path | None = None,
     circuit: str = "ocellar",
     sensory_cell_types: set[str] | None = None,
+    sensory_only_seed: bool = False,
 ) -> dict:
     """Constrói um subcircuito e grava nodes/edges/manifest em `out_dir`
     (default: `data/processed/`, o circuito ocelar da v1 — AD-06). Outros
@@ -114,7 +115,15 @@ def build(
     aqui, não porque a ontologia mudou. Sem isso, `Connectome.sensory` fica
     vazio e `Engine.stimulate()` não tem onde injetar corrente (ver
     `server.py`). `None` (default) preserva o comportamento de todos os
-    outros circuitos."""
+    outros circuitos.
+
+    `sensory_only_seed` (F12/AD-23, `thermo`) — só a SEMENTE conta como
+    `role="sensory"`; neurônios `super_class == "sensory"` alcançados por
+    salto (outras modalidades) viram interneurônios. Necessário quando 1
+    salto não basta pra ter saídas (2 descendentes só) e 2 saltos arrastam
+    milhares de sensoriais NÃO relacionados (1.561 no `thermo`) que seriam
+    estimulados junto e tirariam a especificidade do circuito. `False`
+    (default) preserva todos os outros circuitos."""
     out_dir = C.PROCESSED if out_dir is None else out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -125,6 +134,14 @@ def build(
     seed = select_seed(ann, pattern)
     descending = set(ann.loc[ann.super_class == "descending", "root_id"])
     keep = expand(edges, seed, descending, hops)
+    # F13 — 8 neurônios de todo o conectoma aparecem em `connectivity` sem
+    # linha em `annotations` (sem super_class/neurotransmissor: sinal
+    # impossível de atribuir, RN-01). Subcircuitos pequenos nunca os
+    # alcançaram; o do sono (2+ saltos a partir do complexo central) sim.
+    # Sai do subcircuito E registra no manifest — não afeta os totais
+    # validados contra o artigo (feitos sobre a conectividade inteira, antes).
+    unannotated = keep - set(ann.root_id)
+    keep -= unannotated
 
     sub = edges[edges.pre.isin(keep) & edges.post.isin(keep)].copy()
 
@@ -137,6 +154,8 @@ def build(
     nodes.loc[nodes.super_class == "sensory", "role"] = "sensory"
     if sensory_cell_types is not None:
         nodes.loc[nodes.cell_type.isin(sensory_cell_types), "role"] = "sensory"
+    if sensory_only_seed:
+        nodes.loc[(nodes.role == "sensory") & ~nodes.is_seed, "role"] = "interneuron"
     nodes.loc[nodes.super_class == "descending", "role"] = "output"  # RN-04
 
     # RN-05 — nid determinístico por root_id ordenado
@@ -159,6 +178,8 @@ def build(
         "syn_threshold": C.SYN_THRESHOLD,
         "hops": C.HOPS if hops is None else hops,
         "sensory_cell_types": sorted(sensory_cell_types) if sensory_cell_types else None,
+        "sensory_only_seed": sensory_only_seed,
+        "unannotated_dropped": len(unannotated),
         "seed_neurons": len(seed),
         "nodes": len(nodes),
         "edges": len(sub),

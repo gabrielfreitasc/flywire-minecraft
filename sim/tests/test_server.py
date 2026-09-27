@@ -345,6 +345,53 @@ def test_bridge_with_taste_exposes_appetite():
             sock.close()
 
 
+def test_bridge_without_thermo_omits_thermo_fields():
+    """F12 — sem thermo_connectome (default None), resposta idêntica a antes."""
+    cc = graph.load()
+    with SimulationServer(cc, host="127.0.0.1", port=0) as srv:
+        time.sleep(0.1)
+        sock = socket.create_connection(("127.0.0.1", srv.port), timeout=5.0)
+        sock_file = sock.makefile("rwb")
+        try:
+            sensor = {"t_ms": 0, "light": 0.5, "dorsal_light": 0.0, "damage": False}
+            sock_file.write((json.dumps(sensor) + "\n").encode("utf-8"))
+            sock_file.flush()
+            payload = json.loads(sock_file.readline().decode("utf-8"))
+            assert "thermo_motor" not in payload
+            assert "thermo_active_dn" not in payload
+        finally:
+            sock.close()
+
+
+def test_bridge_with_thermo_exposes_thermal():
+    """F12 — com thermo_connectome, a resposta ganha 'thermo_motor' (canal
+    'thermal', telemetria) e 'thermo_active_dn'. As duas sementes (7 TRNs de
+    aquecimento, 9 de frio) ficam separadas por `cell_sub_class`."""
+    cc = graph.load()
+    thermo_cc = graph.load(C.PROCESSED / "thermo")
+    with SimulationServer(cc, thermo_connectome=thermo_cc, host="127.0.0.1", port=0) as srv:
+        assert len(srv._thermo_heating_nids) == 7
+        assert len(srv._thermo_cold_nids) == 9
+        time.sleep(0.1)
+        sock = socket.create_connection(("127.0.0.1", srv.port), timeout=5.0)
+        sock_file = sock.makefile("rwb")
+        try:
+            for i in range(5):
+                sensor = {
+                    "t_ms": i * 50, "light": 0.0, "dorsal_light": 0.0,
+                    "damage": False, "thermo_heat": True,
+                }
+                sock_file.write((json.dumps(sensor) + "\n").encode("utf-8"))
+                sock_file.flush()
+                payload = json.loads(sock_file.readline().decode("utf-8"))
+                time.sleep(0.05)
+            assert "thermal" in payload["thermo_motor"]
+            assert all(-1.0 < v < 1.0 for v in payload["thermo_motor"].values())
+            assert isinstance(payload["thermo_active_dn"], int)
+        finally:
+            sock.close()
+
+
 def test_bridge_survives_client_disconnect():
     """Se o plugin cair, o simulador continua rodando (não deve travar/crashar)."""
     cc = graph.load()

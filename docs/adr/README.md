@@ -27,6 +27,8 @@ Decisões com consequência arquitetural. Uma ADR nunca é editada depois de ace
 | AD-20 | Circuito `escape` (F9, fuga por looming): semente LC4/LPLC2/DNp01/DNp02 fora de `super_class == "sensory"` — `ingest.build` ganha `sensory_cell_types` pra declarar o primeiro estágio de UM subcircuito específico sem mudar o default dos outros; canal `escape_drive` curado por identidade de tipo celular (DNp01+DNp02), não por `topology.group_outputs_by_predicted_sign` | 2026-09-24 | Aceita |
 | AD-21 | RN-01a — override de 27/129 neurônios "serotonin" do taste (F10, paladar apetitivo): GRNs de açúcar/água→colinérgico (Yasuyama & Salvaterra 1999); escala própria `TASTE_MOTOR_RATE_SCALE` pro grupo de saída pequeno (mesma lição do escape) | 2026-09-25 | Aceita |
 | AD-22 | Fome (F11) NÃO vira circuito LIF — achado negativo real: IPC/Hugin-RG/DH44/ITP (neurônios neurosecretores endócrinos) têm zero arestas de saída acima de `SYN_THRESHOLD` no conectoma inteiro (sinalizam por hormônio, não sinapse). `EnergyTracker.java` é medidor de engenharia puro do lado do plugin, documentado como proxy de jogo — não simula neurônio real, ao contrário de todo canal anterior | 2026-09-26 | Aceita |
+| AD-23 | Circuito `thermo` (F12, calor/frio): `ingest.build(sensory_only_seed=True)` — só a SEMENTE vira `role="sensory"`; sensoriais de outras modalidades alcançados por salto viram interneurônios (2 saltos arrastavam 1.561 sensoriais não relacionados). Escala própria `THERMO_MOTOR_RATE_SCALE=60`. O canal `thermal` não distingue calor de frio — o sensor distingue. Também: `ingest.build` agora exclui neurônios sem anotação (`unannotated_dropped` no manifest) | 2026-09-26 | Aceita |
+| AD-24 | Sono (F13) NÃO vira circuito LIF — achado negativo real: sementes inibitórias da literatura (ER5 + dFB FB6A/H/I/Z) estimuladas não mudam os descendentes em 2 saltos (p=0,083/p=1,0) e em 3 saltos o efeito é ~3% com passo de ~1,12 ms (inviável em tempo real). `SleepState.java` é estado de engenharia (relógio do mundo), como `EnergyTracker`; os gatilhos de despertar vêm de circuitos reais (johnston `startle`, escape, dano) | 2026-09-26 | Aceita |
 
 AD-01 a AD-05 estão detalhadas em [`../01-camada-de-dados.md`](../01-camada-de-dados.md).
 AD-07 a AD-10 e AD-17 estão detalhadas em [`../02-arquitetura.md`](../02-arquitetura.md).
@@ -34,6 +36,9 @@ AD-13, AD-14, AD-15, AD-16, AD-18, AD-19, AD-20, AD-21 estão detalhadas em
 [`../04-regras-de-negocio.md`](../04-regras-de-negocio.md) como RN-09, RN-08, RN-01a, RN-04.
 AD-22 está detalhada em [`../03-roadmap-fases.md`](../03-roadmap-fases.md) F11 e na
 docstring de `plugin/.../EnergyTracker.java`.
+AD-23 está detalhada em [`../03-roadmap-fases.md`](../03-roadmap-fases.md) F12 e na
+docstring de `sim/src/flywire_sim/ingest.py::build`. AD-24 está detalhada em F13 e nas
+docstrings de `sim/tools/build_f13_circuit.py` e `plugin/.../SleepState.java`.
 
 ## Formato para novas ADRs
 

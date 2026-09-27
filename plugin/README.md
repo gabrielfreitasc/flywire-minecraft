@@ -1038,6 +1038,29 @@ alvo/distância de chegada do `taste`, não um sensor novo). HUD ganhou uma
 Ver `docs/03-roadmap-fases.md` F11, `docs/adr/README.md` AD-22,
 `EnergyTracker.java`.
 
+## Sensor de temperatura (F12/AD-23, 26/09/2026) — calor/frio
+
+`ThermalSensor.java` (thread principal, varredura r=3 cacheada a cada 5
+ticks): calor perigoso (lava, fogo, magma, fogueira acesa) e frio (gelo,
+neve), mais bioma (temperatura >= 1,5 quente, <= 0,15 frio).
+`thermo_heat`/`thermo_cold` estimulam SEPARADAMENTE os TRNs de
+aquecimento/frio no `thermo`. Comportamento (pedido do usuário): fonte
+PERIGOSA de calor + canal `thermal` acima de 0,45 ⇒ foge (0,4
+blocos/tick, oposto à fonte); frio só avisa no balão ("Sente frio"), e
+calor de bioma só avisa ("Sente muito calor"). O canal `thermal` não
+distingue calor de frio, o sensor sim. HUD: linha "Temperatura (thermal)".
+Ver `docs/03-roadmap-fases.md` F12.
+
+## Sono (F13/AD-24, 26/09/2026) — sonolência noturna
+
+`SleepState.java` — proxy de ENGENHARIA (o circuito real de sono,
+testado, não muda os descendentes; ver F13). Noite (`World#getTime()` em
+[13000, 23000)) + calma há >= 10 s ⇒ velocidade a 12% e teto de 1 bloco
+acima do chão; balão "Sonolenta — quase dormindo". Despertam: som alto
+(alarme real E `startle` > 0,5), medo (escape) ou dano; 10 s de calma e
+volta a ficar sonolenta ("Acordada — atenta, sem sono" nesse meio-tempo).
+HUD: linha "Sono". Testar com `/time set night`.
+
 ## Regra
 
 O plugin **nunca** altera a simulação. Se o comportamento não emerge, o problema

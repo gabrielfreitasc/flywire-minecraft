@@ -70,13 +70,16 @@ final class StatusLabel {
     void update(
             Bee bee, JsonObject bristleMotor, JsonObject hygroMotor, JsonObject johnstonMotor,
             JsonObject tasteMotor, boolean groomingEpisodeIsDodge, boolean sheltered, boolean escapeActive,
-            boolean tasteFollowingPlayer, double energyLevel
+            boolean tasteFollowingPlayer, double energyLevel,
+            JsonObject thermoMotor, boolean heatNear, boolean coldNear, boolean heatAvoiding,
+            boolean drowsy, boolean wokenAtNight
     ) {
         if (stand == null || !stand.isValid()) {
             stand = spawn(bee, HEIGHT_OFFSET_BLOCKS);
         }
         stand.teleport(bee.getLocation().add(0, HEIGHT_OFFSET_BLOCKS, 0));
         stand.setCustomName(pickMessage(bristleMotor, hygroMotor, johnstonMotor, tasteMotor,
+                thermoMotor, heatNear, coldNear, heatAvoiding, drowsy, wokenAtNight,
                 groomingEpisodeIsDodge, sheltered, escapeActive, tasteFollowingPlayer, energyLevel));
 
         if (hungerStand == null || !hungerStand.isValid()) {
@@ -129,7 +132,8 @@ final class StatusLabel {
 
     private String pickMessage(
             JsonObject bristleMotor, JsonObject hygroMotor, JsonObject johnstonMotor, JsonObject tasteMotor,
-            boolean groomingEpisodeIsDodge, boolean sheltered, boolean escapeActive, boolean tasteFollowingPlayer,
+            JsonObject thermoMotor, boolean heatNear, boolean coldNear, boolean heatAvoiding,
+            boolean drowsy, boolean wokenAtNight, boolean groomingEpisodeIsDodge, boolean sheltered, boolean escapeActive, boolean tasteFollowingPlayer,
             double energyLevel
     ) {
         // F9/AD-20 — mesma ordem de prioridade de MotorMapping.toVelocity:
@@ -139,6 +143,12 @@ final class StatusLabel {
         // o balão piscaria "fugindo" por menos de uma troca.
         if (escapeActive) {
             return ChatColor.DARK_PURPLE + "Medo — fugindo!";
+        }
+        if (heatAvoiding) {
+            // F12 (26/09/2026, pedido do usuário) — perigo térmico (lava/
+            // magma/fogo) tem prioridade logo abaixo do medo; mesma ordem
+            // de ControlLoop (fuga de calor vem depois da fuga por medo).
+            return ChatColor.GOLD + "Muito calor — fugindo do perigo!";
         }
         if (MotorMapping.isSeekingShelterActive(hygroMotor)) {
             return sheltered
@@ -167,17 +177,35 @@ final class StatusLabel {
             // mesma ordem de MotorMapping.
             return ChatColor.LIGHT_PURPLE + "Com fome — indo comer";
         }
+        if (drowsy) {
+            // F13 (26/09/2026, pedido do usuário) — noite calma: quase parada e baixa.
+            return ChatColor.DARK_BLUE + "Sonolenta — quase dormindo";
+        }
         if (johnstonMotor != null && johnstonMotor.has("startle")
                 && johnstonMotor.get("startle").getAsDouble() > STARTLE_LABEL_THRESHOLD) {
             // Informativo só — startle ainda não controla o movimento
             // (telemetria pura), verbo mais fraco de propósito.
             return ChatColor.RED + "Percebendo som/vibração por perto";
         }
+        if (MotorMapping.isThermalActive(thermoMotor)) {
+            // F12 — informativo (pedido do usuário): o circuito confirma
+            // estímulo térmico, o sensor diz de que lado. Frio nunca gera
+            // fuga; calor perigoso já foi tratado acima (heatAvoiding).
+            if (heatNear) {
+                return ChatColor.GOLD + "Sente muito calor";
+            }
+            if (coldNear) {
+                return ChatColor.AQUA + "Sente frio";
+            }
+        }
         if (energyLevel < LOW_ENERGY_LABEL_THRESHOLD) {
             // F11 — informativo só, prioridade mais baixa de todas (ver
             // docstring da classe) — energia baixa ainda não muda
             // comportamento de voo, só avisa.
             return ChatColor.DARK_GRAY + "Faminta!";
+        }
+        if (wokenAtNight) {
+            return ChatColor.BLUE + "Acordada — atenta, sem sono";
         }
         return ChatColor.YELLOW + "Buscando luz";
     }

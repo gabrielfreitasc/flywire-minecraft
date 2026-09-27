@@ -45,11 +45,12 @@ public final class BridgeClient implements AutoCloseable {
             double light, double dorsalLight, boolean damage,
             boolean touchContact, boolean touchProximity, boolean raining,
             boolean alarmExplosion, boolean alarmHostileMob, boolean soundMusic,
-            boolean loomingThreat, boolean foodContact, long tMs
+            boolean loomingThreat, boolean foodContact, boolean thermoHeat, boolean thermoCold, long tMs
     ) throws IOException {
         return sendSensorAndReceiveMotor(
                 light, dorsalLight, damage, touchContact, touchProximity, raining,
-                alarmExplosion, alarmHostileMob, soundMusic, loomingThreat, foodContact, tMs, null, null);
+                alarmExplosion, alarmHostileMob, soundMusic, loomingThreat, foodContact, thermoHeat, thermoCold,
+                tMs, null, null);
     }
 
     /**
@@ -80,10 +81,12 @@ public final class BridgeClient implements AutoCloseable {
      * {@link TasteSensor}): contato com bloco de comida (mel, melancia,
      * abóbora, bolo, plantação madura), item comestível largado no chão, ou
      * jogador segurando comida por perto — pedido do usuário, mosca prova
-     * com o corpo todo, não só ingestão. Todos já são consumidos por
+     * com o corpo todo, não só ingestão. F12 (26/09/2026) — {@code thermoHeat}
+     * e {@code thermoCold} (nível, {@link ThermalSensor}): fonte de calor ou
+     * de frio por perto, cada uma estimula só a sua semente de TRNs. Todos já são consumidos por
      * `server.py` desde que os `Engine`s opcionais
      * (`bristle_connectome`/`hygro_connectome`/`johnston_connectome`/
-     * `escape_connectome`/`taste_connectome`) forem passados na construção
+     * `escape_connectome`/`taste_connectome`/`thermo_connectome`) forem passados na construção
      * do {@code SimulationServer}.
      *
      * @throws IOException se a conexão cair — quem chama decide se reconecta
@@ -93,7 +96,7 @@ public final class BridgeClient implements AutoCloseable {
             double light, double dorsalLight, boolean damage,
             boolean touchContact, boolean touchProximity, boolean raining,
             boolean alarmExplosion, boolean alarmHostileMob, boolean soundMusic,
-            boolean loomingThreat, boolean foodContact, long tMs,
+            boolean loomingThreat, boolean foodContact, boolean thermoHeat, boolean thermoCold, long tMs,
             Collection<String> mute, StimulateSpec stimulate
     ) throws IOException {
         JsonObject sensor = new JsonObject();
@@ -109,6 +112,8 @@ public final class BridgeClient implements AutoCloseable {
         sensor.addProperty("sound_music", soundMusic);
         sensor.addProperty("looming_threat", loomingThreat);
         sensor.addProperty("food_contact", foodContact);
+        sensor.addProperty("thermo_heat", thermoHeat);
+        sensor.addProperty("thermo_cold", thermoCold);
         if (mute != null) {
             JsonArray muteArray = new JsonArray();
             mute.forEach(muteArray::add);

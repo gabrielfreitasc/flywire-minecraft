@@ -72,6 +72,7 @@ public final class ActivityVisualizer {
     static final Color COLOR_JOHNSTON = Color.fromRGB(220, 0, 0);    // vermelho (alarme/som)
     static final Color COLOR_ESCAPE = Color.fromRGB(148, 0, 211);    // violeta (medo/fuga)
     static final Color COLOR_TASTE = Color.fromRGB(255, 105, 180);   // rosa (paladar/doce)
+    static final Color COLOR_THERMO = Color.fromRGB(255, 140, 0);    // laranja (temperatura)
 
     private static final CircuitVisual[] CIRCUITS = {
             new CircuitVisual(COLOR_OCELAR, "phototaxis", "yaw_steering"),
@@ -80,6 +81,7 @@ public final class ActivityVisualizer {
             new CircuitVisual(COLOR_JOHNSTON, "startle"),
             new CircuitVisual(COLOR_ESCAPE, "escape_drive"),
             new CircuitVisual(COLOR_TASTE, "appetite"),
+            new CircuitVisual(COLOR_THERMO, "thermal"),
     };
 
     private static final int MAX_PARTICLES_PER_CIRCUIT = 6;
@@ -88,7 +90,7 @@ public final class ActivityVisualizer {
     /** Roda na thread principal — spawnar partícula é chamada de World, não thread-safe fora dela. */
     public void render(
             Bee bee, JsonObject motor, JsonObject bristleMotor, JsonObject hygroMotor, JsonObject johnstonMotor,
-            JsonObject escapeMotor, JsonObject tasteMotor
+            JsonObject escapeMotor, JsonObject tasteMotor, JsonObject thermoMotor
     ) {
         if (!bee.isValid()) {
             return;
@@ -99,7 +101,7 @@ public final class ActivityVisualizer {
             return;
         }
 
-        JsonObject[] byCircuit = {motor, bristleMotor, hygroMotor, johnstonMotor, escapeMotor, tasteMotor};
+        JsonObject[] byCircuit = {motor, bristleMotor, hygroMotor, johnstonMotor, escapeMotor, tasteMotor, thermoMotor};
         for (int i = 0; i < CIRCUITS.length; i++) {
             renderCircuit(world, center, byCircuit[i], CIRCUITS[i]);
         }

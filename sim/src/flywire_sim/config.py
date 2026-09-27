@@ -87,6 +87,13 @@ GUSTATORY_RECEPTOR_SIGN = 1
 # média=0,352 (p95=0,462), tanh estimulado=0,999.
 TASTE_MOTOR_RATE_SCALE = 60.0
 
+# F12 — escala PRÓPRIA do canal `thermal` (grupo excitatório de 47
+# descendentes do `thermo`). Checado ANTES de fixar limiar (lição F9/F10):
+# baseline 33,0 Hz (p95=41,3) — com `MOTOR_RATE_SCALE` genérico (30) o tanh
+# de baseline já é 0,79 (satura). Estimulado: 105 Hz. Escala 60: baseline
+# tanh média=0,498 (p95=0,597), estimulado média=0,941 (p05=0,924).
+THERMO_MOTOR_RATE_SCALE = 60.0
+
 # ------------------------------------------------------------ modelo (RN-07)
 DT_MS = 1.0                # passo de integração
 V_REST = 0.0               # potencial de repouso (normalizado)
@@ -175,6 +182,19 @@ SENSOR_LOOMING_AMPLITUDE = 2.0
 # disciplina, não calibrado contra dinâmica real de alimentação no
 # Minecraft ainda.
 SENSOR_TASTE_AMPLITUDE = 2.0
+
+# F12 — amplitude de estímulo nos TRNs do subcircuito `thermo` (heating/cold)
+# quando o sensor de temperatura no jogo indica calor/frio (ligado/desligado,
+# mesma lógica das constantes acima). MESMO valor de
+# `tools/thermo_calibration_check.py`.
+SENSOR_THERMO_AMPLITUDE = 2.0
+
+# F13 — amplitude de estímulo nas 31 sementes do subcircuito `sleep` (ER5 +
+# dFB FB6A/H/I/Z) quando é noite no jogo (ligado/desligado). É entrada de
+# ENGENHARIA (SEM USO NO JOGO — resultado negativo, ver build_f13_circuit.py): a hora do mundo
+# faz o papel do sinal circadiano/de pressão de sono. MESMO valor de
+# `tools/sleep_calibration_check.py`.
+SENSOR_SLEEP_AMPLITUDE = 2.0
 
 # ------------------------------------------------------------------ RN-08
 # Escala usada para normalizar taxa de disparo (Hz) em (-1, 1) via tanh.
