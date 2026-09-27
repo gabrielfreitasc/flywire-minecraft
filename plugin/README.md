@@ -1061,6 +1061,28 @@ acima do chão; balão "Sonolenta — quase dormindo". Despertam: som alto
 volta a ficar sonolenta ("Acordada — atenta, sem sono" nesse meio-tempo).
 HUD: linha "Sono". Testar com `/time set night`.
 
+## Experimentos de lesão pendentes (F14, 27/09/2026) — escape, taste, thermo
+
+Os três circuitos que viraram comportamento real depois do F7 (`bristle`/
+`hygro` já validados, p=0,0025/p=0,00019) e ainda não tinham lesão validando
+em servidor real ganharam comando:
+
+- `/flywirebee escapelesion [trials=20] [segundos=10] [x y z]` — mascara
+  `looming_threat`/`damage`. Estímulo SCRIPTED (o experimento aplica dano
+  real na abelha, `bee.damage(1.0)`, vida restaurada antes de cada trial)
+  — não precisa de ameaça externa, mas `segundos >= 4` (a fuga dura ~2,5s).
+- `/flywirebee tastelesion [trials=20] [segundos=10] [x y z]` — mascara
+  `food_contact`. Orientado a objeto: x/y/z a até 4 blocos de comida real
+  (bloco ou item largado).
+- `/flywirebee thermolesion [trials=20] [segundos=10] [x y z]` — mascara
+  `thermo_heat`/`thermo_cold`. Ambiente: x/y/z perto de lava/fogo/magma —
+  só a fuga de calor PERIGOSO tem efeito de movimento (frio/bioma só
+  mudam o balão, testar isso mediria ruído).
+
+Mesmo CSV/`sim/tools/lesion_analysis.py` dos anteriores. Ver
+`EscapeLesionExperiment.java`/`TasteLesionExperiment.java`/
+`ThermoLesionExperiment.java`, `docs/03-roadmap-fases.md` F14.
+
 ## Regra
 
 O plugin **nunca** altera a simulação. Se o comportamento não emerge, o problema

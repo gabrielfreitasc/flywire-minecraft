@@ -273,6 +273,9 @@ public final class ControlLoop {
     private volatile boolean touchLesioned = false; // F7/AD-17 — ver setTouchLesioned
     private volatile boolean hygroLesioned = false; // F7/AD-17 — ver setHygroLesioned
     private volatile boolean bristleSuppressedForExperiment = false; // F7/AD-17 — ver setBristleSuppressedForExperiment
+    private volatile boolean escapeLesioned = false; // F9/F14 — ver setEscapeLesioned
+    private volatile boolean tasteLesioned = false; // F10/F14 — ver setTasteLesioned
+    private volatile boolean thermoLesioned = false; // F12/F14 — ver setThermoLesioned
     private volatile boolean visualize = true;
     // F6/AD-16 — direção COMANDADA, persiste entre trocas (não é a orientação
     // visual da abelha, que a IA nativa continua controlando). null = precisa
@@ -385,6 +388,47 @@ public final class ControlLoop {
      */
     public void setBristleSuppressedForExperiment(boolean suppressed) {
         this.bristleSuppressedForExperiment = suppressed;
+    }
+
+    /**
+     * F14 (27/09/2026) — experimento de lesão pro `escape` (fuga por
+     * looming/dano): quando true, {@code looming_threat} E {@code damage}
+     * sempre chegam `false` na ponte — mesma filosofia de
+     * {@link #setTouchLesioned}. Zerar {@code damage} aqui também impede
+     * que ele chegue ao `bristle` nesta troca (mesmo campo, ver
+     * {@code damageToSend} em {@code onTick}) — de propósito: sem isso, um
+     * hit mascarado do `escape` ainda dispararia `grooming`, que teria
+     * prioridade em {@code MotorMapping} sobre a ausência de fuga e
+     * confundiria a métrica (mesma lição do confundidor real do
+     * {@link #setBristleSuppressedForExperiment}, aplicada preventivamente
+     * aqui em vez de esperar redescobrir em jogo).
+     */
+    public void setEscapeLesioned(boolean lesioned) {
+        this.escapeLesioned = lesioned;
+    }
+
+    /**
+     * F14 (27/09/2026) — experimento de lesão pro `taste` (paladar
+     * apetitivo): quando true, {@code food_contact} sempre chega `false` na
+     * ponte, não importa o que {@link TasteSensor} detecte de verdade —
+     * mesma filosofia de {@link #setTouchLesioned}. `appetite` nunca cruza
+     * {@code MotorMapping.TASTE_THRESHOLD}, então ela ignora a comida
+     * visível e segue só phototaxis/hygro/grooming.
+     */
+    public void setTasteLesioned(boolean lesioned) {
+        this.tasteLesioned = lesioned;
+    }
+
+    /**
+     * F14 (27/09/2026) — experimento de lesão pro `thermo` (calor/frio):
+     * quando true, {@code thermo_heat} E {@code thermo_cold} sempre chegam
+     * `false` na ponte, não importa o que {@link ThermalSensor} detecte —
+     * mesma filosofia de {@link #setTouchLesioned}. `thermal` nunca cruza
+     * {@code MotorMapping.THERMO_THRESHOLD}, então perto de uma fonte de
+     * calor perigosa ela não foge.
+     */
+    public void setThermoLesioned(boolean lesioned) {
+        this.thermoLesioned = lesioned;
     }
 
     /**
@@ -835,15 +879,23 @@ public final class ControlLoop {
         // ver docstring de setTouchLesioned). consumeContact() já rodou
         // acima — mascarar depois não perde nem acumula o estado real.
         boolean touchLesionedNow = touchLesioned;
-        boolean damageToSend = touchLesionedNow ? false : damage;
+        // F14 — lesão do escape mascara `damage` também pro bristle (ver
+        // docstring de setEscapeLesioned): sem isso, um hit mascarado do
+        // escape ainda dispararia grooming e confundiria a métrica.
+        boolean damageToSend = (touchLesionedNow || escapeLesioned) ? false : damage;
         boolean touchContactToSend = touchLesionedNow ? false : touchContact;
         boolean touchProximityToSend = touchLesionedNow ? false : touchProximity;
+        boolean loomingThreatToSend = escapeLesioned ? false : loomingThreat;
         // F7/AD-17 — experimento de lesão do hygro: mascara o que é ENVIADO,
         // não o que é detectado (mesma lógica das linhas acima).
         boolean rainingToSend = hygroLesioned ? false : raining;
         // F8 — ainda sem experimento de lesão pro johnston (mesma sequência
         // do hygro: sensor → protocolo → simulador antes de qualquer
         // experimento) — envia sempre o valor real, sem máscara ainda.
+        // F14 — lesão do taste/thermo: mesma filosofia, mascara o que é ENVIADO.
+        boolean foodContactToSend = tasteLesioned ? false : foodContact;
+        boolean thermoHeatToSend = thermoLesioned ? false : thermal.heat();
+        boolean thermoColdToSend = thermoLesioned ? false : thermal.cold();
 
         bridgeExecutor.submit(() -> {
             try {
@@ -852,8 +904,8 @@ public final class ControlLoop {
                 }
                 JsonObject response = bridge.sendSensorAndReceiveMotor(
                         light, dorsalLight, damageToSend, touchContactToSend, touchProximityToSend,
-                        rainingToSend, alarmExplosion, alarmHostileMob, soundMusic, loomingThreat,
-                        foodContact, thermal.heat(), thermal.cold(), tMs, muteToSend, stimulateToSend);
+                        rainingToSend, alarmExplosion, alarmHostileMob, soundMusic, loomingThreatToSend,
+                        foodContactToSend, thermoHeatToSend, thermoColdToSend, tMs, muteToSend, stimulateToSend);
                 if (sendMuteThisTime) {
                     muteDirty = false;
                 }

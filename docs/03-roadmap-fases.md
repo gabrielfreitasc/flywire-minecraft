@@ -2006,6 +2006,50 @@ do `EnergyTracker`. O que É circuito real são os **gatilhos de despertar**.
 
 ---
 
+## F14 — Experimentos de lesão pendentes: escape, taste, thermo (27/09/2026) 🔶 comandos implantados, execução em jogo pendente
+
+Mesmo padrão estatístico/CSV de F4/F7 (`sim/tools/lesion_analysis.py`, sem
+mudar nada nele), um comando `/flywirebee <circuito>lesion` por circuito que
+ainda não tinha — `escape` (fuga), `taste` (paladar) e `thermo`
+(calor/frio) eram os três que já viraram comportamento real (controlam
+`MotorMapping.toVelocity`) mas nunca tinham lesão validando em servidor
+real. `bristle`/`hygro` já validados desde F7 (p=0,0025/p=0,00019).
+
+- [x] **`ControlLoop.setEscapeLesioned/setTasteLesioned/setThermoLesioned`**
+      — mesma filosofia de `setTouchLesioned`/`setHygroLesioned`: mascara o
+      que é ENVIADO à ponte, sensor real continua rodando. `escapeLesioned`
+      mascara `damage` TAMBÉM pro `bristle` (mesmo campo compartilhado) —
+      prevenção do confundidor real que `hygrolesion` só descobriu em jogo
+      (grooming mascarando o efeito medido).
+- [x] **`EscapeLesionExperiment.java`** — estímulo SCRIPTED: o próprio
+      experimento aplica `bee.damage(1.0)` real (capturado por
+      `DamageTracker` como qualquer hit) no início de cada trial, vida
+      restaurada ao máximo antes — não precisa de ameaça externa por perto,
+      mas `secondsPerTrial` precisa caber a janela de fuga (~2,5s,
+      `ESCAPE_LATCH_TICKS`). Direção esperada: normal > lesionado
+      (`ESCAPE_SPEED_BLOCKS_PER_TICK=0,45` > voo normal).
+- [x] **`TasteLesionExperiment.java`** — orientado a objeto, como o toque:
+      x/y/z precisa ficar a até 4 blocos de comida real. Suprime `bristle`
+      na velocidade pelo experimento inteiro (mesma técnica preventiva do
+      `hygrolesion`). Direção esperada: normal < lesionado (ela pousa/para
+      na comida real, nunca para na mascarada — mesmo sentido do
+      `bristle`).
+- [x] **`ThermoLesionExperiment.java`** — ambiente, como a chuva: x/y/z
+      precisa ficar perto de lava/fogo/magma. **Só testa a fuga de calor
+      PERIGOSO** — frio e calor de bioma não têm efeito de movimento
+      (decisão de F12, só mudam o balão), testá-los mediria ruído. Direção
+      esperada: normal > lesionado (mesmo sentido do escape).
+- [x] Compilado, jar reimplantado, servidor reiniciado com desligamento
+      gracioso (mundo salvo) — pronto pra rodar.
+- [ ] **Execução em jogo** — os três comandos (`/flywirebee escapelesion`,
+      `tastelesion`, `thermolesion`) ainda não foram rodados; exigem
+      jogador posicionando a origem (comida/lava perto, ou ar aberto pro
+      escape) e aguardando o experimento terminar (`trials × segundos`).
+- [ ] Nenhum teste Python novo (mudança inteiramente do lado do plugin,
+      sem protocolo/simulador envolvido) — 46/46 continuam passando.
+
+---
+
 ## Fora de escopo (candidatos a v2+)
 
 | Item | Fase provável |

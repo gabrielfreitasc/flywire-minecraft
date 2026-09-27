@@ -36,6 +36,20 @@ import java.util.logging.Level;
  *       {@link HygroLesionExperiment}). Precisa estar chovendo de verdade
  *       (`/weather rain`) — ambiente como a luz, mas sem chuva real não há
  *       estímulo em nenhum dos dois grupos;</li>
+ *   <li>{@code escapelesion [trials] [segundos] [x y z]} — experimento de
+ *       lesão do subcircuito `escape` (fuga), F14 (ver
+ *       {@link EscapeLesionExperiment}). Estímulo SCRIPTED (dano real
+ *       aplicado pelo próprio experimento) — não precisa de ameaça externa,
+ *       mas segundosPorTrial >= 4 (a fuga dura ~2,5s);</li>
+ *   <li>{@code tastelesion [trials] [segundos] [x y z]} — experimento de
+ *       lesão do subcircuito `taste` (paladar), F14 (ver
+ *       {@link TasteLesionExperiment}). Escolher x/y/z a até 4 blocos de
+ *       comida real (bloco ou item largado) — orientado a objeto;</li>
+ *   <li>{@code thermolesion [trials] [segundos] [x y z]} — experimento de
+ *       lesão do subcircuito `thermo` (calor/frio), F14 (ver
+ *       {@link ThermoLesionExperiment}). Escolher x/y/z perto de
+ *       lava/fogo/magma — só a fuga de calor PERIGOSO tem efeito de
+ *       movimento (frio/bioma só mudam o balão);</li>
  *   <li>{@code daynight [trials] [segundos]} — experimento dia/noite, F6
  *       (ver {@link DayNightExperiment}). Exige abelha ao ar livre —
  *       {@code light} (não {@code dorsal_light}) é quem varia com a hora do
@@ -159,6 +173,9 @@ public final class FlywireBeePlugin extends JavaPlugin {
             case "lesion" -> handleLesion(player, args);
             case "touchlesion" -> handleTouchLesion(player, args);
             case "hygrolesion" -> handleHygroLesion(player, args);
+            case "escapelesion" -> handleEscapeLesion(player, args);
+            case "tastelesion" -> handleTasteLesion(player, args);
+            case "thermolesion" -> handleThermoLesion(player, args);
             case "daynight" -> handleDayNight(player, args);
             case "doseresponse" -> handleDoseResponse(player, args);
             case "validateyaw" -> handleValidateYaw(player, args);
@@ -324,6 +341,120 @@ public final class FlywireBeePlugin extends JavaPlugin {
             return;
         }
         new HygroLesionExperiment(this, controlLoop).run(bee.get(), trials, secondsPerTrial, origin, player);
+    }
+
+    /**
+     * F14 (27/09/2026) — mesmo desenho de {@link #handleLesion}, mascarando
+     * {@code looming_threat}/{@code damage}. Diferente do toque/chuva, o
+     * estímulo é SCRIPTED (o próprio experimento aplica dano real na
+     * abelha) — não precisa de obstáculo ou ameaça externa por perto, mas
+     * NÃO cabe num trial curto demais (a fuga dura ~2,5s). Ver docstring de
+     * {@link EscapeLesionExperiment}.
+     */
+    private void handleEscapeLesion(Player player, String[] args) {
+        Optional<Bee> bee = player.getWorld().getEntitiesByClass(Bee.class).stream()
+                .filter(marker::isMarked)
+                .findFirst();
+        if (bee.isEmpty()) {
+            player.sendMessage("Nenhuma abelha do FlyWire encontrada neste mundo. Use /flywirebee give primeiro.");
+            return;
+        }
+        int trials = 20;
+        int secondsPerTrial = 10;
+        Location origin = null;
+        try {
+            if (args.length >= 2) {
+                trials = Integer.parseInt(args[1]);
+            }
+            if (args.length >= 3) {
+                secondsPerTrial = Integer.parseInt(args[2]);
+            }
+            if (args.length == 6) {
+                origin = parseXyz(player, args, 3);
+            } else if (args.length != 3 && args.length != 2 && args.length != 1) {
+                throw new NumberFormatException(String.join(" ", args));
+            }
+        } catch (NumberFormatException e) {
+            player.sendMessage("Uso: /flywirebee escapelesion [trials=20] [segundosPorTrial=10] [x y z]"
+                    + " — segundosPorTrial >= 4, a fuga dura ~2,5s.");
+            return;
+        }
+        new EscapeLesionExperiment(this, controlLoop).run(bee.get(), trials, secondsPerTrial, origin, player);
+    }
+
+    /**
+     * F14 (27/09/2026) — mesmo desenho de {@link #handleTouchLesion},
+     * mascarando {@code food_contact}. Orientado a objeto: x/y/z precisa
+     * ficar a até 4 blocos de comida real (bloco ou item largado). Ver
+     * docstring de {@link TasteLesionExperiment}.
+     */
+    private void handleTasteLesion(Player player, String[] args) {
+        Optional<Bee> bee = player.getWorld().getEntitiesByClass(Bee.class).stream()
+                .filter(marker::isMarked)
+                .findFirst();
+        if (bee.isEmpty()) {
+            player.sendMessage("Nenhuma abelha do FlyWire encontrada neste mundo. Use /flywirebee give primeiro.");
+            return;
+        }
+        int trials = 20;
+        int secondsPerTrial = 10;
+        Location origin = null;
+        try {
+            if (args.length >= 2) {
+                trials = Integer.parseInt(args[1]);
+            }
+            if (args.length >= 3) {
+                secondsPerTrial = Integer.parseInt(args[2]);
+            }
+            if (args.length == 6) {
+                origin = parseXyz(player, args, 3);
+            } else if (args.length != 3 && args.length != 2 && args.length != 1) {
+                throw new NumberFormatException(String.join(" ", args));
+            }
+        } catch (NumberFormatException e) {
+            player.sendMessage("Uso: /flywirebee tastelesion [trials=20] [segundosPorTrial=10] [x y z]"
+                    + " — escolha x/y/z a até 4 blocos de comida real, senão não há paladar pra medir.");
+            return;
+        }
+        new TasteLesionExperiment(this, controlLoop).run(bee.get(), trials, secondsPerTrial, origin, player);
+    }
+
+    /**
+     * F14 (27/09/2026) — mesmo desenho de {@link #handleHygroLesion},
+     * mascarando {@code thermo_heat}/{@code thermo_cold}. Ambiente: x/y/z
+     * precisa ficar perto de lava/fogo/magma (fonte PERIGOSA — frio e calor
+     * de bioma não têm efeito de movimento pra medir, ver docstring de
+     * {@link ThermoLesionExperiment}).
+     */
+    private void handleThermoLesion(Player player, String[] args) {
+        Optional<Bee> bee = player.getWorld().getEntitiesByClass(Bee.class).stream()
+                .filter(marker::isMarked)
+                .findFirst();
+        if (bee.isEmpty()) {
+            player.sendMessage("Nenhuma abelha do FlyWire encontrada neste mundo. Use /flywirebee give primeiro.");
+            return;
+        }
+        int trials = 20;
+        int secondsPerTrial = 10;
+        Location origin = null;
+        try {
+            if (args.length >= 2) {
+                trials = Integer.parseInt(args[1]);
+            }
+            if (args.length >= 3) {
+                secondsPerTrial = Integer.parseInt(args[2]);
+            }
+            if (args.length == 6) {
+                origin = parseXyz(player, args, 3);
+            } else if (args.length != 3 && args.length != 2 && args.length != 1) {
+                throw new NumberFormatException(String.join(" ", args));
+            }
+        } catch (NumberFormatException e) {
+            player.sendMessage("Uso: /flywirebee thermolesion [trials=20] [segundosPorTrial=10] [x y z]"
+                    + " — escolha x/y/z perto de lava/fogo/magma, senão não há calor perigoso pra medir.");
+            return;
+        }
+        new ThermoLesionExperiment(this, controlLoop).run(bee.get(), trials, secondsPerTrial, origin, player);
     }
 
     private void handleDayNight(Player player, String[] args) {
@@ -574,6 +705,9 @@ public final class FlywireBeePlugin extends JavaPlugin {
         return "Uso: /flywirebee give | kill | spike <modo> | control <start|stop> | "
                 + "lesion [trials] [segundos] [x y z] | touchlesion [trials] [segundos] [x y z] | "
                 + "hygrolesion [trials] [segundos] [x y z] | "
+                + "escapelesion [trials] [segundos] [x y z] | "
+                + "tastelesion [trials] [segundos] [x y z] | "
+                + "thermolesion [trials] [segundos] [x y z] | "
                 + "daynight [trials] [segundos] [blind] | "
                 + "doseresponse [trials] [segundos] [x y z] | "
                 + "validateyaw [trials] [segundos] [amplitude] [x y z] | "
