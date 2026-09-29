@@ -2,7 +2,9 @@
 Analisa o CSV do experimento de lesão (gravado pelo plugin Java,
 LesionExperiment.java) — critério de saída da F4.
 
-Compara path_length e avg_speed entre trials com fotorreceptores normais
+Compara toda coluna numérica do CSV (path_length, avg_speed, e qualquer
+outra que um experimento específico tenha acrescentado — ver F14 em
+docs/03-roadmap-fases.md) entre trials com fotorreceptores normais
 (lesioned=False) e silenciados (lesioned=True, sempre light=0 mandado pro
 simulador). Ver docs/00-visao-geral.md ("Critério de falsificação") e
 docs/03-roadmap-fases.md (F4): se o comportamento for estatisticamente igual
@@ -42,7 +44,16 @@ def main() -> None:
     if len(normal) < 2 or len(lesioned) < 2:
         print("Poucos trials por grupo para estatística confiável — rode mais (/flywirebee lesion).")
 
-    for col in ("path_length", "avg_speed"):
+    # F14 (29/09/2026) — qualquer coluna numérica além de trial/lesioned é
+    # analisada, não só path_length/avg_speed: alguns experimentos (taste)
+    # ganharam colunas extras (final_distance_to_food) pra testar hipóteses
+    # que path_length/avg_speed sozinhos não capturam — ver
+    # TasteLesionExperiment.java e docs/03-roadmap-fases.md F14.
+    numeric_cols = [
+        c for c in df.columns
+        if c not in ("trial", "lesioned") and pd.api.types.is_numeric_dtype(df[c])
+    ]
+    for col in numeric_cols:
         n = normal[col].to_numpy()
         l = lesioned[col].to_numpy()
         print(f"\n{col}:")

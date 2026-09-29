@@ -19,9 +19,10 @@ import java.util.logging.Level;
 
 /**
  * F14 (27/09/2026) — experimento de lesão pro subcircuito `taste` (paladar
- * apetitivo), mesmo desenho estatístico e mesmo formato de CSV dos
- * experimentos anteriores — reaproveita {@code sim/tools/lesion_analysis.py}
- * sem mudar nada nele.
+ * apetitivo), mesmo desenho estatístico dos experimentos anteriores — CSV
+ * ganha uma coluna a mais (`final_distance_to_food`, ver mais abaixo), mas
+ * `sim/tools/lesion_analysis.py` analisa qualquer coluna numérica presente
+ * automaticamente, sem precisar mudar o script.
  *
  * <p>Orientado a EVENTO/objeto, igual {@link TouchLesionExperiment}: sem
  * comida de verdade perto da origem, nem a condição normal nem a lesionada
@@ -45,14 +46,31 @@ import java.util.logging.Level;
  * (`MotorMapping.TASTE_ARRIVAL_THRESHOLD_BLOCKS`) — o grupo NORMAL deveria
  * ter `path_length`/`avg_speed` MENORES (mesmo sentido do `bristle`: real =
  * pousa/para, mascarado = nunca para, sempre voando via phototaxis).
+ *
+ * <p><b>`final_distance_to_food` (29/09/2026, achado real — ver F14 em
+ * `docs/03-roadmap-fases.md`):</b> `path_length` sozinho deu nulo nas duas
+ * primeiras rodadas mesmo com o mascaramento confirmado funcionando
+ * (`appetite` cruzando `TASTE_THRESHOLD` do jeito certo em cada condição,
+ * via log). Hipótese: `TASTE_APPROACH_SPEED_BLOCKS_PER_TICK` tem a MESMA
+ * ordem de grandeza de `MAX_SPEED_BLOCKS_PER_TICK` (voo normal) — taste só
+ * muda a DIREÇÃO do voo (pra comida em vez de pra luz), não a velocidade
+ * como escape/thermo mudam, então `path_length` acumulado pode não
+ * distinguir os dois casos mesmo quando o circuito está certo. Métrica
+ * direta pra essa hipótese: onde ela está no FIM do trial, não quanto
+ * andou no caminho — deveria ficar perto da comida (posição capturada UMA
+ * vez no início do experimento, assumindo fonte estática — bloco ou item
+ * já parado) no grupo normal, e longe/aleatória no lesionado.
  */
 public final class TasteLesionExperiment {
 
     private static final Random RNG = new Random();
     private static final int TICKS_PER_SECOND = 20;
+    /** Sentinela quando nenhuma comida foi detectada no início — não deveria acontecer, ver aviso em {@link #run}. */
+    private static final double NO_FOOD_DETECTED_SENTINEL = -1.0;
 
     private final Plugin plugin;
     private final ControlLoop controlLoop;
+    private final TasteSensor tasteSensor = new TasteSensor();
 
     public TasteLesionExperiment(Plugin plugin, ControlLoop controlLoop) {
         this.plugin = plugin;
@@ -74,6 +92,17 @@ public final class TasteLesionExperiment {
             bee.setVelocity(new Vector(0, 0, 0));
         }
         Location origin = bee.getLocation().clone();
+        // F14 (29/09/2026) — capturada UMA vez aqui, não recalculada a cada
+        // trial: assume fonte estática (bloco ou item já parado), ver
+        // docstring da classe. Referência fixa pra `final_distance_to_food`
+        // mesmo se ela sair do raio de busca do TasteSensor (4 blocos)
+        // durante um trial lesionado.
+        TasteSensor.FoodTarget initialFood = tasteSensor.findNearestFood(bee);
+        Location foodLocation = initialFood != null ? initialFood.location() : null;
+        if (foodLocation == null) {
+            notify.sendMessage("Aviso: não detectei comida real a até 4 blocos da origem — "
+                    + "o experimento vai medir ruído.");
+        }
         List<TrialResult> results = new ArrayList<>();
         // Mesma técnica de HygroLesionExperiment — evita que touch_proximity
         // (jogador/mob perto da comida) mascare o efeito do taste via grooming.
@@ -81,12 +110,13 @@ public final class TasteLesionExperiment {
         notify.sendMessage("Experimento de lesão de paladar iniciado: " + trials + " trials de "
                 + secondsPerTrial + "s. Confirme que há comida real a até 4 blocos da origem.");
         plugin.getLogger().info("[TasteLesionExperiment] início — " + trials + " trials x " + secondsPerTrial
-                + "s, origem=" + formatLocation(origin));
-        runTrial(bee, origin, 0, trials, secondsPerTrial * TICKS_PER_SECOND, results, notify);
+                + "s, origem=" + formatLocation(origin) + ", comida="
+                + (foodLocation != null ? formatLocation(foodLocation) : "NÃO DETECTADA"));
+        runTrial(bee, origin, foodLocation, 0, trials, secondsPerTrial * TICKS_PER_SECOND, results, notify);
     }
 
     private void runTrial(
-            Bee bee, Location origin, int trialIndex, int totalTrials, int durationTicks,
+            Bee bee, Location origin, Location foodLocation, int trialIndex, int totalTrials, int durationTicks,
             List<TrialResult> results, CommandSender notify
     ) {
         if (!bee.isValid() || bee.isDead()) {
@@ -132,9 +162,14 @@ public final class TasteLesionExperiment {
 
                 if (tick >= durationTicks) {
                     double durationS = durationTicks / (double) TICKS_PER_SECOND;
-                    results.add(new TrialResult(trialIndex, lesioned, pathLength, pathLength / durationS));
+                    // F14 — distância até a comida NO FIM do trial (posição fixa
+                    // capturada no início do experimento, ver docstring da classe).
+                    double finalDistance = foodLocation != null
+                            ? current.distance(foodLocation) : NO_FOOD_DETECTED_SENTINEL;
+                    results.add(new TrialResult(
+                            trialIndex, lesioned, pathLength, pathLength / durationS, finalDistance));
                     cancel();
-                    runTrial(bee, origin, trialIndex + 1, totalTrials, durationTicks, results, notify);
+                    runTrial(bee, origin, foodLocation, trialIndex + 1, totalTrials, durationTicks, results, notify);
                 }
             }
         }.runTaskTimer(plugin, 0L, 1L);
@@ -150,13 +185,17 @@ public final class TasteLesionExperiment {
         }
         File file = new File(dir, "taste_lesion_experiment.csv");
         try (PrintWriter out = new PrintWriter(new FileWriter(file))) {
-            out.println("trial,lesioned,path_length,avg_speed");
+            // F14 (29/09/2026) — final_distance_to_food além de path_length/
+            // avg_speed: ver docstring da classe pra por quê (path_length
+            // sozinho deu nulo nas duas primeiras rodadas mesmo com o
+            // mascaramento confirmado funcionando).
+            out.println("trial,lesioned,path_length,avg_speed,final_distance_to_food");
             for (TrialResult r : results) {
                 // Locale.ROOT — nunca o locale padrão da JVM (pt_BR usa vírgula
                 // decimal, que colide com a vírgula do CSV e corrompe o arquivo
                 // silenciosamente).
-                out.printf(Locale.ROOT, "%d,%s,%.4f,%.4f%n",
-                        r.trial(), r.lesioned(), r.pathLength(), r.avgSpeed());
+                out.printf(Locale.ROOT, "%d,%s,%.4f,%.4f,%.4f%n",
+                        r.trial(), r.lesioned(), r.pathLength(), r.avgSpeed(), r.finalDistanceToFood());
             }
         } catch (IOException e) {
             plugin.getLogger().log(Level.WARNING, "[TasteLesionExperiment] falha ao escrever CSV", e);
@@ -173,6 +212,7 @@ public final class TasteLesionExperiment {
         return String.format(Locale.ROOT, "(%.2f, %.2f, %.2f)", loc.getX(), loc.getY(), loc.getZ());
     }
 
-    private record TrialResult(int trial, boolean lesioned, double pathLength, double avgSpeed) {
+    private record TrialResult(
+            int trial, boolean lesioned, double pathLength, double avgSpeed, double finalDistanceToFood) {
     }
 }
