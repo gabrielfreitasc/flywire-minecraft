@@ -2006,7 +2006,7 @@ do `EnergyTracker`. O que É circuito real são os **gatilhos de despertar**.
 
 ---
 
-## F14 — Experimentos de lesão pendentes: escape, taste, thermo (27–29/09/2026) 🔶 escape confirmado; taste e thermo executados mas com resultado não conclusivo — achados reais, registrados
+## F14 — Experimentos de lesão pendentes: escape, taste, thermo (27–29/09/2026) 🔶 escape e taste confirmados; thermo com efeito real em direção invertida, pendente de repetição
 
 Mesmo padrão estatístico/CSV de F4/F7 (`sim/tools/lesion_analysis.py`, sem
 mudar nada nele), um comando `/flywirebee <circuito>lesion` por circuito que
@@ -2109,9 +2109,14 @@ propósito" futuro esquece a mesma exceção.
       intencional, mesmo padrão de grooming/hygro.
 - [x] Compilado, jar reimplantado, servidor reiniciado com desligamento
       gracioso. 46/46 testes Python inalterados.
-- [ ] **Repetir `tastelesion`** com o fix — o CSV da 1ª rodada da métrica
-      nova foi gerado ANTES da correção, não é mais representativo do
-      comportamento atual.
+- [x] **`tastelesion` repetido com o fix (29/09/2026) — ✅ CONFIRMADO, limpo.**
+      normal: path_length=1,52 (desvio 0,09), final_distance_to_food=0,15
+      (desvio 0,06, todos os 6 trials entre 0,09–0,24 — dentro do limiar de
+      chegada). Lesionado: path_length=18,75, final_distance_to_food=2,40.
+      Os três testes concordam: Welch p≈0 nos três, Mann-Whitney p=0,00005
+      (U=0,0 — separação perfeita). Sem ambiguidade nenhuma, diferente da
+      1ª rodada da métrica nova (Welch/MW discordavam) — o fix do
+      `intentionalLanding` resolveu de verdade, não era escolha de origem.
 
 **`thermo` — efeito real, replicado, direção invertida.** Repetido na
 MESMA origem (achado do usuário não mudou o local) e o padrão se manteve,
