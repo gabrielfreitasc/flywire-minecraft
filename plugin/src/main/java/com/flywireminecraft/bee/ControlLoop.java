@@ -48,6 +48,13 @@ public final class ControlLoop {
     private final LoomingSensor loomingSensor = new LoomingSensor(); // F9/AD-20 — looming (escape)
     private final TasteSensor tasteSensor = new TasteSensor(); // F10 — comida (taste)
     private volatile boolean tasteTargetHeldByPlayer = false; // F10 — ver StatusLabel
+    // F14 (29/09/2026, achado real) — ver docstring do stuck-check
+    // (intentionalLanding): sem isto, o sistema de recuperação confundia
+    // "chegou na comida e parou de propósito" com "travou contra
+    // obstáculo" e empurrava ela pra longe logo depois de chegar —
+    // explicava por que tastelesion não fechava mesmo com o mascaramento
+    // confirmado funcionando (ver F14 em docs/03-roadmap-fases.md).
+    private volatile boolean tasteArrived = false;
     private final EnergyTracker energyTracker = new EnergyTracker(); // F11 — fome/energia, proxy de engenharia
     private final ThermalSensor thermalSensor = new ThermalSensor(); // F12 — calor/frio (thermo)
     private final SleepState sleepState = new SleepState(); // F13 — sonolência noturna, proxy de engenharia
@@ -615,11 +622,21 @@ public final class ControlLoop {
                 // (tocou chão/água mas sem teto), ela continua se deslocando,
                 // e se ficar presa contra um obstáculo nesse meio tempo, o
                 // sistema de recuperação deve continuar podendo ajudar, não
-                // achar que é "abrigo".
+                // achar que é "abrigo". F14 (29/09/2026, achado real,
+                // tastelesion) — mesmo raciocínio faltava pro taste: chegar
+                // na comida (`tasteArrived`, `MotorMapping.
+                // TASTE_ARRIVAL_THRESHOLD_BLOCKS`) faz `computeTasteVelocity`
+                // parar de propósito (velocidade zero), e sem esta linha o
+                // sistema de recuperação confundia isso com travamento e
+                // empurrava ela pra longe da comida repetidamente — bug
+                // real, não só confundidor de origem, achado ao investigar
+                // por que a distância final até a comida não fechava mesmo
+                // com o mascaramento confirmado funcionando.
                 boolean landedStable = ticksSinceGroundOrWaterContact < LANDED_GRACE_TICKS;
                 boolean intentionalLanding = (landedStable && groomingActive)
                         || (shelterFoundThisEpisode
-                                && MotorMapping.isSeekingShelterActive(latestHygroMotor));
+                                && MotorMapping.isSeekingShelterActive(latestHygroMotor))
+                        || tasteArrived;
                 if (moved < STUCK_DISPLACEMENT_THRESHOLD_BLOCKS && !intentionalLanding) {
                     consecutiveStuckCount++;
                     recoveryBoostTicksLeft = RECOVERY_BOOST_TICKS;
@@ -842,9 +859,9 @@ public final class ControlLoop {
         // agora, não um sensor novo. lastAppliedVelocity já reflete o
         // deslocamento REAL aplicado neste tick (mesma medida que
         // TouchSensor já usa).
-        boolean eatingNow = nearestFoodTarget != null
+        tasteArrived = nearestFoodTarget != null
                 && nearestFoodTarget.location().distance(bee.getLocation()) < MotorMapping.TASTE_ARRIVAL_THRESHOLD_BLOCKS;
-        energyTracker.tick(lastAppliedVelocity.length(), eatingNow);
+        energyTracker.tick(lastAppliedVelocity.length(), tasteArrived);
         long tMs = System.currentTimeMillis();
         // F6/AD-16: heading é a direção COMANDADA da troca anterior, não a
         // orientação real da abelha — só cai pra getDirection() se ainda não

@@ -2075,10 +2075,43 @@ clara, taste só muda a DIREÇÃO (pra comida em vez de pra luz), então
 "quantos blocos ela andou no total" pode não distinguir os dois casos
 mesmo quando o circuito está correto — a métrica certa seria provavelmente
 "distância até a comida no FIM do trial" (deveria ficar pertinho no
-normal, longe/aleatória no lesionado), não path_length acumulado. Não
-implementado ainda — precisa de mudança na métrica do CSV, não só
-recalibração. Log ampliado (`tasteDist=`) adicionado pra facilitar o
-próximo diagnóstico.
+normal, longe/aleatória no lesionado), não path_length acumulado.
+
+### `final_distance_to_food` (29/09/2026) — métrica nova + bug real encontrado
+
+`TasteLesionExperiment` ganhou a coluna (posição da comida capturada uma
+vez no início, distância até ela no FIM de cada trial).
+`lesion_analysis.py` generalizado pra analisar qualquer coluna numérica do
+CSV automaticamente. 1ª rodada com a métrica nova: `final_distance_to_food`
+normal=2,16 / lesionado=2,90 — direção certa, mas Welch (p=0,029) e
+Mann-Whitney (p=0,153) DISCORDAM — resultado ambíguo, não uma confirmação
+limpa. Olhando os valores brutos: só 2 de 14 trials normais chegaram
+perto de verdade (<0,2 blocos), o resto ficou espalhado de 1,2 a 3,6 —
+inconsistente, não "ela sempre chega e para".
+
+**Causa raiz encontrada, bug real (não só escolha de origem):** o log
+mostrou 51 mensagens de "recuperação" na janela do experimento — o
+sistema anti-obstáculo de `ControlLoop` (`intentionalLanding`) reconhecia
+pouso intencional do grooming e abrigo encontrado do hygro, mas **não**
+reconhecia chegada na comida do taste. Quando `computeTasteVelocity` para
+de propósito (chegou, `MotorMapping.TASTE_ARRIVAL_THRESHOLD_BLOCKS`), o
+detector de travamento via isso como "só 0,0x blocos em 20 ticks" e
+disparava um empurrão — literalmente chutando ela pra longe da comida
+logo depois dela chegar, repetidas vezes. Corrigido: novo campo
+`ControlLoop.tasteArrived` (mesmo critério já usado por
+`EnergyTracker`/`eatingNow`, sem duplicar lógica) adicionado ao OR de
+`intentionalLanding`. **Terceiro caso do mesmo padrão** (grooming e
+hygro-abrigo já tinham essa exceção, taste não tinha sido lembrado quando
+F10 foi implementado) — vale checar se outro comportamento de "parar de
+propósito" futuro esquece a mesma exceção.
+
+- [x] `ControlLoop.tasteArrived` — reconhece chegada no taste como pouso
+      intencional, mesmo padrão de grooming/hygro.
+- [x] Compilado, jar reimplantado, servidor reiniciado com desligamento
+      gracioso. 46/46 testes Python inalterados.
+- [ ] **Repetir `tastelesion`** com o fix — o CSV da 1ª rodada da métrica
+      nova foi gerado ANTES da correção, não é mais representativo do
+      comportamento atual.
 
 **`thermo` — efeito real, replicado, direção invertida.** Repetido na
 MESMA origem (achado do usuário não mudou o local) e o padrão se manteve,

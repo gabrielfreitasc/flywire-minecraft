@@ -219,6 +219,29 @@ Minecraft. Subcircuito ocelar: 625 neurônios, 2.981 conexões.
   perto da direção de fuga esperada, não mudando a métrica (a métrica em
   si é válida noutro contexto). Ver F14 em `docs/03-roadmap-fases.md`.
 
+- **Todo comportamento novo que faz a abelha PARAR de propósito precisa
+  entrar na lista de exceção do sistema anti-obstáculo, senão ele é
+  confundido com travamento e literalmente desfeito.** Achado real (F14,
+  29/09/2026, bug de código, não só confundidor de origem): `grooming`
+  (pouso) e `hygro`/abrigo encontrado já tinham exceção em
+  `ControlLoop.intentionalLanding` (o detector de "só 0,0x blocos em 20
+  ticks" empurra ela pra longe quando isso NÃO é intencional) — `taste`
+  (parar ao chegar na comida, `MotorMapping.TASTE_ARRIVAL_THRESHOLD_BLOCKS`)
+  não tinha, desde que foi implementado no F10. Resultado: toda vez que ela
+  chegava de verdade na comida, o sistema de recuperação achava que ela
+  tinha travado e a empurrava pra longe de novo — o `tastelesion` dava nulo
+  mesmo com o mascaramento do sensor confirmado funcionando corretamente
+  (log mostrando `appetite` cruzando o limiar do jeito certo em cada
+  condição), porque o efeito estava sendo desfeito por um sistema não
+  relacionado. Corrigido com `ControlLoop.tasteArrived` no OR de
+  `intentionalLanding` (reaproveitando o mesmo critério que `EnergyTracker`
+  já usava pra "comendo", sem duplicar lógica). **Ao adicionar um circuito
+  novo que decide parar (velocidade zero) como resposta correta a algum
+  estímulo, sempre perguntar: o sistema de recuperação sabe que isso é de
+  propósito?** — senão ele vai "corrigir" o comportamento que você acabou de
+  implementar, e o sintoma vai parecer um circuito fraco ou um problema de
+  origem/ambiente, não o bug real. Ver F14 em `docs/03-roadmap-fases.md`.
+
 ## Papéis no projeto
 
 | Papel | Responsabilidade | Fronteira |
