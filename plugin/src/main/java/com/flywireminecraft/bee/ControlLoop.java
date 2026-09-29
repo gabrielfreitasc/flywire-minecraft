@@ -755,14 +755,28 @@ public final class ControlLoop {
             String appetite = latestTasteMotor.has("appetite")
                     ? String.format(Locale.ROOT, "%.3f", latestTasteMotor.get("appetite").getAsDouble())
                     : "-";
+            // F14 (29/09/2026) — achado real: escapelesion/tastelesion/thermolesion
+            // são difíceis de depurar sem ver `thermal` e a distância até a comida
+            // no log (precisou de arqueologia de log linha a linha pra diagnosticar
+            // o resultado invertido do thermo e o nulo do taste). Diagnóstico
+            // ampliado aqui, mesma cadência (1x/s), sem mudar comportamento.
+            String thermal = latestThermoMotor.has("thermal")
+                    ? String.format(Locale.ROOT, "%.3f", latestThermoMotor.get("thermal").getAsDouble())
+                    : "-";
+            TasteSensor.FoodTarget loggedFood = tasteSensor.findNearestFood(bee);
+            String tasteDist = loggedFood != null
+                    ? String.format(Locale.ROOT, "%.2f", loggedFood.location().distance(bee.getLocation()))
+                    : "-";
+            ThermalSensor.Reading loggedThermal = thermalSensor.read(bee);
             plugin.getLogger().info(String.format(Locale.ROOT,
                     "[ControlLoop] light=%.2f (real=%.2f, forçado=%s) vel=%s trocas=%d falhas=%d "
                             + "proximity=%s grooming=%s onGround=%s raining=%s hygrotaxis=%s "
-                            + "hostileMob=%s startle=%s looming=%s escapeDrive=%s food=%s appetite=%s",
+                            + "hostileMob=%s startle=%s looming=%s escapeDrive=%s food=%s appetite=%s "
+                            + "tasteDist=%s heatNear=%s coldNear=%s thermal=%s",
                     light, realLight, forced, latestVelocity, exchangeCount, exchangeFailures,
                     touchSensor.isNearSomething(bee), grooming, bee.isOnGround(), raining, hygrotaxis,
                     alarmSensor.isHostileMobNearby(bee), startle, loomingSensor.isLoomingThreat(), escapeDrive,
-                    tasteSensor.findNearestFood(bee) != null, appetite));
+                    loggedFood != null, appetite, tasteDist, loggedThermal.heat(), loggedThermal.cold(), thermal));
         }
         tickCount++;
 

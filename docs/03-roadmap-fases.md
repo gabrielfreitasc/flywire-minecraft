@@ -2006,7 +2006,7 @@ do `EnergyTracker`. O que É circuito real são os **gatilhos de despertar**.
 
 ---
 
-## F14 — Experimentos de lesão pendentes: escape, taste, thermo (27/09/2026) 🔶 comandos implantados, execução em jogo pendente
+## F14 — Experimentos de lesão pendentes: escape, taste, thermo (27–29/09/2026) 🔶 escape confirmado; taste e thermo executados mas com resultado não conclusivo — achados reais, registrados
 
 Mesmo padrão estatístico/CSV de F4/F7 (`sim/tools/lesion_analysis.py`, sem
 mudar nada nele), um comando `/flywirebee <circuito>lesion` por circuito que
@@ -2040,11 +2040,77 @@ real. `bristle`/`hygro` já validados desde F7 (p=0,0025/p=0,00019).
       (decisão de F12, só mudam o balão), testá-los mediria ruído. Direção
       esperada: normal > lesionado (mesmo sentido do escape).
 - [x] Compilado, jar reimplantado, servidor reiniciado com desligamento
-      gracioso (mundo salvo) — pronto pra rodar.
-- [ ] **Execução em jogo** — os três comandos (`/flywirebee escapelesion`,
-      `tastelesion`, `thermolesion`) ainda não foram rodados; exigem
-      jogador posicionando a origem (comida/lava perto, ou ar aberto pro
-      escape) e aguardando o experimento terminar (`trials × segundos`).
+      gracioso (mundo salvo).
+
+### Execução em jogo (29/09/2026) — resultados reais
+
+| Circuito | p (path_length) | Direção | Veredito |
+|---|---|---|---|
+| `escape` | 0,00011 (Welch) / 0,00049 (MW) | normal=13,76 > lesionado=3,12 — como esperado | **✅ CONFIRMADO** |
+| `taste` (1ª rodada) | 0,74 | — | Nulo, mas confundido (ver abaixo) |
+| `taste` (2ª rodada) | 0,61 | normal=20,61 ≈ lesionado=21,30 | Nulo, sem confundidor óbvio — em aberto |
+| `thermo` (1ª rodada) | 0,00010 | normal=6,12 < lesionado=12,75 — **invertido** | Efeito real, direção errada |
+| `thermo` (2ª rodada, mesma origem) | 0,00007 | normal=5,06 < lesionado=19,61 — **invertido, replicado** | Efeito real, direção errada |
+
+**`escape` — validado, sem ressalvas.** Estímulo scripted funcionou
+exatamente como desenhado, sem sinal de confundidor no log.
+
+**`taste` — dois achados, um resolvido, um em aberto.** 1ª rodada: estava
+chovendo o experimento INTEIRO (`raining=true` em 200/200 linhas de log da
+janela), `hygrotaxis`≈0,99 o tempo todo — acima de `HYGROTAXIS_THRESHOLD`.
+`MotorMapping.toVelocity` prioriza busca de abrigo ACIMA de taste sempre
+(mesmo com comida estática, não segurada por jogador) — as duas condições
+tiveram o movimento dominado por "fugir da chuva", não por "ir até a
+comida". Isso é uma variação do MESMO tipo de confundidor já documentado 3
+vezes nas armadilhas do projeto (canais/prioridades que competem mascaram o
+que se quer medir) — ver `CONVENCOES.md`. 2ª rodada, sem chuva: confirmado
+por análise linha a linha do log que o MASCARAMENTO funciona corretamente
+(`appetite` fica em ~0,999 nos trials normais, cai pra ~0,14–0,34 nos
+lesionados, cruzando `TASTE_THRESHOLD=0,7` exatamente como devia) — mas
+`path_length` continua estatisticamente igual (p=0,61). Hipótese mais
+provável, NÃO CONFIRMADA: `TASTE_APPROACH_SPEED_BLOCKS_PER_TICK=0,3` é a
+MESMA ordem de grandeza de `MAX_SPEED_BLOCKS_PER_TICK=0,3` (voo normal) —
+diferente de escape (0,45) e thermo (0,4), que mudam a VELOCIDADE de forma
+clara, taste só muda a DIREÇÃO (pra comida em vez de pra luz), então
+"quantos blocos ela andou no total" pode não distinguir os dois casos
+mesmo quando o circuito está correto — a métrica certa seria provavelmente
+"distância até a comida no FIM do trial" (deveria ficar pertinho no
+normal, longe/aleatória no lesionado), não path_length acumulado. Não
+implementado ainda — precisa de mudança na métrica do CSV, não só
+recalibração. Log ampliado (`tasteDist=`) adicionado pra facilitar o
+próximo diagnóstico.
+
+**`thermo` — efeito real, replicado, direção invertida.** Repetido na
+MESMA origem (achado do usuário não mudou o local) e o padrão se manteve,
+mais forte até (razão ~4x contra ~2x). Diagnóstico por log linha a linha:
+mensagens de "recuperação" (sistema anti-obstáculo de `ControlLoop`)
+aparecem quase exclusivamente nos trials LESIONADOS (sem sinal de calor,
+voando só por phototaxis) — nos NORMAIS (thermal ativo, fugindo), quase
+nenhuma. Hipótese: a origem escolhida tem um obstáculo que a rota de
+phototaxis encontra repetidamente (sem o override de fuga pra desviar),
+cada travamento dispara um empurrão de recuperação, e a SOMA de vários
+empurrões pequenos ao longo de 10s acumula mais `path_length` que o desvio
+único e limpo da fuga de calor. **Achado geral, não só do thermo:**
+`path_length`/`avg_speed` não distinguem "andou muito de propósito" de
+"ficou preso batendo/empurrando repetidas vezes" — um confundidor
+metodológico que pode inverter a direção de QUALQUER experimento de lesão
+futuro perto de obstáculo. Registrado como armadilha (ver
+`CONVENCOES.md`). Log ampliado (`thermal=`, `heatNear=`, `coldNear=`)
+adicionado — permite confirmar em texto se o circuito realmente cruzou o
+limiar durante os trials "normais", sem depender só de inferência pelo
+padrão de `path_length`.
+
+- [x] **Log de diagnóstico ampliado (29/09/2026)** — `ControlLoop`'s linha
+      periódica (`LOG_EVERY_TICKS`) ganhou `tasteDist=` (distância real até
+      a comida mais próxima) e `heatNear=`/`coldNear=`/`thermal=` (leitura
+      crua do `ThermalSensor` + canal do circuito) — antes só dava pra
+      diagnosticar via arqueologia de outras linhas de log; agora esses
+      sinais aparecem direto, 1x/s, mesma cadência de sempre.
+- [ ] **Taste** — precisa de uma métrica de CSV nova (distância final até a
+      comida) antes de repetir; path_length não é sensível ao efeito.
+- [ ] **Thermo** — repetir numa origem sem obstáculo perto (paredes/blocos
+      que possam interceptar a direção de fuga), com o log novo confirmando
+      se `thermal` cruzou o limiar nos trials normais.
 - [ ] Nenhum teste Python novo (mudança inteiramente do lado do plugin,
       sem protocolo/simulador envolvido) — 46/46 continuam passando.
 

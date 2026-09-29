@@ -184,6 +184,41 @@ Minecraft. Subcircuito ocelar: 625 neurônios, 2.981 conexões.
   registra `unannotated_dropped` — não é contorno da validação de totais
   (essa roda antes, na conectividade inteira).
 
+- **Busca de abrigo (hygro) tem prioridade ACIMA de qualquer outro canal
+  motor mesmo quando o outro está claramente ativo — chover durante um
+  experimento de outro circuito mascara o efeito dele, não só do bristle.**
+  Achado real (F14, 29/09/2026): `tastelesion` deu nulo (p=0,74) na
+  primeira rodada porque choveu o experimento INTEIRO (`raining=true` em
+  200/200 linhas de log) — `hygrotaxis`≈0,99 (acima do limiar) dominou o
+  movimento nas duas condições (normal e lesionada), mascarando qualquer
+  efeito de `taste`. `MotorMapping.toVelocity` prioriza busca de abrigo
+  ACIMA de `taste` sempre, mesmo com comida estática (não é só o caso já
+  conhecido de "jogador/mob perto = grooming mascarando"). **Antes de
+  rodar QUALQUER experimento de lesão de um circuito que não seja o
+  hygro, confirmar que não está chovendo** (`/weather clear`) — do
+  contrário a "condição normal" e a "lesionada" competem igualmente contra
+  a busca de abrigo, e a diferença que se quer medir desaparece nos dois
+  grupos por igual.
+- **`path_length`/`avg_speed` acumulado não distingue "andou muito de
+  propósito" de "ficou preso batendo/empurrando repetidas vezes" — pode
+  INVERTER a direção esperada de um experimento de lesão perto de
+  obstáculo.** Achado real (F14, 27–29/09/2026, replicado 2x na mesma
+  origem): `thermolesion` deu efeito real (p<0,0001) mas na direção
+  ERRADA — trials LESIONADOS (sem fuga de calor, só phototaxis) tiveram
+  MAIS `path_length` que os normais (fugindo). Diagnóstico por log linha a
+  linha: mensagens de "recuperação" (sistema anti-obstáculo de
+  `ControlLoop`) apareciam quase só nos trials lesionados — a rota de
+  phototaxis batia num obstáculo repetidamente, e a SOMA de vários
+  empurrões de recuperação pequenos ao longo do trial acumulou mais
+  distância total que o desvio único e limpo da fuga de calor. **Antes de
+  aceitar a direção de um resultado de lesão como o circuito "explicando"
+  o efeito, checar o log por mensagens de recuperação/travamento
+  concentradas numa condição** — se estiverem, a origem tem um obstáculo
+  raso e o experimento está medindo "quantas vezes travou", não o
+  comportamento do circuito. Corrigido escolhendo origem sem obstáculo
+  perto da direção de fuga esperada, não mudando a métrica (a métrica em
+  si é válida noutro contexto). Ver F14 em `docs/03-roadmap-fases.md`.
+
 ## Papéis no projeto
 
 | Papel | Responsabilidade | Fronteira |
