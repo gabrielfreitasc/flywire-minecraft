@@ -2006,7 +2006,7 @@ do `EnergyTracker`. O que É circuito real são os **gatilhos de despertar**.
 
 ---
 
-## F14 — Experimentos de lesão pendentes: escape, taste, thermo (27–29/09/2026) 🔶 escape e taste confirmados; thermo com efeito real em direção invertida, pendente de repetição
+## F14 — Experimentos de lesão pendentes: escape, taste, thermo (27–29/09/2026) ✅ os três circuitos confirmados por lesão em servidor real
 
 Mesmo padrão estatístico/CSV de F4/F7 (`sim/tools/lesion_analysis.py`, sem
 mudar nada nele), um comando `/flywirebee <circuito>lesion` por circuito que
@@ -2051,6 +2051,9 @@ real. `bristle`/`hygro` já validados desde F7 (p=0,0025/p=0,00019).
 | `taste` (2ª rodada) | 0,61 | normal=20,61 ≈ lesionado=21,30 | Nulo, sem confundidor óbvio — em aberto |
 | `thermo` (1ª rodada) | 0,00010 | normal=6,12 < lesionado=12,75 — **invertido** | Efeito real, direção errada |
 | `thermo` (2ª rodada, mesma origem) | 0,00007 | normal=5,06 < lesionado=19,61 — **invertido, replicado** | Efeito real, direção errada |
+| `taste` (3ª rodada, com `final_distance_to_food`, pós-fix) | ≈0 (Welch e MW) | normal=0,15 < lesionado=2,40 — correto | **✅ CONFIRMADO** |
+| `thermo` (3ª rodada, origem aberta) | 0,041 (Welch) / 0,254 (MW) | normal=24,74 > lesionado=17,98 — correto, mas ambíguo | Direção corrigida, amostra pequena |
+| `thermo` (4ª rodada, mesma origem, N=40) | 0,00114 (Welch) / 0,00002 (MW) | normal=15,69 > lesionado=11,84 — correto | **✅ CONFIRMADO** |
 
 **`escape` — validado, sem ressalvas.** Estímulo scripted funcionou
 exatamente como desenhado, sem sinal de confundidor no log.
@@ -2144,13 +2147,42 @@ padrão de `path_length`.
       crua do `ThermalSensor` + canal do circuito) — antes só dava pra
       diagnosticar via arqueologia de outras linhas de log; agora esses
       sinais aparecem direto, 1x/s, mesma cadência de sempre.
-- [ ] **Taste** — precisa de uma métrica de CSV nova (distância final até a
-      comida) antes de repetir; path_length não é sensível ao efeito.
-- [ ] **Thermo** — repetir numa origem sem obstáculo perto (paredes/blocos
-      que possam interceptar a direção de fuga), com o log novo confirmando
-      se `thermal` cruzou o limiar nos trials normais.
-- [ ] Nenhum teste Python novo (mudança inteiramente do lado do plugin,
+- [x] **Taste** — ver seção "`final_distance_to_food`" abaixo: métrica
+      nova + bug real corrigido (`intentionalLanding` não reconhecia
+      chegada do taste) → **✅ CONFIRMADO**, limpo (Welch/Mann-Whitney
+      concordam, p≈0 nos dois).
+
+### `thermo` — 3ª e 4ª rodadas (29/09/2026) — ✅ CONFIRMADO após trocar origem + dobrar N
+
+**3ª rodada, origem aberta** (sem parede perto, escolhida pelo usuário
+depois do diagnóstico da 2ª rodada): direção já corrigiu (normal=24,74 >
+lesionado=17,98, como esperado), e as mensagens de "recuperação" (9 no
+total) pararam de se concentrar numa condição só — confirma que o
+obstáculo era mesmo a causa da inversão anterior. Mas ainda ambíguo:
+Welch p=0,041 (raspando o limiar), Mann-Whitney p=0,254 (não
+significativo) — os dois discordam. Diagnóstico via log novo
+(`thermal=`, `heatNear=`): o canal só cruza o limiar de 0,45 em picos
+breves (`heatNear` alterna true/false VÁRIAS vezes dentro do MESMO
+trial — ela entra e sai do raio de 3 blocos do sensor), diferente do
+`escape` (trava sustentada ~2,5s) ou do `taste` (para e fica) — a fuga
+de calor aqui é intermitente, o que dilui o efeito ao longo de 10s e
+pede mais amostra pra separar do ruído.
+
+**4ª rodada, mesma origem, N dobrado (20→40 trials):** ✅ **CONFIRMADO,
+limpo.** `path_length` normal=15,69 (desvio 1,67) / lesionado=11,84
+(desvio 4,10). Welch p=0,00114, Mann-Whitney p=0,00002 — os dois
+concordam com folga. Confirma a hipótese: o efeito é real mas modesto/
+ruidoso (natureza intermitente do sinal), problema de tamanho de
+amostra, não de mecanismo. Mesmo padrão já visto no F4/F6 (RN-09):
+ruído mais baixo revela efeitos reais mais modestos que pareciam nulos
+ou ambíguos com poucos trials.
+
+- [x] Nenhum teste Python novo (mudança inteiramente do lado do plugin,
       sem protocolo/simulador envolvido) — 46/46 continuam passando.
+
+**F14 encerrado: os três circuitos (`escape`, `taste`, `thermo`) estão
+confirmados por lesão em servidor real**, mesmo padrão de rigor que
+`bristle`/`hygro` desde F7.
 
 ---
 
