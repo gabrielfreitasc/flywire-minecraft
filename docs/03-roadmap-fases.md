@@ -2186,7 +2186,7 @@ confirmados por lesão em servidor real**, mesmo padrão de rigor que
 
 ---
 
-## F15 — Lesão do johnston (som/vento, 29/09/2026) 🔶 bug real corrigido (assentamento assimétrico entre condições), execução em jogo pendente
+## F15 — Lesão do johnston (som/vento, 29/09/2026) ✅ confirmado por lesão em servidor real
 
 **Decisão do usuário (via `AskUserQuestion`, entre 2 opções):** testar a
 lesão pelo gatilho existente, em vez de inventar um reflexo novo pro
@@ -2244,10 +2244,13 @@ abelha sumir de verdade).
 
 - [x] Fix aplicado, compilado, jar reimplantado, servidor reiniciado com
       desligamento gracioso. 46/46 testes Python inalterados.
-- [ ] **Execução em jogo com o fix** — ainda não repetido; cada trial
-      demora mais que os outros (assentamento de até 20s + medição), então
-      N=20 trials pode levar bem mais tempo total que os experimentos
-      anteriores.
+- [x] **Execução em jogo com o fix (29/09/2026) — ✅ CONFIRMADO, limpo.**
+      Os 20 trials completaram sem abortar (fix do assentamento validado
+      na prática). `path_length` normal=15,40 (desvio 2,39) /
+      lesionado=10,10 (desvio 1,85). Welch p=0,00030, Mann-Whitney
+      p=0,00030 — concordam perfeitamente. Direção certa: som real
+      chegando no circuito desperta ela (mais rápida), mascarado ela
+      continua sonolenta.
 
 ---
 

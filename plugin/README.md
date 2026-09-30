@@ -1085,7 +1085,7 @@ Mesmo CSV/`sim/tools/lesion_analysis.py` dos anteriores. Ver
 `EscapeLesionExperiment.java`/`TasteLesionExperiment.java`/
 `ThermoLesionExperiment.java`, `docs/03-roadmap-fases.md` F14.
 
-## Lesão do johnston (F15, 29/09/2026) — som/vento, pendente de execução
+## Lesão do johnston (F15, 29/09/2026) — som/vento ✅ confirmado
 
 `startle` continua telemetria pura — o único efeito real é indireto
 (acordar do sono noturno, F13). Desenho diferente dos outros:
