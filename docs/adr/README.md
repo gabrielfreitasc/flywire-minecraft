@@ -29,6 +29,8 @@ Decisões com consequência arquitetural. Uma ADR nunca é editada depois de ace
 | AD-22 | Fome (F11) NÃO vira circuito LIF — achado negativo real: IPC/Hugin-RG/DH44/ITP (neurônios neurosecretores endócrinos) têm zero arestas de saída acima de `SYN_THRESHOLD` no conectoma inteiro (sinalizam por hormônio, não sinapse). `EnergyTracker.java` é medidor de engenharia puro do lado do plugin, documentado como proxy de jogo — não simula neurônio real, ao contrário de todo canal anterior | 2026-09-26 | Aceita |
 | AD-23 | Circuito `thermo` (F12, calor/frio): `ingest.build(sensory_only_seed=True)` — só a SEMENTE vira `role="sensory"`; sensoriais de outras modalidades alcançados por salto viram interneurônios (2 saltos arrastavam 1.561 sensoriais não relacionados). Escala própria `THERMO_MOTOR_RATE_SCALE=60`. O canal `thermal` não distingue calor de frio — o sensor distingue. Também: `ingest.build` agora exclui neurônios sem anotação (`unannotated_dropped` no manifest) | 2026-09-26 | Aceita |
 | AD-24 | Sono (F13) NÃO vira circuito LIF — achado negativo real: sementes inibitórias da literatura (ER5 + dFB FB6A/H/I/Z) estimuladas não mudam os descendentes em 2 saltos (p=0,083/p=1,0) e em 3 saltos o efeito é ~3% com passo de ~1,12 ms (inviável em tempo real). `SleepState.java` é estado de engenharia (relógio do mundo), como `EnergyTracker`; os gatilhos de despertar vêm de circuitos reais (johnston `startle`, escape, dano) | 2026-09-26 | Aceita |
+| AD-25 | `server.py` vira multiprocessing (F16) — um processo por circuito em vez de um laço único numa thread (RN-06 preservada: acoplamento assíncrono, só a implementação interna muda). Medido antes de decidir: laço único usava 99,6% do orçamento de 1ms/tick; multiprocessing sem controlar threads de BLAS deu só 0,666ms/tick; travando `OPENBLAS_NUM_THREADS=1`/`OMP_NUM_THREADS=1`/`MKL_NUM_THREADS=1` (ANTES de qualquer import que traga numpy/scipy) deu 0,407ms/tick, 59,3% livre. Coordenação só por `multiprocessing.Array` compartilhado (estímulo) + fila `maxsize=1` por circuito (saída) — sem mudar o protocolo TCP/JSON | 2026-09-30 | Aceita |
+| AD-26 | Circuito `olfactory` (F17, feromônio): `ingest.expand(exclude=...)`/`ingest.build(exclude_cell_classes=...)` — segunda barreira de BFS, mesmo mecanismo de `descending` (RN-04), por outro motivo: excluir uma via funcional inteira (`Kenyon_Cell`, corpo cogumelo/memória) confirmada por medição (não presumida) como irrelevante pros descendentes alcançados — corta 1.806 nós sem perder nenhum dos 74 descendentes. Semente = 429 ORNs de feromônio (`cell_sub_class=="pheromone"`); escala própria `OLFACTORY_MOTOR_RATE_SCALE=60` | 2026-09-30 | Aceita |
 
 AD-01 a AD-05 estão detalhadas em [`../01-camada-de-dados.md`](../01-camada-de-dados.md).
 AD-07 a AD-10 e AD-17 estão detalhadas em [`../02-arquitetura.md`](../02-arquitetura.md).
@@ -39,6 +41,9 @@ docstring de `plugin/.../EnergyTracker.java`.
 AD-23 está detalhada em [`../03-roadmap-fases.md`](../03-roadmap-fases.md) F12 e na
 docstring de `sim/src/flywire_sim/ingest.py::build`. AD-24 está detalhada em F13 e nas
 docstrings de `sim/tools/build_f13_circuit.py` e `plugin/.../SleepState.java`.
+AD-25 está detalhada em F16 e no topo de `sim/src/flywire_sim/server.py`. AD-26
+está detalhada em F17 e nas docstrings de `sim/tools/build_f17_circuit.py` e
+`sim/src/flywire_sim/ingest.py::expand`.
 
 ## Formato para novas ADRs
 

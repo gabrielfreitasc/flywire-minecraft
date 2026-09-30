@@ -94,6 +94,13 @@ TASTE_MOTOR_RATE_SCALE = 60.0
 # tanh média=0,498 (p95=0,597), estimulado média=0,941 (p05=0,924).
 THERMO_MOTOR_RATE_SCALE = 60.0
 
+# F17 — escala PRÓPRIA do canal `pheromone` (grupo excitatório de 43
+# descendentes do `olfactory`). Checado ANTES de fixar limiar (lição
+# F9/F10/F12): baseline (exc-inh) 6,5 Hz (p95=17,2), estimulado 133,6 Hz.
+# Escala 60: baseline tanh média=0,106 (p95=0,280), estimulado
+# média=0,976 (p05=0,954) — gap de ~0,67 entre o pior caso de cada lado.
+OLFACTORY_MOTOR_RATE_SCALE = 60.0
+
 # ------------------------------------------------------------ modelo (RN-07)
 DT_MS = 1.0                # passo de integração
 V_REST = 0.0               # potencial de repouso (normalizado)
@@ -195,6 +202,13 @@ SENSOR_THERMO_AMPLITUDE = 2.0
 # faz o papel do sinal circadiano/de pressão de sono. MESMO valor de
 # `tools/sleep_calibration_check.py`.
 SENSOR_SLEEP_AMPLITUDE = 2.0
+
+# F17 — amplitude de estímulo nos 429 ORNs de feromônio do subcircuito
+# `olfactory` quando o sensor do jogo indica exposição a feromônio (a
+# definir — sem sensor no plugin ainda, este circuito começa como
+# telemetria, mesmo estágio inicial que taste/thermo/johnston tiveram).
+# MESMO valor usado em `tools/olfactory_calibration_check.py`.
+SENSOR_OLFACTORY_AMPLITUDE = 2.0
 
 # ------------------------------------------------------------------ RN-08
 # Escala usada para normalizar taxa de disparo (Hz) em (-1, 1) via tanh.

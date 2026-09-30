@@ -1100,6 +1100,16 @@ Mesmo CSV/`sim/tools/lesion_analysis.py` dos anteriores. Ver
 
 Ver `JohnstonLesionExperiment.java`, `docs/03-roadmap-fases.md` F15.
 
+## Circuito olfativo de feromônio (F17, 30/09/2026) — telemetria, sem sensor no plugin ainda
+
+Oitavo `Engine` do simulador (`olfactory_connectome`), canal `pheromone`
+na resposta (`olfactory_motor`). **Nada a fazer aqui no plugin ainda** —
+diferente de luz/chuva/som/comida/calor, feromônio de *Drosophila* não
+tem equivalente óbvio no Minecraft. O campo `pheromone_contact` existe no
+protocolo (sempre `false`) pra não precisar mudar `server.py` de novo
+quando essa decisão vier — provavelmente junto com corte/agressividade,
+outro item do checklist original. Ver `docs/03-roadmap-fases.md` F17.
+
 ## Regra
 
 O plugin **nunca** altera a simulação. Se o comportamento não emerge, o problema

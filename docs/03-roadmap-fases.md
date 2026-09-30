@@ -2356,6 +2356,80 @@ fique na mesma ordem de grandeza de `escape`/`taste`/`johnston`, não um
 
 ---
 
+## F17 — Circuito olfativo de feromônio (checklist "paladar/fome/olfato", 30/09/2026) ✅ integrado, telemetria — confirmado em Docker real
+
+**Revisão de literatura ANTES de escrever código** (pedido explícito do
+usuário) — achado real: os dois artigos que o usuário mandou pra começar
+(Berck et al. 2016, eLife 14859, "The Wiring Diagram of a Glomerular
+Olfactory System"; thetransmitter.org sobre evolução cross-species do
+circuito olfativo) descrevem o sistema olfativo **LARVAL** de *Drosophila*
+(21 glomérulos). O FlyWire 783 é o cérebro **ADULTO** (~50 glomérulos,
+nomenclatura `ORN_DA1`/`VA1d`/etc. confirmada nos dados) — os dois artigos
+não mapeiam direto pro conectoma usado aqui. Referência certa encontrada:
+Bates et al. 2020, Current Biology, "Complete Connectomic Reconstruction
+of Olfactory Projection Neurons in the Fly Brain" (hemibrain, adulto) —
+primeiro inventário completo de PNs olfativos adultos, mesma nomenclatura
+`ALPN`/`ALLN` que aparece nos nossos dados (confirma o achado, não é
+suposição).
+
+**Semente (curadoria por identidade celular, literatura):** 429 ORNs
+(`cell_class=="olfactory"`, `cell_sub_class=="pheromone"`) — os cinco
+glomérulos de feromônio clássicos: `ORN_DA1` (Or67d, cVA), `ORN_VA1d`/
+`ORN_VA1v`, `ORN_DL3`, `ORN_DC3`. Conecta com agressão/corte via Or67d/DA1
+(Kurtovic et al. 2007; Wang & Anderson 2010) — não é combinação artificial
+de dois itens do checklist, é via biológica real documentada.
+
+**Achado real — corpo cogumelo excluído, sem perder descendente
+nenhum.** 1 salto alcança só `ALPN`/`ALLN`/`ALON` (540 nós), zero
+descendentes. 2 saltos normais dão 6.370 nós, mas 1.806 são `Kenyon_Cell`
+(corpo cogumelo, memória/aprendizado associativo). Medido: excluir
+`Kenyon_Cell` do salto (`ingest.expand(exclude=...)`, novo mecanismo,
+AD-26 — mesma barreira de `descending`/RN-04, por outro motivo) corta pra
+4.564 nós **sem perder nenhum dos 74 descendentes alcançados** — confirma
+que o sinal chega no comportamento pela via INATA (corpo cogumelo
+lateral, `LHLN`/`LHCENT`), não pela de memória, pelo menos neste
+subcircuito. Curadoria real, não corte arbitrário.
+
+**Custo medido ANTES de integrar (lição do F16 — não presumir que cabe no
+orçamento):** isolado, 0,2114ms/tick. Com os 8 circuitos rodando em
+paralelo (multiprocessing, BLAS travado): 0,3503ms/tick — não supera o
+gargalo atual (`hygro`, 0,4199ms/tick), então a sobra do orçamento caiu só
+de 59,3% pra **58,0%**. Cabe com folga.
+
+**RN-09 (`tools/olfactory_calibration_check.py`, 20 trials pareados):**
+exc +294,65 (p<1e-5), inh +17,85 (p<1e-5) — efeito real e forte. Escala
+própria `OLFACTORY_MOTOR_RATE_SCALE=60`: baseline tanh média=0,106
+(p95=0,280), estimulado média=0,976 (p05=0,954) — gap de ~0,67.
+
+- [x] `tools/build_f17_circuit.py` — extração, 4.564 nós, 429 sementes,
+      74 descendentes.
+- [x] `ingest.py` ganha `expand(exclude=...)`/`build(exclude_cell_classes=
+      ...)` — generalização real, documentada, reaproveitável por
+      qualquer circuito futuro que precise da mesma barreira.
+- [x] `olfactory_motor.py` (`OlfactoryMotorDecoder`, canal `pheromone`,
+      mesmo mecanismo de topologia de sinal de `thermo_motor.py`).
+- [x] `server.py` — oitavo circuito opcional (`olfactory_connectome`),
+      campo de protocolo `pheromone_contact` reservado desde já (mesmo
+      padrão dos outros sete: todo circuito ganha seu campo junto) —
+      **mas sem sensor real no plugin ainda**, chega sempre `false`.
+      Diferente de luz/chuva/som/comida/calor, feromônio de *Drosophila*
+      não tem equivalente óbvio no Minecraft — decisão de mapeamento
+      fica pra quando corte/agressividade for decidido (mesmo item do
+      checklist original do usuário).
+- [x] Validado em Docker real: `docker top` confirma 8 processos worker;
+      troca TCP manual com `pheromone_contact=true` retornou
+      `pheromone=0.975`, `active_dn=53/74` — plausível, bate com a
+      calibração.
+- [x] 48/48 testes Python passando (2 novos), `ruff check` limpo.
+
+**Pendente:** decidir o que dispara `pheromone_contact` no jogo (jogador
+segurando algo? outra abelha por perto? algo ligado a corte/agressividade
+especificamente?) — telemetria pura até essa decisão, mesmo estágio
+inicial que `taste`/`thermo`/`johnston` tiveram antes de ganhar sensor
+real.
+
+---
+
 ## Fora de escopo (candidatos a v2+)
 
 | Item | Fase provável |

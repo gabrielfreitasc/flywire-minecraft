@@ -381,6 +381,44 @@ def test_bridge_with_thermo_exposes_thermal():
             sock.close()
 
 
+def test_bridge_without_olfactory_omits_olfactory_fields():
+    """F17 — sem olfactory_connectome (default None), resposta idêntica a antes."""
+    cc = graph.load()
+    with SimulationServer(cc, host="127.0.0.1", port=0) as srv:
+        time.sleep(0.1)
+        sock = socket.create_connection(("127.0.0.1", srv.port), timeout=5.0)
+        sock_file = sock.makefile("rwb")
+        try:
+            sensor = {"t_ms": 0, "light": 0.5, "dorsal_light": 0.0, "damage": False}
+            sock_file.write((json.dumps(sensor) + "\n").encode("utf-8"))
+            sock_file.flush()
+            payload = json.loads(sock_file.readline().decode("utf-8"))
+            assert "olfactory_motor" not in payload
+            assert "olfactory_active_dn" not in payload
+        finally:
+            sock.close()
+
+
+def test_bridge_with_olfactory_exposes_pheromone():
+    """F17 — com olfactory_connectome, a resposta ganha 'olfactory_motor'
+    (canal 'pheromone', telemetria — sem sensor real no plugin ainda) e
+    'olfactory_active_dn'. 'pheromone_contact' dispara a semente (429 ORNs
+    de feromônio: ORN_DA1/VA1d/VA1v/DL3/DC3) via SENSOR_OLFACTORY_AMPLITUDE."""
+    cc = graph.load()
+    olfactory_cc = graph.load(C.PROCESSED / "olfactory")
+    with SimulationServer(cc, olfactory_connectome=olfactory_cc, host="127.0.0.1", port=0) as srv:
+        sock = socket.create_connection(("127.0.0.1", srv.port), timeout=5.0)
+        sock_file = sock.makefile("rwb")
+        try:
+            sensor = {"light": 0.0, "dorsal_light": 0.0, "damage": False, "pheromone_contact": True}
+            payload = _wait_until(sock_file, sensor, lambda p: "olfactory_motor" in p)
+            assert "pheromone" in payload["olfactory_motor"]
+            assert all(-1.0 < v < 1.0 for v in payload["olfactory_motor"].values())
+            assert isinstance(payload["olfactory_active_dn"], int)
+        finally:
+            sock.close()
+
+
 def test_bridge_survives_client_disconnect():
     """Se o plugin cair, o simulador continua rodando (não deve travar/crashar)."""
     cc = graph.load()

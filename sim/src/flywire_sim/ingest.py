@@ -78,13 +78,30 @@ def select_seed(ann: pd.DataFrame, pattern: str | None = None) -> set[int]:
 
 
 def expand(
-    edges: pd.DataFrame, seed: set[int], descending: set[int], hops: int | None = None
+    edges: pd.DataFrame,
+    seed: set[int],
+    descending: set[int],
+    hops: int | None = None,
+    exclude: set[int] | None = None,
 ) -> set[int]:
-    """BFS a jusante. Não atravessa neurônios descendentes — RN-04."""
+    """BFS a jusante. Não atravessa neurônios descendentes — RN-04.
+
+    `exclude` (F17/AD-24, `olfactory`) — segunda barreira, mesmo mecanismo
+    de `descending`: um conjunto de nós que NUNCA entra em `keep` nem vira
+    ponto de partida pro próximo salto, mas por um motivo diferente de
+    RN-04 (ali é "não é papel deste circuito decidir o que sai por um
+    descendente"; aqui é "esse nó pertence a outra via funcional, agregá-lo
+    dilui/explode o circuito sem ajudar a alcançar descendente nenhum" —
+    medido caso a caso, não presumido: `tools/build_f17_circuit.py`
+    confirmou que excluir `Kenyon_Cell` da semente de feromônio corta 1.806
+    nós SEM perder nenhum dos 74 descendentes alcançados em 2 saltos — a
+    via de memória/aprendizado não é por onde esse sinal chega no
+    comportamento, pelo menos não neste subcircuito)."""
     hops = C.HOPS if hops is None else hops
+    exclude = set() if exclude is None else exclude
     keep, frontier = set(seed), set(seed)
     for _ in range(hops):
-        nxt = set(edges.loc[edges.pre.isin(frontier - descending), "post"]) - keep
+        nxt = set(edges.loc[edges.pre.isin(frontier - descending), "post"]) - keep - exclude
         keep |= nxt
         frontier = nxt
     return keep
@@ -98,6 +115,7 @@ def build(
     circuit: str = "ocellar",
     sensory_cell_types: set[str] | None = None,
     sensory_only_seed: bool = False,
+    exclude_cell_classes: set[str] | None = None,
 ) -> dict:
     """Constrói um subcircuito e grava nodes/edges/manifest em `out_dir`
     (default: `data/processed/`, o circuito ocelar da v1 — AD-06). Outros
@@ -123,7 +141,15 @@ def build(
     salto não basta pra ter saídas (2 descendentes só) e 2 saltos arrastam
     milhares de sensoriais NÃO relacionados (1.561 no `thermo`) que seriam
     estimulados junto e tirariam a especificidade do circuito. `False`
-    (default) preserva todos os outros circuitos."""
+    (default) preserva todos os outros circuitos.
+
+    `exclude_cell_classes` (F17/AD-24, `olfactory`) — nomes de
+    `cell_class` que nunca entram no subcircuito, mesmo mecanismo de
+    barreira que `descending` já usa (RN-04), por outro motivo: excluir
+    uma via funcional INTEIRA que se confirmou (medido, não presumido —
+    ver `tools/build_f17_circuit.py`) não contribuir pra nenhum
+    descendente alcançado, só inflar o tamanho. `None` (default) preserva
+    todos os outros circuitos."""
     out_dir = C.PROCESSED if out_dir is None else out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -133,7 +159,11 @@ def build(
 
     seed = select_seed(ann, pattern)
     descending = set(ann.loc[ann.super_class == "descending", "root_id"])
-    keep = expand(edges, seed, descending, hops)
+    exclude = (
+        set(ann.loc[ann.cell_class.isin(exclude_cell_classes), "root_id"])
+        if exclude_cell_classes else None
+    )
+    keep = expand(edges, seed, descending, hops, exclude=exclude)
     # F13 — 8 neurônios de todo o conectoma aparecem em `connectivity` sem
     # linha em `annotations` (sem super_class/neurotransmissor: sinal
     # impossível de atribuir, RN-01). Subcircuitos pequenos nunca os
@@ -179,6 +209,7 @@ def build(
         "hops": C.HOPS if hops is None else hops,
         "sensory_cell_types": sorted(sensory_cell_types) if sensory_cell_types else None,
         "sensory_only_seed": sensory_only_seed,
+        "exclude_cell_classes": sorted(exclude_cell_classes) if exclude_cell_classes else None,
         "unannotated_dropped": len(unannotated),
         "seed_neurons": len(seed),
         "nodes": len(nodes),

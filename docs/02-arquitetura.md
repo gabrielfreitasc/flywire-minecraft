@@ -243,6 +243,18 @@ nenhum campo novo no protocolo. Os gatilhos de despertar reaproveitam
 circuitos existentes (`johnston_motor.startle`, `escape`, `damage`). Ver
 `docs/03-roadmap-fases.md` F13 pro achado negativo.
 
+**`pheromone_contact` (F17/AD-26, 30/09/2026) — oitavo `Engine`, subcircuito
+`olfactory` (feromônio).** Semente = 429 ORNs `cell_sub_class=="pheromone"`
+(`ORN_DA1`/`VA1d`/`VA1v`/`DL3`/`DC3`, adulto — revisão de literatura ANTES
+de extrair achou que os artigos originais do usuário descreviam o sistema
+LARVAL; referência adulta certa é Bates et al. 2020). 2 saltos excluindo
+`Kenyon_Cell` (`ingest.expand(exclude=...)`, AD-26 — corta 1.806 nós sem
+perder nenhum dos 74 descendentes, via inata em vez de memória). Campo
+`pheromone_contact` reservado no protocolo, mas **sem sensor real no
+plugin ainda** — sempre `false` até a decisão de mapeamento (ligada a
+corte/agressividade). Resposta ganha `olfactory_motor` (canal `pheromone`,
+`OLFACTORY_MOTOR_RATE_SCALE=60`) e `olfactory_active_dn`. Telemetria pura.
+
 ### Protocolo da ponte
 - TCP em `localhost:8765`, JSON-lines (`\n`), UTF-8.
 - Sem handshake, sem estado de sessão. Reconexão é reinício.
