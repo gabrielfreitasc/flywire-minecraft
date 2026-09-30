@@ -119,6 +119,21 @@ def test_motor_decode_empty_history_is_zero(connectome):
     assert all(v == 0.0 for v in vec.values())
 
 
+def test_motor_history_stays_bounded_by_window(connectome):
+    """F16 (30/09/2026) — movido de test_server.py: depois da reforma pra
+    multiprocessing, o MotorDecoder do ocelar vive dentro do processo
+    worker, não mais acessível como `srv.motor` do processo de teste. A
+    estrutura que mais cresceria num vazamento é `_history` — testado aqui
+    direto (mais rápido e preciso que subir um SimulationServer inteiro só
+    pra isso)."""
+    motor = MotorDecoder(connectome)
+    spikes = np.zeros(connectome.n, dtype=bool)
+    # janela MOTOR_WINDOW_MS=50, dt=1ms -> no máximo ~50-60 frames retidos
+    for t_ms in range(500):
+        motor.push(t_ms, spikes)
+    assert len(motor._history) <= 60
+
+
 def test_telemetry_roundtrip(tmp_path, connectome):
     """Esquema runs/spikes/stimuli/motor_frames grava e lê de volta."""
     db_path = tmp_path / "test_runs.duckdb"

@@ -51,7 +51,7 @@ TRNs de aquecimento e os de frio do `thermo` com `SENSOR_THERMO_AMPLITUDE`
 (cada flag só a sua semente, por `cell_sub_class`). Ausência de estímulo = só a
 dinâmica basal (RN-09) roda. Campos `bristle_*`/`hygro_*`/`johnston_*`/
 `escape_*`/`taste_*` na resposta só aparecem se `SimulationServer` foi
-construído com o `Connectome` correspondente (default `None` nos cinco —
+construído com o `Connectome` correspondente (default `None` nos seis —
 sem isso, comportamento idêntico a antes desta mudança, compatível com
 `main()` chamado só com o ocelar e com os testes existentes). `hygro_motor`/
 `johnston_motor`/`escape_motor`/`taste_motor` são TELEMETRIA — os canais
@@ -68,7 +68,9 @@ Quando AUSENTE, o silenciamento atual não muda — só é alterado quando o cam
 está presente (mesmo lista vazia, que limpa o silenciamento). Ver
 `engine.py::Engine.set_silenced`. Mecanismo DIFERENTE do experimento de lesão
 da F4 (que zera `light`, não silencia neurônio nenhum) — aqui a saída
-sináptica do grupo é removida da rede de verdade.
+sináptica do grupo é removida da rede de verdade. Só o `Engine` principal
+(ocelar) aceita `mute`/`stimulate` — mesmo escopo de sempre, RN-08 curou
+`motor.groups` só pra ele.
 
 Campo `stimulate` (F5, estimulação dirigida): injeta corrente extra num grupo
 nomeado, SOMADA ao estímulo de luz dos fotorreceptores (não substitui). Mesma
@@ -76,11 +78,41 @@ semântica de "ausente = sem mudança" do `mute`. `{"group": null}` ou
 `{"group": "", "amplitude": 0}` limpa o estímulo dirigido. Ver
 `engine.py::Engine.set_directed_stimulus`.
 
-RN-06 — o simulador roda em thread própria a dt=1 ms, desacoplado do tick do
-jogo. O jogo nunca espera o simulador terminar passos extras: cada linha de
-sensor recebida atualiza o estímulo e recebe de volta, na hora, o ÚLTIMO vetor
-motor já computado pela thread de simulação — nunca um vetor calculado sob
-demanda.
+RN-06 — cada circuito roda a dt=1 ms em PROCESSO próprio (F16, 30/09/2026 —
+ver docs/03-roadmap-fases.md), desacoplado do tick do jogo E dos outros
+circuitos. O jogo nunca espera o simulador terminar passos extras: cada linha
+de sensor recebida atualiza o estímulo compartilhado e recebe de volta, na
+hora, o ÚLTIMO vetor motor já computado por cada processo — nunca um vetor
+calculado sob demanda.
+
+**F16 — por que multiprocessing, não threading.** Medido (29/09/2026): os 7
+circuitos somados num laço único (thread) já usavam 99,6% do orçamento de
+1ms/tick — quase zero de sobra pra um circuito novo (ver F16 em
+docs/03-roadmap-fases.md). Threading Python deu só 1,22x de aceleração com 2
+engines (GIL trava a maior parte da execução, só o trecho dentro de
+numpy/scipy solta) — não resolve. Multiprocessing (processos de verdade,
+sem GIL) mediu 0,407ms/tick pro mais lento dos 7 rodando em paralelo — 59,3%
+de sobra — DESDE QUE as threads internas de BLAS (OpenBLAS/MKL, que cada
+processo abriria por conta própria) sejam limitadas a 1 por processo (ver
+`os.environ` logo abaixo); sem isso, multiprocessing dá 0,666ms/tick — pior
+que threading, melhor que nada, mas deixando a maior parte do ganho na mesa.
+**Armadilha registrada em CONVENCOES.md:** presumir paralelismo grátis com
+numpy/scipy sem controlar threads de BLAS pode piorar as coisas.
+
+Cada `Engine`/`MotorDecoder` (F5-F12) vive inteiramente dentro do seu próprio
+processo — nenhum outro processo (nem o coordenador/`SimulationServer`) toca
+nesse estado depois de criado. Coordenação entre processos usa só dois
+mecanismos, os dois deliberadamente pequenos e de baixa frequência:
+(1) um `multiprocessing.Array` compartilhado com os valores de estímulo
+crus (`light`, `touch`, `raining`, ...), lido por cada processo a cada tick
+seu (1ms) — não é fila, não bloqueia, é leitura de memória compartilhada; e
+(2) uma fila de saída por circuito (`maxsize=1`, sempre substitui o valor
+antigo em vez de acumular) onde cada processo publica o canal decodificado a
+cada janela de 50ms (`MOTOR_WINDOW_MS`) — o coordenador drena tudo que
+chegou e guarda só o mais recente de cada circuito, nunca espera. `mute`/
+`stimulate` (F5, só o `Engine` principal) usam uma fila de controle própria,
+com a mesma semântica "só o mais recente pendente vale" que a versão de
+thread única já tinha.
 
 Canais do vetor motor: RN-08 segue em aberto (ver motor.py) — os nomes de
 canal são os grupos provisórios por prefixo de `cell_type` (DNp, DNg, ...),
@@ -96,10 +128,27 @@ não do simulador.
 """
 from __future__ import annotations
 
+import os
+
+# F16 (29-30/09/2026) — CRÍTICO, precisa rodar antes de QUALQUER import que
+# traga numpy/scipy (graph, engine, motor, numpy em si logo abaixo). Sem
+# isto, cada processo worker abre várias threads internas de BLAS por conta
+# própria, e N processos disputando os mesmos núcleos entre si deixa
+# multiprocessing PIOR que sequencial, não melhor (medido, ver docstring do
+# módulo e docs/03-roadmap-fases.md F16: 0,666ms/tick sem isto, 0,407ms/tick
+# com). `setdefault` — respeita override explícito do operador (ex.:
+# container com núcleos de sobra reservados só pra isto), não força.
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+
 import json
+import multiprocessing as mp
+import queue as queue_module
 import socketserver
 import threading
 import time
+from collections.abc import Callable
 from typing import Any, Self
 
 import numpy as np
@@ -115,6 +164,187 @@ from .johnston_motor import JohnstonMotorDecoder
 from .motor import MotorDecoder, group_by_published_behavior, group_steering_by_side
 from .taste_motor import TasteMotorDecoder
 from .thermo_motor import ThermoMotorDecoder
+
+# F16 — índices no `multiprocessing.Array` de estímulo compartilhado. Um
+# array só, 8 posições, em vez de um por circuito — todos os sensores crus
+# já eram computados juntos em `on_sensor` antes desta mudança, então
+# continuam sendo escritos juntos aqui (mesma seção crítica de sempre, só
+# que agora em memória compartilhada entre processos em vez de atributos de
+# instância lidos por uma thread).
+_STIM_LIGHT = 0
+_STIM_TOUCH = 1
+_STIM_RAINING = 2
+_STIM_ALARM = 3
+_STIM_LOOMING = 4
+_STIM_FOOD = 5
+_STIM_THERMO_HEAT = 6
+_STIM_THERMO_COLD = 7
+_STIM_SIZE = 8
+
+# F16 — cada circuito tem sua própria "receita" de estímulo (quais nids,
+# que amplitude) — funções puras de nível de módulo (picklable, não
+# closures) em vez de método de classe, porque rodam DENTRO do processo
+# worker, chamadas por `_engine_worker`. `heating_nids`/`cold_nids` só têm
+# uso real na receita do `thermo`; as outras ignoram (mesma assinatura pra
+# manter o laço do worker genérico).
+StimulusFn = Callable[[Any, Connectome, np.ndarray, np.ndarray], tuple[np.ndarray, float]]
+
+
+def _stim_main(vals: Any, cc: Connectome, _heat: np.ndarray, _cold: np.ndarray) -> tuple[np.ndarray, float]:
+    return np.asarray(cc.sensory), vals[_STIM_LIGHT] * C.SENSOR_LIGHT_GAIN
+
+
+def _stim_bristle(vals: Any, cc: Connectome, _heat: np.ndarray, _cold: np.ndarray) -> tuple[np.ndarray, float]:
+    return np.asarray(cc.sensory), (C.SENSOR_TOUCH_AMPLITUDE if vals[_STIM_TOUCH] else 0.0)
+
+
+def _stim_hygro(vals: Any, cc: Connectome, _heat: np.ndarray, _cold: np.ndarray) -> tuple[np.ndarray, float]:
+    return np.asarray(cc.sensory), (C.SENSOR_RAIN_AMPLITUDE if vals[_STIM_RAINING] else 0.0)
+
+
+def _stim_johnston(vals: Any, cc: Connectome, _heat: np.ndarray, _cold: np.ndarray) -> tuple[np.ndarray, float]:
+    return np.asarray(cc.sensory), (C.SENSOR_ALARM_AMPLITUDE if vals[_STIM_ALARM] else 0.0)
+
+
+def _stim_escape(vals: Any, cc: Connectome, _heat: np.ndarray, _cold: np.ndarray) -> tuple[np.ndarray, float]:
+    return np.asarray(cc.sensory), (C.SENSOR_LOOMING_AMPLITUDE if vals[_STIM_LOOMING] else 0.0)
+
+
+def _stim_taste(vals: Any, cc: Connectome, _heat: np.ndarray, _cold: np.ndarray) -> tuple[np.ndarray, float]:
+    return np.asarray(cc.sensory), (C.SENSOR_TASTE_AMPLITUDE if vals[_STIM_FOOD] else 0.0)
+
+
+def _stim_thermo(vals: Any, cc: Connectome, heat_nids: np.ndarray, cold_nids: np.ndarray) -> tuple[np.ndarray, float]:
+    driven = []
+    if vals[_STIM_THERMO_HEAT]:
+        driven.append(heat_nids)
+    if vals[_STIM_THERMO_COLD]:
+        driven.append(cold_nids)
+    nids = np.concatenate(driven) if driven else np.array([], dtype=np.int64)
+    return nids, C.SENSOR_THERMO_AMPLITUDE
+
+
+# nome -> (DecoderFactory, StimulusFn) dos seis circuitos opcionais. "main"
+# (ocelar) é tratado à parte em SimulationServer.__init__ porque é o único
+# obrigatório e o único que aceita mute/stimulate.
+_OPTIONAL_CIRCUITS: dict[str, tuple[type, StimulusFn]] = {
+    "bristle": (BristleMotorDecoder, _stim_bristle),
+    "hygro": (HygroMotorDecoder, _stim_hygro),
+    "johnston": (JohnstonMotorDecoder, _stim_johnston),
+    "escape": (EscapeMotorDecoder, _stim_escape),
+    "taste": (TasteMotorDecoder, _stim_taste),
+    "thermo": (ThermoMotorDecoder, _stim_thermo),
+}
+
+
+def _engine_worker(
+    name: str,
+    connectome: Connectome,
+    decoder_cls: type,
+    stimulus_fn: StimulusFn,
+    stim_array: Any,
+    output_queue: mp.Queue,
+    stop_event: Any,
+    control_queue: mp.Queue | None,
+) -> None:
+    """F16 — laço de um circuito, rodando em PROCESSO próprio a dt=1ms real.
+
+    `control_queue` não-`None` só pro worker do `main` (mute/stimulate, F5)
+    — os outros seis sempre recebem `None`. Ver docstring do módulo pro
+    desenho geral (array de estímulo compartilhado + fila de saída
+    `maxsize=1`).
+    """
+    engine = Engine(connectome)
+    decoder = decoder_cls(connectome)
+
+    # F5 — só o worker principal resolve nome de grupo -> nids (precisa do
+    # MotorDecoder.groups DESTE engine específico, RN-08). Construído aqui
+    # dentro (não no coordenador) porque agora é o único lugar onde o
+    # MotorDecoder do ocelar existe de verdade.
+    group_lookup: dict[str, np.ndarray] | None = None
+    if control_queue is not None:
+        group_lookup = dict(decoder.groups)
+        group_lookup.update(group_by_published_behavior(connectome))
+        group_lookup["sensory"] = connectome.sensory
+        steering_left, steering_right = group_steering_by_side(connectome)
+        group_lookup["steering_left"] = steering_left
+        group_lookup["steering_right"] = steering_right
+
+    # F12 — só o `thermo` usa isto (as duas sementes separadas por
+    # cell_sub_class); as outras receitas de estímulo ignoram.
+    sensory_arr = np.asarray(connectome.sensory)
+    heating_nids = np.array([], dtype=np.int64)
+    cold_nids = np.array([], dtype=np.int64)
+    if name == "thermo":
+        sub_class = connectome.nodes.loc[sensory_arr, "cell_sub_class"].to_numpy()
+        heating_nids = sensory_arr[sub_class == "heating"]
+        cold_nids = sensory_arr[sub_class == "cold"]
+
+    period_s = C.DT_MS / 1000.0
+    window_steps = max(int(C.MOTOR_WINDOW_MS), 1)
+    next_tick = time.monotonic()
+
+    while not stop_event.is_set():
+        if control_queue is not None:
+            # F5 — drena tudo que chegou desde o último tick, mas só aplica
+            # o MAIS RECENTE de cada tipo (mesma semântica "só o pendente
+            # mais novo vale" da versão de thread única — não acumula).
+            last_mute: list[str] | None = None
+            last_stimulate: dict[str, Any] | None = None
+            while True:
+                try:
+                    kind, payload = control_queue.get_nowait()
+                except queue_module.Empty:
+                    break
+                if kind == "mute":
+                    last_mute = payload
+                else:
+                    last_stimulate = payload
+            if last_mute is not None:
+                nids: list[int] = []
+                for gname in last_mute:
+                    group = group_lookup.get(gname)  # type: ignore[union-attr]
+                    if group is not None:
+                        nids.extend(int(n) for n in group)
+                engine.set_silenced(np.array(nids, dtype=np.int64))
+            if last_stimulate is not None:
+                gname = last_stimulate.get("group")
+                amplitude = float(last_stimulate.get("amplitude", 0.0))
+                group = group_lookup.get(gname) if gname else None  # type: ignore[union-attr]
+                if group is None:
+                    engine.set_directed_stimulus(np.array([], dtype=np.int64), 0.0)
+                else:
+                    engine.set_directed_stimulus(np.asarray(group, dtype=np.int64), amplitude)
+
+        vals = stim_array[:]  # cópia rápida da memória compartilhada, sem segurar lock além disso
+        nids, amplitude = stimulus_fn(vals, connectome, heating_nids, cold_nids)
+        engine.stimulate(nids, amplitude)
+        frame = engine.step()
+        decoder.push(frame.t_ms, frame.spikes)
+
+        if frame.t_ms % window_steps == 0:
+            payload = {
+                "t_ms": frame.t_ms,
+                "channels": decoder.decode(),
+                "active_dn": decoder.active_output_count(),
+            }
+            # maxsize=1 — sempre substitui o antigo, nunca acumula (RN-06:
+            # o coordenador só quer o mais recente, nunca espera).
+            try:
+                output_queue.get_nowait()
+            except queue_module.Empty:
+                pass
+            try:
+                output_queue.put_nowait(payload)
+            except queue_module.Full:
+                pass
+
+        next_tick += period_s
+        sleep_for = next_tick - time.monotonic()
+        if sleep_for > 0:
+            time.sleep(sleep_for)
+        else:
+            next_tick = time.monotonic()  # atrasado — não acumula dívida
 
 
 class _Handler(socketserver.StreamRequestHandler):
@@ -140,7 +370,7 @@ class _TCPServer(socketserver.ThreadingTCPServer):
 
 
 class SimulationServer:
-    """Servidor TCP + thread de simulação desacoplada (RN-06).
+    """Servidor TCP + um processo por circuito, cada um a dt=1ms real (F16).
 
     Uso:
 
@@ -149,14 +379,14 @@ class SimulationServer:
             ...  # srv.port, roda até sair do bloco
 
     F7/AD-17 — `bristle_connectome`/`hygro_connectome` opcionais ligam um
-    segundo e um terceiro `Engine` independentes (toque, chuva), rodando no
-    mesmo laço/mesmo dt, sem misturar estado com o ocelar nem entre si. F8
-    acrescenta `johnston_connectome` (vento/som), um quarto `Engine`, mesmo
-    padrão. F9 acrescenta `escape_connectome` (fuga por looming, AD-20), um
-    quinto `Engine`, mesmo padrão. F10 acrescenta `taste_connectome`
-    (paladar apetitivo), um sexto `Engine`, mesmo padrão. `None` (default,
-    nos cinco) preserva o comportamento de antes desta mudança — nenhum
-    teste existente ou chamada antiga precisa mudar.
+    segundo e um terceiro `Engine` independentes (toque, chuva), cada um no
+    seu próprio processo (F16), sem misturar estado com o ocelar nem entre
+    si. F8 acrescenta `johnston_connectome` (vento/som). F9 acrescenta
+    `escape_connectome` (fuga por looming, AD-20). F10 acrescenta
+    `taste_connectome` (paladar apetitivo). F12 acrescenta
+    `thermo_connectome` (calor/frio). `None` (default, nos seis) preserva o
+    comportamento de antes desta mudança — nenhum teste existente ou
+    chamada antiga precisa mudar.
     """
 
     def __init__(
@@ -172,72 +402,43 @@ class SimulationServer:
         port: int = C.BRIDGE_PORT,
     ) -> None:
         self.connectome = connectome
-        self.engine = Engine(connectome)
-        self.motor = MotorDecoder(connectome)
-
-        # F7/AD-17 — segundo Engine, só existe se bristle_connectome foi dado.
         self.bristle_connectome = bristle_connectome
-        if bristle_connectome is not None:
-            self.bristle_engine: Engine | None = Engine(bristle_connectome)
-            self.bristle_motor: BristleMotorDecoder | None = BristleMotorDecoder(bristle_connectome)
-        else:
-            self.bristle_engine = None
-            self.bristle_motor = None
-
-        # F7/AD-17 — terceiro Engine, só existe se hygro_connectome foi dado.
         self.hygro_connectome = hygro_connectome
-        if hygro_connectome is not None:
-            self.hygro_engine: Engine | None = Engine(hygro_connectome)
-            self.hygro_motor: HygroMotorDecoder | None = HygroMotorDecoder(hygro_connectome)
-        else:
-            self.hygro_engine = None
-            self.hygro_motor = None
-
-        # F8 — quarto Engine, só existe se johnston_connectome foi dado.
         self.johnston_connectome = johnston_connectome
-        if johnston_connectome is not None:
-            self.johnston_engine: Engine | None = Engine(johnston_connectome)
-            self.johnston_motor: JohnstonMotorDecoder | None = JohnstonMotorDecoder(johnston_connectome)
-        else:
-            self.johnston_engine = None
-            self.johnston_motor = None
-
-        # F9 — quinto Engine, só existe se escape_connectome foi dado.
         self.escape_connectome = escape_connectome
-        if escape_connectome is not None:
-            self.escape_engine: Engine | None = Engine(escape_connectome)
-            self.escape_motor: EscapeMotorDecoder | None = EscapeMotorDecoder(escape_connectome)
-        else:
-            self.escape_engine = None
-            self.escape_motor = None
-
-        # F10 — sexto Engine, só existe se taste_connectome foi dado.
         self.taste_connectome = taste_connectome
-        if taste_connectome is not None:
-            self.taste_engine: Engine | None = Engine(taste_connectome)
-            self.taste_motor: TasteMotorDecoder | None = TasteMotorDecoder(taste_connectome)
-        else:
-            self.taste_engine = None
-            self.taste_motor = None
-
-        # F12 — sétimo Engine, só existe se thermo_connectome foi dado. Duas
-        # sementes (TRNs de aquecimento e de frio), estimuladas separadamente.
         self.thermo_connectome = thermo_connectome
+
+        # F12 — mesma metadata de sempre (7 TRNs de aquecimento, 9 de frio),
+        # computada aqui só pra introspecção/testes (ex.: `srv.
+        # _thermo_heating_nids` nos testes) — o worker do thermo recalcula a
+        # própria cópia de forma independente, a partir do MESMO connectome.
         if thermo_connectome is not None:
-            self.thermo_engine: Engine | None = Engine(thermo_connectome)
-            self.thermo_motor: ThermoMotorDecoder | None = ThermoMotorDecoder(thermo_connectome)
-            sensory = thermo_connectome.sensory
+            sensory = np.asarray(thermo_connectome.sensory)
             sub_class = thermo_connectome.nodes.loc[sensory, "cell_sub_class"].to_numpy()
-            self._thermo_heating_nids = np.asarray(sensory)[sub_class == "heating"]
-            self._thermo_cold_nids = np.asarray(sensory)[sub_class == "cold"]
+            self._thermo_heating_nids = sensory[sub_class == "heating"]
+            self._thermo_cold_nids = sensory[sub_class == "cold"]
         else:
-            self.thermo_engine = None
-            self.thermo_motor = None
             self._thermo_heating_nids = np.array([], dtype=np.int64)
             self._thermo_cold_nids = np.array([], dtype=np.int64)
 
+        # F16 — 'spawn' explícito nos dois SOs (Windows já só tem spawn;
+        # Linux/Docker default seria 'fork', mas forkar um processo com
+        # threads vivas — o servidor TCP já usa threads — é terreno
+        # arriscado no POSIX. 'spawn' sempre recomeça do zero, sem herdar
+        # estado de thread nenhum, mesmo comportamento nos dois ambientes.
+        self._mp_ctx = mp.get_context("spawn")
+        self._stim_array = self._mp_ctx.Array("d", _STIM_SIZE)
+        self._stop_event = self._mp_ctx.Event()
+        self._control_queue: mp.Queue = self._mp_ctx.Queue()
+
+        # F16 — só protege as duas estruturas coordenador-side que podem
+        # ser lidas/escritas por threads handler concorrentes (múltiplas
+        # conexões simultâneas, teoricamente — o protocolo assume uma só,
+        # mas não custa nada proteger). NÃO protege o `_stim_array` (esse já
+        # tem seu próprio lock interno, `multiprocessing.Array` default) nem
+        # as filas (essas são thread/processo-safe por natureza).
         self._lock = threading.Lock()
-        self._light = 0.0
         self._touch = False  # F7/AD-17 — OR de damage/touch_proximity (F9: touch_contact saiu, ver on_sensor)
         self._raining = False  # F7/AD-17 — World#hasStorm(), estímulo da semente do hygro
         self._alarm = False  # F8 — OR de alarm_explosion/alarm_hostile_mob, estímulo da semente do johnston
@@ -245,30 +446,41 @@ class SimulationServer:
         self._food = False  # F10 — food_contact, estímulo da semente do taste
         self._thermo_heat = False  # F12 — thermo_heat, estímulo dos TRNs de aquecimento
         self._thermo_cold = False  # F12 — thermo_cold, estímulo dos TRNs de frio
-        self._pending_mute: list[str] | None = None
-        self._pending_stimulate: dict[str, Any] | None = None
         self._latest: dict[str, Any] = {"t_ms": 0, "motor": {}, "active_dn": 0}
-        self._stop = threading.Event()
+        self._latest_by_circuit: dict[str, dict[str, Any]] = {}
 
-        # F5 — nomes válidos para os campos "mute"/"stimulate": os 8 grupos
-        # por prefixo + os grupos de comportamento publicado (RN-08, ver
-        # motor.py) + "sensory" (fotorreceptores, fora de motor.groups
-        # porque esse dict só cobre descendentes).
-        self._group_lookup: dict[str, np.ndarray] = dict(self.motor.groups)
-        self._group_lookup.update(group_by_published_behavior(connectome))
-        self._group_lookup["sensory"] = connectome.sensory
-        # F6/AD-16 — "steering_left"/"steering_right" nomeáveis por stimulate,
-        # pra validar o sentido do canal yaw_steering (estimular só um lado
-        # do par bilateral e medir se a abelha vira de forma consistente).
-        steering_left, steering_right = group_steering_by_side(connectome)
-        self._group_lookup["steering_left"] = steering_left
-        self._group_lookup["steering_right"] = steering_right
+        self._processes: list[Any] = []
+        self._output_queues: dict[str, mp.Queue] = {}
+
+        main_output_queue = self._mp_ctx.Queue(maxsize=1)
+        self._output_queues["_main"] = main_output_queue
+        self._processes.append(self._mp_ctx.Process(
+            target=_engine_worker,
+            args=("main", connectome, MotorDecoder, _stim_main, self._stim_array,
+                  main_output_queue, self._stop_event, self._control_queue),
+            daemon=True, name="flywire-engine-main",
+        ))
+
+        circuit_connectomes = {
+            "bristle": bristle_connectome, "hygro": hygro_connectome,
+            "johnston": johnston_connectome, "escape": escape_connectome,
+            "taste": taste_connectome, "thermo": thermo_connectome,
+        }
+        for name, (decoder_cls, stim_fn) in _OPTIONAL_CIRCUITS.items():
+            cc = circuit_connectomes[name]
+            if cc is None:
+                continue
+            oq = self._mp_ctx.Queue(maxsize=1)
+            self._output_queues[name] = oq
+            self._processes.append(self._mp_ctx.Process(
+                target=_engine_worker,
+                args=(name, cc, decoder_cls, stim_fn, self._stim_array, oq,
+                      self._stop_event, None),
+                daemon=True, name=f"flywire-engine-{name}",
+            ))
 
         self._tcp = _TCPServer((host, port), _Handler)
         self._tcp.bridge = self  # type: ignore[attr-defined]
-        self._sim_thread = threading.Thread(
-            target=self._sim_loop, name="flywire-sim-loop", daemon=True
-        )
         self._serve_thread = threading.Thread(
             target=self._tcp.serve_forever, name="flywire-tcp-serve", daemon=True
         )
@@ -278,20 +490,27 @@ class SimulationServer:
         return self._tcp.server_address[1]
 
     def start(self) -> None:
-        self._sim_thread.start()
+        # F16 — processos ANTES da thread TCP: evita a combinação
+        # fork+threads-vivas mesmo que 'spawn' já torne isso improvável de
+        # dar problema — hábito seguro, sem custo.
+        for p in self._processes:
+            p.start()
         self._serve_thread.start()
 
     def stop(self) -> None:
-        self._stop.set()
+        self._stop_event.set()
         self._tcp.shutdown()
         self._tcp.server_close()
-        self._sim_thread.join(timeout=2.0)
+        for p in self._processes:
+            p.join(timeout=2.0)
+            if p.is_alive():
+                p.terminate()
 
     def on_sensor(self, sensor: dict[str, Any]) -> None:
         """Chamado pela thread de conexão a cada linha recebida.
 
         Só atualiza o estado compartilhado — nunca chama engine.step() nem
-        espera a thread de simulação (RN-06).
+        espera nenhum processo de simulação (RN-06).
         """
         light = float(sensor.get("light", 0.0))
         # F7/AD-17 — família de sensores de toque (damage já existia, os
@@ -330,8 +549,21 @@ class SimulationServer:
         thermo_cold = bool(sensor.get("thermo_cold", False))
         mute = sensor.get("mute")
         stimulate = sensor.get("stimulate")
+
+        # F16 — grava no array compartilhado (lido por CADA processo a cada
+        # tick seu). `get_lock()` protege só a seção crítica de escrita, não
+        # segura nada além disso.
+        with self._stim_array.get_lock():
+            self._stim_array[_STIM_LIGHT] = light
+            self._stim_array[_STIM_TOUCH] = 1.0 if touch else 0.0
+            self._stim_array[_STIM_RAINING] = 1.0 if raining else 0.0
+            self._stim_array[_STIM_ALARM] = 1.0 if alarm else 0.0
+            self._stim_array[_STIM_LOOMING] = 1.0 if looming else 0.0
+            self._stim_array[_STIM_FOOD] = 1.0 if food else 0.0
+            self._stim_array[_STIM_THERMO_HEAT] = 1.0 if thermo_heat else 0.0
+            self._stim_array[_STIM_THERMO_COLD] = 1.0 if thermo_cold else 0.0
+
         with self._lock:
-            self._light = light
             self._touch = touch
             self._raining = raining
             self._alarm = alarm
@@ -339,145 +571,48 @@ class SimulationServer:
             self._food = food
             self._thermo_heat = thermo_heat
             self._thermo_cold = thermo_cold
-            if mute is not None:
-                self._pending_mute = list(mute)
-            if stimulate is not None:
-                self._pending_stimulate = dict(stimulate)
+
+        # F5 — só manda pra fila de controle (worker principal) quando o
+        # campo está PRESENTE — mesma semântica "ausente = sem mudança" de
+        # sempre, agora expressa como "não manda mensagem nenhuma" em vez
+        # de "não sobrescreve o campo pendente".
+        if mute is not None:
+            self._control_queue.put(("mute", list(mute)))
+        if stimulate is not None:
+            self._control_queue.put(("stimulate", dict(stimulate)))
 
     def latest_frame(self) -> dict[str, Any]:
+        """Drena o que chegou de cada processo e monta a resposta — nunca
+        bloqueia, nunca espera um processo terminar um passo (RN-06)."""
         with self._lock:
-            return dict(self._latest)
+            for name, q in self._output_queues.items():
+                payload = None
+                try:
+                    while True:
+                        payload = q.get_nowait()
+                except queue_module.Empty:
+                    pass
+                if payload is not None:
+                    self._latest_by_circuit[name] = payload
 
-    def _apply_mute(self, group_names: list[str]) -> None:
-        """Roda só na thread de simulação — única que toca em self.engine."""
-        nids: list[int] = []
-        for name in group_names:
-            group = self._group_lookup.get(name)
-            if group is None:
-                continue
-            nids.extend(int(n) for n in group)
-        self.engine.set_silenced(np.array(nids, dtype=np.int64))
+            main_payload = self._latest_by_circuit.get("_main")
+            if main_payload is None:
+                return dict(self._latest)  # antes do primeiro frame do main chegar
 
-    def _apply_stimulate(self, spec: dict[str, Any]) -> None:
-        """Roda só na thread de simulação — única que toca em self.engine."""
-        name = spec.get("group")
-        amplitude = float(spec.get("amplitude", 0.0))
-        group = self._group_lookup.get(name) if name else None
-        if group is None:
-            self.engine.set_directed_stimulus(np.array([], dtype=np.int64), 0.0)
-        else:
-            self.engine.set_directed_stimulus(np.asarray(group, dtype=np.int64), amplitude)
-
-    def _sim_loop(self) -> None:
-        """Roda a dt=1 ms em tempo real, independente de qualquer conexão."""
-        period_s = C.DT_MS / 1000.0
-        next_tick = time.monotonic()
-        window_steps = max(int(C.MOTOR_WINDOW_MS), 1)
-
-        while not self._stop.is_set():
-            with self._lock:
-                light = self._light
-                touch = self._touch
-                raining = self._raining
-                alarm = self._alarm
-                looming = self._looming
-                food = self._food
-                thermo_heat = self._thermo_heat
-                thermo_cold = self._thermo_cold
-                mute = self._pending_mute
-                self._pending_mute = None
-                stimulate = self._pending_stimulate
-                self._pending_stimulate = None
-            if mute is not None:
-                self._apply_mute(mute)
-            if stimulate is not None:
-                self._apply_stimulate(stimulate)
-
-            self.engine.stimulate(self.connectome.sensory, light * C.SENSOR_LIGHT_GAIN)
-            frame = self.engine.step()
-            self.motor.push(frame.t_ms, frame.spikes)
-
-            # F7/AD-17 — segundo Engine, passo próprio, mesmo dt/tempo real
-            # do laço principal, estado nunca compartilhado com o ocelar.
-            if self.bristle_engine is not None and self.bristle_motor is not None:
-                amplitude = C.SENSOR_TOUCH_AMPLITUDE if touch else 0.0
-                self.bristle_engine.stimulate(self.bristle_connectome.sensory, amplitude)
-                bristle_frame = self.bristle_engine.step()
-                self.bristle_motor.push(bristle_frame.t_ms, bristle_frame.spikes)
-
-            # F7/AD-17 — terceiro Engine, mesma mecânica do bristle acima.
-            if self.hygro_engine is not None and self.hygro_motor is not None:
-                amplitude = C.SENSOR_RAIN_AMPLITUDE if raining else 0.0
-                self.hygro_engine.stimulate(self.hygro_connectome.sensory, amplitude)
-                hygro_frame = self.hygro_engine.step()
-                self.hygro_motor.push(hygro_frame.t_ms, hygro_frame.spikes)
-
-            # F8 — quarto Engine, mesma mecânica do bristle/hygro acima.
-            if self.johnston_engine is not None and self.johnston_motor is not None:
-                amplitude = C.SENSOR_ALARM_AMPLITUDE if alarm else 0.0
-                self.johnston_engine.stimulate(self.johnston_connectome.sensory, amplitude)
-                johnston_frame = self.johnston_engine.step()
-                self.johnston_motor.push(johnston_frame.t_ms, johnston_frame.spikes)
-
-            # F9 — quinto Engine, mesma mecânica do bristle/hygro/johnston acima.
-            if self.escape_engine is not None and self.escape_motor is not None:
-                amplitude = C.SENSOR_LOOMING_AMPLITUDE if looming else 0.0
-                self.escape_engine.stimulate(self.escape_connectome.sensory, amplitude)
-                escape_frame = self.escape_engine.step()
-                self.escape_motor.push(escape_frame.t_ms, escape_frame.spikes)
-
-            # F10 — sexto Engine, mesma mecânica do bristle/hygro/johnston/escape acima.
-            if self.taste_engine is not None and self.taste_motor is not None:
-                amplitude = C.SENSOR_TASTE_AMPLITUDE if food else 0.0
-                self.taste_engine.stimulate(self.taste_connectome.sensory, amplitude)
-                taste_frame = self.taste_engine.step()
-                self.taste_motor.push(taste_frame.t_ms, taste_frame.spikes)
-
-            # F12 — sétimo Engine: cada flag estimula só a sua semente.
-            if self.thermo_engine is not None and self.thermo_motor is not None:
-                driven = []
-                if thermo_heat:
-                    driven.append(self._thermo_heating_nids)
-                if thermo_cold:
-                    driven.append(self._thermo_cold_nids)
-                nids = np.concatenate(driven) if driven else np.array([], dtype=np.int64)
-                self.thermo_engine.stimulate(nids, C.SENSOR_THERMO_AMPLITUDE)
-                thermo_frame = self.thermo_engine.step()
-                self.thermo_motor.push(thermo_frame.t_ms, thermo_frame.spikes)
-
-            if frame.t_ms % window_steps == 0:
-                with self._lock:
-                    latest: dict[str, Any] = {
-                        "t_ms": frame.t_ms,
-                        "motor": self.motor.decode(),
-                        "active_dn": self.motor.active_output_count(),
-                    }
-                    if self.bristle_motor is not None:
-                        latest["bristle_motor"] = self.bristle_motor.decode()
-                        latest["bristle_active_dn"] = self.bristle_motor.active_output_count()
-                    if self.hygro_motor is not None:
-                        latest["hygro_motor"] = self.hygro_motor.decode()
-                        latest["hygro_active_dn"] = self.hygro_motor.active_output_count()
-                    if self.johnston_motor is not None:
-                        latest["johnston_motor"] = self.johnston_motor.decode()
-                        latest["johnston_active_dn"] = self.johnston_motor.active_output_count()
-                    if self.escape_motor is not None:
-                        latest["escape_motor"] = self.escape_motor.decode()
-                        latest["escape_active_dn"] = self.escape_motor.active_output_count()
-                    if self.taste_motor is not None:
-                        latest["taste_motor"] = self.taste_motor.decode()
-                        latest["taste_active_dn"] = self.taste_motor.active_output_count()
-                    if self.thermo_motor is not None:
-                        latest["thermo_motor"] = self.thermo_motor.decode()
-                        latest["thermo_active_dn"] = self.thermo_motor.active_output_count()
-                    self._latest = latest
-
-            next_tick += period_s
-            sleep_for = next_tick - time.monotonic()
-            if sleep_for > 0:
-                time.sleep(sleep_for)
-            else:
-                next_tick = time.monotonic()  # atrasado — não acumula dívida
+            result: dict[str, Any] = {
+                "t_ms": main_payload["t_ms"],
+                "motor": main_payload["channels"],
+                "active_dn": main_payload["active_dn"],
+            }
+            for name in self._output_queues:
+                if name == "_main":
+                    continue
+                cached = self._latest_by_circuit.get(name)
+                if cached is not None:
+                    result[f"{name}_motor"] = cached["channels"]
+                    result[f"{name}_active_dn"] = cached["active_dn"]
+            self._latest = result
+            return dict(result)
 
     def __enter__(self) -> Self:
         self.start()

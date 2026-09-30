@@ -244,6 +244,22 @@ Minecraft. Subcircuito ocelar: 625 neurônios, 2.981 conexões.
   implementar, e o sintoma vai parecer um circuito fraco ou um problema de
   origem/ambiente, não o bug real. Ver F14 em `docs/03-roadmap-fases.md`.
 
+- **Presumir paralelismo grátis com numpy/scipy sem controlar threads de
+  BLAS pode piorar as coisas em vez de ajudar.** Achado real (F16,
+  30/09/2026): trocar o laço único do simulador (thread, RN-06) por um
+  processo por circuito (`multiprocessing`) deu 0,666ms/tick — só um pouco
+  melhor que o laço único (0,996ms/tick) — até travar
+  `OPENBLAS_NUM_THREADS=1`/`OMP_NUM_THREADS=1`/`MKL_NUM_THREADS=1` (o
+  OpenBLAS desta máquina abre até 24 threads por processo por conta
+  própria — 7 processos multiplicando isso é MUITO mais threads que
+  núcleos reais, todas brigando entre si). Com isso: 0,407ms/tick — quase
+  3x melhor. **Ordem importa**: os `os.environ.setdefault(...)` têm que
+  rodar ANTES de qualquer import que traga numpy/scipy (mesmo transitivo,
+  via `graph`/`engine`/`motor`) — depois que o processo já importou numpy
+  uma vez, mudar a variável de ambiente não tem mais efeito. Ver
+  `sim/src/flywire_sim/server.py` (topo do arquivo) e F16 em
+  `docs/03-roadmap-fases.md`.
+
 ## Papéis no projeto
 
 | Papel | Responsabilidade | Fronteira |

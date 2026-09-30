@@ -2254,6 +2254,108 @@ abelha sumir de verdade).
 
 ---
 
+## F16 — Simulador vira multiprocessing (30/09/2026) ✅ concluído, validado em Docker real
+
+**Contexto.** Investigando o circuito olfativo (checklist, item "paladar/
+fome/olfato"), medido que o laço único a dt=1ms (RN-06) já usava **99,6%**
+do orçamento de 1ms/tick com os 7 circuitos atuais (15.766 neurônios
+somados) — quase zero de sobra pra qualquer circuito novo, e olfato exigiria
+ORN→ALPN→(Kenyon cell/lateral horn), que explode rápido (2 saltos além do
+ALPN já dá 37 mil nós, 793 descendentes — maior que o `sleep`, F13, que já
+foi rejeitado por custo de passo).
+
+**Medido antes de decidir (RN-09-style, não presumido):**
+
+| Configuração | Custo/tick (o mais lento manda) | Sobra do orçamento |
+|---|---|---|
+| Laço único, 1 thread (como era) | 0,996 ms | 0,4% |
+| Threading Python, 2 engines simultâneas | — | speedup real 1,22x (GIL trava a maior parte) |
+| Multiprocessing, SEM controlar threads de BLAS | 0,666 ms | 33,4% |
+| **Multiprocessing, BLAS travado em 1 thread/processo** | **0,407 ms** | **59,3%** |
+
+**Achado real, registrado como armadilha:** presumir paralelismo grátis com
+numpy/scipy sem controlar threads internas de BLAS (OpenBLAS aqui,
+`MAX_THREADS=24`) pode deixar multiprocessing PIOR que threading — cada
+processo abre seu próprio pool de threads de BLAS por conta própria, e N
+processos disputando os mesmos núcleos entre si é pior que 1 processo usando
+todos os núcleos sozinho. `OPENBLAS_NUM_THREADS=1`/`OMP_NUM_THREADS=1`/
+`MKL_NUM_THREADS=1` (via `os.environ.setdefault`, ANTES de qualquer import
+que traga numpy/scipy — ordem importa) resolveu. Máquina de teste: 4 núcleos
+físicos/8 lógicos — por isso mesmo com tudo certo ainda sobra menos que o
+paralelismo "perfeito" teórico (thermo/hygro isolados custam ~0,25-0,31ms,
+em paralelo custam ~0,41ms cada — 7 processos disputando 4 núcleos reais).
+
+**Reforma implementada — `sim/src/flywire_sim/server.py`:**
+- [x] Cada circuito (ocelar + 6 opcionais) roda em **processo** próprio
+      (`multiprocessing`, contexto `spawn` explícito nos dois SOs — Windows
+      só tem spawn; Linux/Docker teria fork por padrão, mas forkar um
+      processo com threads vivas — o servidor TCP já usa threads — é
+      terreno arriscado no POSIX, `spawn` sempre recomeça do zero).
+- [x] Coordenação entre processos, só dois mecanismos, os dois de baixa
+      frequência: (1) `multiprocessing.Array` compartilhado com os 8
+      valores de estímulo crus, lido por cada processo a cada tick seu
+      (1ms) — memória compartilhada, não fila, não bloqueia; (2) uma fila
+      de saída por circuito (`maxsize=1`, sempre substitui o valor antigo)
+      onde cada processo publica o canal decodificado a cada janela de
+      50ms — o coordenador drena tudo e guarda só o mais recente,
+      nunca espera (RN-06 preservada).
+- [x] `mute`/`stimulate` (F5, só o `Engine` principal): fila de controle
+      própria, mesma semântica "só o mais recente pendente vale" de antes.
+- [x] Cada "receita" de estímulo (qual nids, que amplitude por circuito)
+      virou função pura de nível de módulo (`_stim_main`, `_stim_bristle`,
+      ..., `_stim_thermo`) — picklable, roda dentro do processo worker.
+- [x] Protocolo TCP e formato JSON **inalterados** — reforma é só
+      implementação interna, `main()` e a assinatura pública de
+      `SimulationServer` continuam as mesmas.
+- [x] Validado em Docker real (não só nos testes automatizados): `docker
+      top` confirma 1 coordenador + 7 processos worker + resource_tracker,
+      todos com CPU ativo de verdade; troca TCP manual com os 7 circuitos
+      estimulados ao mesmo tempo retornou todos os campos esperados com
+      valores plausíveis.
+
+**Testes — 3 precisaram adaptar (não dá mais pra acessar `Engine`/
+`MotorDecoder` como atributo direto, cada um vive dentro do processo
+worker):**
+- `test_bridge_history_stays_bounded_by_window` → movido pra
+  `test_motor_telemetry.py::test_motor_history_stays_bounded_by_window`
+  (testa `MotorDecoder` direto, sem precisar de servidor nenhum — mais
+  rápido e mais preciso).
+- `test_bridge_mute_field_silences_neurons` → reescrito pra testar via
+  protocolo (mutar o canal "DNp" e checar que ele fica em 0,0 exato —
+  determinístico, já que neurônio silenciado nunca aparece no
+  `SpikeFrame`). Tentativa inicial usando `phototaxis`/"sensory" foi
+  descartada: `phototaxis` responde pouco e de forma não-monotônica à
+  luz (achado real da F6) — não separava de forma confiável em poucas
+  amostras.
+- `test_bridge_survives_client_disconnect` → `srv._sim_thread.is_alive()`
+  virou `all(p.is_alive() for p in srv._processes)`.
+
+**Achado real de timing, corrigido:** as esperas fixas curtas
+(`time.sleep(0.1)` + N tentativas) que os testes multi-circuito já usavam
+ficaram frágeis — spawn de processo é mais lento e mais variável que criar
+thread, e sob a suíte inteira rodando em sequência (17 `SimulationServer`
+só em `test_server.py`) o atraso cumulativo estourava a espera fixa
+ocasionalmente. Substituído por `_wait_until` (polling com timeout,
+`tests/test_server.py`) nos testes que checam a chegada de um circuito
+específico. **Custo aceito:** suíte completa foi de ~20s pra ~45,5s (spawn
+de processo tem overhead real que thread não tinha) — mais lenta, mas ainda
+rápida o bastante pra rodar toda hora; o ganho é em PRODUÇÃO (59,3% de
+orçamento livre), não nos testes.
+
+- [x] 46/46 testes passando (3 adaptados, resto inalterado).
+- [x] `ruff check` limpo.
+- [x] Compilado, buildado e recriado no Docker real — `docker compose
+      build` + `up -d --force-recreate`, logs confirmam os 6 subcircuitos
+      opcionais carregando e o servidor escutando.
+
+**Próximo passo desbloqueado:** com 59,3% de orçamento livre (~0,59ms/tick),
+um circuito olfativo modesto (semente de feromônio, ~429 neurônios — ver
+achado da revisão de literatura, F16 anterior) cabe com folga, desde que
+fique na mesma ordem de grandeza de `escape`/`taste`/`johnston`, não um
+`thermo`/`hygro` inteiro.
+
+---
+
 ## Fora de escopo (candidatos a v2+)
 
 | Item | Fase provável |

@@ -16,6 +16,32 @@ from flywire_sim import graph
 from flywire_sim.server import SimulationServer
 
 
+def _send(sock_file, sensor: dict) -> dict:
+    sock_file.write((json.dumps(sensor) + "\n").encode("utf-8"))
+    sock_file.flush()
+    return json.loads(sock_file.readline().decode("utf-8"))
+
+
+def _wait_until(sock_file, sensor: dict, ready, timeout: float = 10.0) -> dict:
+    """F16 (30/09/2026) — repete `sensor` (t_ms crescente) até `ready(payload)`
+    ser verdadeiro, ou desiste após `timeout`s. Substitui esperas fixas
+    curtas (`time.sleep(0.1)` + N tentativas): spawn de processo (cada
+    circuito agora é um processo próprio, não mais uma thread) é mais lento
+    e mais variável que criar thread — sob a suíte inteira rodando em
+    sequência (várias SimulationServer sendo criadas/destruídas), uma
+    espera fixa curta é frágil. `ready` recebe o payload inteiro."""
+    deadline = time.monotonic() + timeout
+    t_ms = sensor.get("t_ms", 0)
+    payload: dict = {}
+    while time.monotonic() < deadline:
+        payload = _send(sock_file, {**sensor, "t_ms": t_ms})
+        if ready(payload):
+            return payload
+        t_ms += 50
+        time.sleep(0.02)
+    raise AssertionError(f"condição não satisfeita em {timeout}s — última resposta: {payload}")
+
+
 def test_bridge_request_response_no_frame_loss():
     cc = graph.load()
     with SimulationServer(cc, host="127.0.0.1", port=0) as srv:
@@ -38,39 +64,52 @@ def test_bridge_request_response_no_frame_loss():
             sock.close()
 
 
-def test_bridge_history_stays_bounded_by_window():
-    """A estrutura que mais cresceria num vazamento é motor._history."""
-    cc = graph.load()
-    with SimulationServer(cc, host="127.0.0.1", port=0) as srv:
-        time.sleep(0.5)
-        # janela MOTOR_WINDOW_MS=50, dt=1ms -> no máximo ~50-60 frames retidos
-        assert len(srv.motor._history) <= 60
+# F16 (30/09/2026) — test_bridge_history_stays_bounded_by_window movido pra
+# test_motor_telemetry.py::test_motor_history_stays_bounded_by_window. Depois
+# da reforma pra multiprocessing, `srv.motor` não existe mais como atributo
+# do processo de teste (o MotorDecoder do ocelar vive dentro do processo
+# worker) — testar isso direto no MotorDecoder é mais rápido E mais preciso
+# do que tentar inferir pelo protocolo.
 
 
 def test_bridge_mute_field_silences_neurons():
-    """F5 — campo 'mute' silencia o grupo nomeado, e omiti-lo não desfaz isso."""
+    """F5 — campo 'mute' silencia o grupo nomeado, e omiti-lo não desfaz isso.
+
+    F16 (30/09/2026) — `Engine.set_silenced` em si já é testado a fundo em
+    test_engine.py (test_set_silenced_blocks_spikes/replaces_not_accumulates);
+    depois da reforma pra multiprocessing esse `Engine` vive dentro do
+    processo worker, sem acesso direto (`srv.engine` não existe mais). O que
+    este teste precisa validar é só a FIAÇÃO do protocolo: que o campo
+    "mute" chega no worker certo e tem efeito observável.
+
+    Sinal escolhido — mutar o próprio grupo de saída ("DNp", um dos 8
+    canais por prefixo de `motor.groups`) e checar O CANAL DELE, não
+    `phototaxis` (tentativa anterior, descartada: `phototaxis` responde
+    pouco e de forma não-monotônica à luz — achado real da F6 — então
+    "sensory" mutado vs. livre não separa de forma confiável em poucas
+    amostras). Silenciar "DNp" faz esses neurônios NUNCA aparecerem no
+    SpikeFrame — a taxa do grupo fica em ZERO de verdade (não é ruído
+    baixo, é ausência), então `tanh(0/escala)=0.0` exato, sem depender de
+    quanta variância basal (RN-09) esse grupo tem.
+    """
     cc = graph.load()
     with SimulationServer(cc, host="127.0.0.1", port=0) as srv:
-        time.sleep(0.1)
         sock = socket.create_connection(("127.0.0.1", srv.port), timeout=5.0)
         sock_file = sock.makefile("rwb")
         try:
-            sensor = {"t_ms": 0, "light": 0.5, "dorsal_light": 0.0, "damage": False, "mute": ["sensory"]}
-            sock_file.write((json.dumps(sensor) + "\n").encode("utf-8"))
-            sock_file.flush()
-            sock_file.readline()
-            time.sleep(0.1)  # dá tempo do loop de simulação aplicar
-
-            assert srv.engine._silenced[cc.sensory].all()
+            # A mensagem de mute fica na fila de controle até o worker
+            # nascer e aplicar — não importa se o processo ainda nem
+            # começou a rodar quando isto é enviado.
+            _send(sock_file, {"t_ms": 0, "light": 0.5, "dorsal_light": 0.0, "damage": False, "mute": ["DNp"]})
+            payload = _wait_until(
+                sock_file, {"t_ms": 50, "light": 0.5, "dorsal_light": 0.0, "damage": False},
+                lambda p: p.get("motor", {}).get("DNp") == 0.0,
+            )
+            assert payload["motor"]["DNp"] == 0.0
 
             # sem "mute" no campo, o silenciamento anterior deve persistir
-            sensor2 = {"t_ms": 50, "light": 0.5, "dorsal_light": 0.0, "damage": False}
-            sock_file.write((json.dumps(sensor2) + "\n").encode("utf-8"))
-            sock_file.flush()
-            sock_file.readline()
-            time.sleep(0.1)
-
-            assert srv.engine._silenced[cc.sensory].all()
+            payload = _send(sock_file, {"t_ms": 100, "light": 0.5, "dorsal_light": 0.0, "damage": False})
+            assert payload["motor"]["DNp"] == 0.0
         finally:
             sock.close()
 
@@ -104,20 +143,14 @@ def test_bridge_with_bristle_exposes_bristle_telemetry():
     cc = graph.load()
     bristle_cc = graph.load(C.PROCESSED / "bristle")
     with SimulationServer(cc, bristle_cc, host="127.0.0.1", port=0) as srv:
-        time.sleep(0.1)
         sock = socket.create_connection(("127.0.0.1", srv.port), timeout=5.0)
         sock_file = sock.makefile("rwb")
         try:
-            for i in range(5):
-                sensor = {
-                    "t_ms": i * 50, "light": 0.0, "dorsal_light": 0.0,
-                    "damage": False, "touch_contact": True, "touch_proximity": True,
-                }
-                sock_file.write((json.dumps(sensor) + "\n").encode("utf-8"))
-                sock_file.flush()
-                payload = json.loads(sock_file.readline().decode("utf-8"))
-                time.sleep(0.05)
-            assert "bristle_motor" in payload
+            sensor = {
+                "light": 0.0, "dorsal_light": 0.0,
+                "damage": False, "touch_contact": True, "touch_proximity": True,
+            }
+            payload = _wait_until(sock_file, sensor, lambda p: "bristle_motor" in p)
             assert "grooming" in payload["bristle_motor"]
             assert all(-1.0 < v < 1.0 for v in payload["bristle_motor"].values())
             assert isinstance(payload["bristle_active_dn"], int)
@@ -178,20 +211,11 @@ def test_bridge_with_hygro_exposes_hygrotaxis():
     cc = graph.load()
     hygro_cc = graph.load(C.PROCESSED / "hygro")
     with SimulationServer(cc, hygro_connectome=hygro_cc, host="127.0.0.1", port=0) as srv:
-        time.sleep(0.1)
         sock = socket.create_connection(("127.0.0.1", srv.port), timeout=5.0)
         sock_file = sock.makefile("rwb")
         try:
-            for i in range(5):
-                sensor = {
-                    "t_ms": i * 50, "light": 0.0, "dorsal_light": 0.0,
-                    "damage": False, "raining": True,
-                }
-                sock_file.write((json.dumps(sensor) + "\n").encode("utf-8"))
-                sock_file.flush()
-                payload = json.loads(sock_file.readline().decode("utf-8"))
-                time.sleep(0.05)
-            assert "hygro_motor" in payload
+            sensor = {"light": 0.0, "dorsal_light": 0.0, "damage": False, "raining": True}
+            payload = _wait_until(sock_file, sensor, lambda p: "hygro_motor" in p)
             assert "hygrotaxis" in payload["hygro_motor"]
             assert all(-1.0 < v < 1.0 for v in payload["hygro_motor"].values())
             assert isinstance(payload["hygro_active_dn"], int)
@@ -227,20 +251,11 @@ def test_bridge_with_johnston_exposes_startle():
     cc = graph.load()
     johnston_cc = graph.load(C.PROCESSED / "johnston")
     with SimulationServer(cc, johnston_connectome=johnston_cc, host="127.0.0.1", port=0) as srv:
-        time.sleep(0.1)
         sock = socket.create_connection(("127.0.0.1", srv.port), timeout=5.0)
         sock_file = sock.makefile("rwb")
         try:
-            for i in range(5):
-                sensor = {
-                    "t_ms": i * 50, "light": 0.0, "dorsal_light": 0.0,
-                    "damage": False, "alarm_hostile_mob": True,
-                }
-                sock_file.write((json.dumps(sensor) + "\n").encode("utf-8"))
-                sock_file.flush()
-                payload = json.loads(sock_file.readline().decode("utf-8"))
-                time.sleep(0.05)
-            assert "johnston_motor" in payload
+            sensor = {"light": 0.0, "dorsal_light": 0.0, "damage": False, "alarm_hostile_mob": True}
+            payload = _wait_until(sock_file, sensor, lambda p: "johnston_motor" in p)
             assert "startle" in payload["johnston_motor"]
             assert all(-1.0 < v < 1.0 for v in payload["johnston_motor"].values())
             assert isinstance(payload["johnston_active_dn"], int)
@@ -276,20 +291,11 @@ def test_bridge_with_escape_exposes_escape_drive():
     cc = graph.load()
     escape_cc = graph.load(C.PROCESSED / "escape")
     with SimulationServer(cc, escape_connectome=escape_cc, host="127.0.0.1", port=0) as srv:
-        time.sleep(0.1)
         sock = socket.create_connection(("127.0.0.1", srv.port), timeout=5.0)
         sock_file = sock.makefile("rwb")
         try:
-            for i in range(5):
-                sensor = {
-                    "t_ms": i * 50, "light": 0.0, "dorsal_light": 0.0,
-                    "damage": False, "looming_threat": True,
-                }
-                sock_file.write((json.dumps(sensor) + "\n").encode("utf-8"))
-                sock_file.flush()
-                payload = json.loads(sock_file.readline().decode("utf-8"))
-                time.sleep(0.05)
-            assert "escape_motor" in payload
+            sensor = {"light": 0.0, "dorsal_light": 0.0, "damage": False, "looming_threat": True}
+            payload = _wait_until(sock_file, sensor, lambda p: "escape_motor" in p)
             assert "escape_drive" in payload["escape_motor"]
             assert all(-1.0 < v < 1.0 for v in payload["escape_motor"].values())
             assert isinstance(payload["escape_active_dn"], int)
@@ -324,20 +330,11 @@ def test_bridge_with_taste_exposes_appetite():
     cc = graph.load()
     taste_cc = graph.load(C.PROCESSED / "taste")
     with SimulationServer(cc, taste_connectome=taste_cc, host="127.0.0.1", port=0) as srv:
-        time.sleep(0.1)
         sock = socket.create_connection(("127.0.0.1", srv.port), timeout=5.0)
         sock_file = sock.makefile("rwb")
         try:
-            for i in range(5):
-                sensor = {
-                    "t_ms": i * 50, "light": 0.0, "dorsal_light": 0.0,
-                    "damage": False, "food_contact": True,
-                }
-                sock_file.write((json.dumps(sensor) + "\n").encode("utf-8"))
-                sock_file.flush()
-                payload = json.loads(sock_file.readline().decode("utf-8"))
-                time.sleep(0.05)
-            assert "taste_motor" in payload
+            sensor = {"light": 0.0, "dorsal_light": 0.0, "damage": False, "food_contact": True}
+            payload = _wait_until(sock_file, sensor, lambda p: "taste_motor" in p)
             assert "appetite" in payload["taste_motor"]
             assert all(-1.0 < v < 1.0 for v in payload["taste_motor"].values())
             assert isinstance(payload["taste_active_dn"], int)
@@ -372,19 +369,11 @@ def test_bridge_with_thermo_exposes_thermal():
     with SimulationServer(cc, thermo_connectome=thermo_cc, host="127.0.0.1", port=0) as srv:
         assert len(srv._thermo_heating_nids) == 7
         assert len(srv._thermo_cold_nids) == 9
-        time.sleep(0.1)
         sock = socket.create_connection(("127.0.0.1", srv.port), timeout=5.0)
         sock_file = sock.makefile("rwb")
         try:
-            for i in range(5):
-                sensor = {
-                    "t_ms": i * 50, "light": 0.0, "dorsal_light": 0.0,
-                    "damage": False, "thermo_heat": True,
-                }
-                sock_file.write((json.dumps(sensor) + "\n").encode("utf-8"))
-                sock_file.flush()
-                payload = json.loads(sock_file.readline().decode("utf-8"))
-                time.sleep(0.05)
+            sensor = {"light": 0.0, "dorsal_light": 0.0, "damage": False, "thermo_heat": True}
+            payload = _wait_until(sock_file, sensor, lambda p: "thermo_motor" in p)
             assert "thermal" in payload["thermo_motor"]
             assert all(-1.0 < v < 1.0 for v in payload["thermo_motor"].values())
             assert isinstance(payload["thermo_active_dn"], int)
@@ -396,9 +385,9 @@ def test_bridge_survives_client_disconnect():
     """Se o plugin cair, o simulador continua rodando (não deve travar/crashar)."""
     cc = graph.load()
     with SimulationServer(cc, host="127.0.0.1", port=0) as srv:
-        time.sleep(0.1)
         sock = socket.create_connection(("127.0.0.1", srv.port), timeout=5.0)
         sock.close()  # desconecta abruptamente, sem handshake de saída
 
-        time.sleep(0.2)
-        assert srv._sim_thread.is_alive()
+        time.sleep(0.5)
+        # F16 — não é mais uma thread só, é um processo por circuito ativo.
+        assert all(p.is_alive() for p in srv._processes)

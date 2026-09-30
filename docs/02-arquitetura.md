@@ -52,12 +52,26 @@ Um tick do jogo = **50 passos de simulação**. Três arranjos possíveis:
 | Arranjo | Como funciona | Veredito |
 |---|---|---|
 | **Síncrono acoplado** | Jogo espera o simulador terminar 50 passos | ❌ trava o servidor se o simulador atrasar |
-| **Assíncrono desacoplado** ✅ | Simulador roda livre em thread própria; jogo lê o último vetor motor disponível | **Escolhido.** Jogo nunca bloqueia; simulação nunca é distorcida pelo jogo |
+| **Assíncrono desacoplado** ✅ | Simulador roda livre, um circuito por processo (F16); jogo lê o último vetor motor disponível | **Escolhido.** Jogo nunca bloqueia; simulação nunca é distorcida pelo jogo |
 | **Lockstep lento** | Jogo e simulador ambos a 20 Hz, dt=50 ms | ❌ dt de 50 ms destrói a dinâmica do LIF |
 
 O acoplamento assíncrono significa que o vetor motor é **sempre levemente antigo** (até
 50 ms). Para o comportamento estudado, isso é aceitável e explicitamente documentado —
 não é um bug a corrigir.
+
+**F16 (30/09/2026) — "thread própria" virou "processo próprio, um por
+circuito".** Medido: o laço único (1 thread, todos os 7 circuitos
+sequenciais) já usava 99,6% do orçamento de 1ms/tick, quase sem sobra pra
+um circuito novo. `multiprocessing` (contexto `spawn`, um processo por
+circuito, coordenados só por um `Array` compartilhado de estímulo + uma
+fila `maxsize=1` de saída por circuito) recuperou a maior parte do
+orçamento — 59,3% livre — DESDE QUE as threads internas de BLAS
+(OpenBLAS/MKL, que cada processo abriria por conta própria) sejam travadas
+em 1 por processo (`os.environ`, ver topo de `server.py`) — sem isso,
+multiprocessing fica pior que devia, quase tão ruim quanto o laço único.
+Protocolo TCP/JSON inalterado — é reforma de implementação interna, não de
+contrato. Ver F16 em `docs/03-roadmap-fases.md` e a armadilha
+correspondente em `CONVENCOES.md`.
 
 ## Contratos
 
