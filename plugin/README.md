@@ -1061,11 +1061,13 @@ acima do chão; balão "Sonolenta — quase dormindo". Despertam: som alto
 volta a ficar sonolenta ("Acordada — atenta, sem sono" nesse meio-tempo).
 HUD: linha "Sono". Testar com `/time set night`.
 
-## Experimentos de lesão pendentes (F14, 27/09/2026) — escape, taste, thermo
+## Experimentos de lesão (F14, 27/09/2026) — escape, taste, thermo ✅ os três confirmados
 
 Os três circuitos que viraram comportamento real depois do F7 (`bristle`/
 `hygro` já validados, p=0,0025/p=0,00019) e ainda não tinham lesão validando
-em servidor real ganharam comando:
+em servidor real ganharam comando — **todos confirmados** em servidor real
+(29/09/2026, ver `docs/03-roadmap-fases.md` F14; taste e thermo precisaram
+de um round de diagnóstico/correção antes de fechar):
 
 - `/flywirebee escapelesion [trials=20] [segundos=10] [x y z]` — mascara
   `looming_threat`/`damage`. Estímulo SCRIPTED (o experimento aplica dano
@@ -1082,6 +1084,21 @@ em servidor real ganharam comando:
 Mesmo CSV/`sim/tools/lesion_analysis.py` dos anteriores. Ver
 `EscapeLesionExperiment.java`/`TasteLesionExperiment.java`/
 `ThermoLesionExperiment.java`, `docs/03-roadmap-fases.md` F14.
+
+## Lesão do johnston (F15, 29/09/2026) — som/vento, pendente de execução
+
+`startle` continua telemetria pura — o único efeito real é indireto
+(acordar do sono noturno, F13). Desenho diferente dos outros:
+
+- `/flywirebee johnstonlesion [trials=20] [segundos=10] [x y z]` — x/y/z
+  a até 6 blocos de uma jukebox real já colocada. Força noite (uma vez,
+  `World#setTime`) se ainda não for. Cada trial: espera ela ficar
+  sonolenta de verdade (`ControlLoop.isDrowsy()`, timeout 20s), SÓ DEPOIS
+  liga a jukebox de verdade via código (`Jukebox#startPlaying()`, insere
+  disco se precisar) e mede. Mascara `alarm_explosion`/`alarm_hostile_mob`/
+  `sound_music` enviados à ponte (mesma filosofia dos outros).
+
+Ver `JohnstonLesionExperiment.java`, `docs/03-roadmap-fases.md` F15.
 
 ## Regra
 

@@ -283,6 +283,7 @@ public final class ControlLoop {
     private volatile boolean escapeLesioned = false; // F9/F14 — ver setEscapeLesioned
     private volatile boolean tasteLesioned = false; // F10/F14 — ver setTasteLesioned
     private volatile boolean thermoLesioned = false; // F12/F14 — ver setThermoLesioned
+    private volatile boolean johnstonLesioned = false; // F8/F14 — ver setJohnstonLesioned
     private volatile boolean visualize = true;
     // F6/AD-16 — direção COMANDADA, persiste entre trocas (não é a orientação
     // visual da abelha, que a IA nativa continua controlando). null = precisa
@@ -436,6 +437,26 @@ public final class ControlLoop {
      */
     public void setThermoLesioned(boolean lesioned) {
         this.thermoLesioned = lesioned;
+    }
+
+    /**
+     * F14 (29/09/2026) — experimento de lesão pro `johnston` (vento/som):
+     * quando true, {@code alarm_explosion}/{@code alarm_hostile_mob}/
+     * {@code sound_music} sempre chegam `false` na ponte — mesma filosofia
+     * de {@link #setTouchLesioned}. O único efeito REAL de `startle` hoje é
+     * indireto (acordar do sono noturno, ver {@code loudSound}/F13) — sem
+     * o circuito real confirmando (`startle` acima de
+     * {@link #WAKE_STARTLE_THRESHOLD} na resposta da ponte, que reflete o
+     * que foi ENVIADO), ela não desperta mesmo com som real tocando por
+     * perto. Ver {@link JohnstonLesionExperiment}.
+     */
+    public void setJohnstonLesioned(boolean lesioned) {
+        this.johnstonLesioned = lesioned;
+    }
+
+    /** F14 — exposto pra {@link JohnstonLesionExperiment} saber quando pode começar a medir. */
+    public boolean isDrowsy() {
+        return sleepState.isDrowsy();
     }
 
     /**
@@ -927,6 +948,13 @@ public final class ControlLoop {
         boolean foodContactToSend = tasteLesioned ? false : foodContact;
         boolean thermoHeatToSend = thermoLesioned ? false : thermal.heat();
         boolean thermoColdToSend = thermoLesioned ? false : thermal.cold();
+        // F14 — lesão do johnston: mesma filosofia, mascara o que é ENVIADO.
+        // `loudSound` (acima) usa os valores REAIS pra decidir SE algo
+        // aconteceu (não é confundido por essa máscara) — quem muda é o que
+        // chega no circuito, refletido de volta em latestJohnstonMotor.
+        boolean alarmExplosionToSend = johnstonLesioned ? false : alarmExplosion;
+        boolean alarmHostileMobToSend = johnstonLesioned ? false : alarmHostileMob;
+        boolean soundMusicToSend = johnstonLesioned ? false : soundMusic;
 
         bridgeExecutor.submit(() -> {
             try {
@@ -935,7 +963,8 @@ public final class ControlLoop {
                 }
                 JsonObject response = bridge.sendSensorAndReceiveMotor(
                         light, dorsalLight, damageToSend, touchContactToSend, touchProximityToSend,
-                        rainingToSend, alarmExplosion, alarmHostileMob, soundMusic, loomingThreatToSend,
+                        rainingToSend, alarmExplosionToSend, alarmHostileMobToSend, soundMusicToSend,
+                        loomingThreatToSend,
                         foodContactToSend, thermoHeatToSend, thermoColdToSend, tMs, muteToSend, stimulateToSend);
                 if (sendMuteThisTime) {
                     muteDirty = false;

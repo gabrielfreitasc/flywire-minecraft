@@ -50,6 +50,12 @@ import java.util.logging.Level;
  *       {@link ThermoLesionExperiment}). Escolher x/y/z perto de
  *       lava/fogo/magma — só a fuga de calor PERIGOSO tem efeito de
  *       movimento (frio/bioma só mudam o balão);</li>
+ *   <li>{@code johnstonlesion [trials] [segundos] [x y z]} — experimento de
+ *       lesão do subcircuito `johnston` (som/vento), F14 (ver
+ *       {@link JohnstonLesionExperiment}). Desenho diferente: força noite,
+ *       espera ela ficar sonolenta, liga uma jukebox real no meio do
+ *       trial — `startle` só tem efeito indireto (acordar do sono, F13).
+ *       x/y/z precisa ficar a até 6 blocos de uma jukebox já colocada;</li>
  *   <li>{@code daynight [trials] [segundos]} — experimento dia/noite, F6
  *       (ver {@link DayNightExperiment}). Exige abelha ao ar livre —
  *       {@code light} (não {@code dorsal_light}) é quem varia com a hora do
@@ -176,6 +182,7 @@ public final class FlywireBeePlugin extends JavaPlugin {
             case "escapelesion" -> handleEscapeLesion(player, args);
             case "tastelesion" -> handleTasteLesion(player, args);
             case "thermolesion" -> handleThermoLesion(player, args);
+            case "johnstonlesion" -> handleJohnstonLesion(player, args);
             case "daynight" -> handleDayNight(player, args);
             case "doseresponse" -> handleDoseResponse(player, args);
             case "validateyaw" -> handleValidateYaw(player, args);
@@ -457,6 +464,47 @@ public final class FlywireBeePlugin extends JavaPlugin {
         new ThermoLesionExperiment(this, controlLoop).run(bee.get(), trials, secondsPerTrial, origin, player);
     }
 
+    /**
+     * F14 (29/09/2026) — desenho diferente dos outros: `startle` só tem
+     * efeito REAL indireto (acordar do sono noturno, F13), então o
+     * experimento força noite, espera ela ficar sonolenta, liga uma
+     * jukebox real via código no meio do trial e mede se ela desperta
+     * (normal) ou continua sonolenta (mascarado). x/y/z precisa ficar a até
+     * 6 blocos de uma jukebox real já colocada (com ou sem disco — o
+     * experimento insere um se precisar). Ver docstring de
+     * {@link JohnstonLesionExperiment}.
+     */
+    private void handleJohnstonLesion(Player player, String[] args) {
+        Optional<Bee> bee = player.getWorld().getEntitiesByClass(Bee.class).stream()
+                .filter(marker::isMarked)
+                .findFirst();
+        if (bee.isEmpty()) {
+            player.sendMessage("Nenhuma abelha do FlyWire encontrada neste mundo. Use /flywirebee give primeiro.");
+            return;
+        }
+        int trials = 20;
+        int secondsPerTrial = 10;
+        Location origin = null;
+        try {
+            if (args.length >= 2) {
+                trials = Integer.parseInt(args[1]);
+            }
+            if (args.length >= 3) {
+                secondsPerTrial = Integer.parseInt(args[2]);
+            }
+            if (args.length == 6) {
+                origin = parseXyz(player, args, 3);
+            } else if (args.length != 3 && args.length != 2 && args.length != 1) {
+                throw new NumberFormatException(String.join(" ", args));
+            }
+        } catch (NumberFormatException e) {
+            player.sendMessage("Uso: /flywirebee johnstonlesion [trials=20] [segundosPorTrial=10] [x y z]"
+                    + " — escolha x/y/z a até 6 blocos de uma jukebox real já colocada.");
+            return;
+        }
+        new JohnstonLesionExperiment(this, controlLoop).run(bee.get(), trials, secondsPerTrial, origin, player);
+    }
+
     private void handleDayNight(Player player, String[] args) {
         Optional<Bee> bee = player.getWorld().getEntitiesByClass(Bee.class).stream()
                 .filter(marker::isMarked)
@@ -708,6 +756,7 @@ public final class FlywireBeePlugin extends JavaPlugin {
                 + "escapelesion [trials] [segundos] [x y z] | "
                 + "tastelesion [trials] [segundos] [x y z] | "
                 + "thermolesion [trials] [segundos] [x y z] | "
+                + "johnstonlesion [trials] [segundos] [x y z] | "
                 + "daynight [trials] [segundos] [blind] | "
                 + "doseresponse [trials] [segundos] [x y z] | "
                 + "validateyaw [trials] [segundos] [amplitude] [x y z] | "

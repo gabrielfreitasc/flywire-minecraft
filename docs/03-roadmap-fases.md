@@ -2186,6 +2186,51 @@ confirmados por lesão em servidor real**, mesmo padrão de rigor que
 
 ---
 
+## F15 — Lesão do johnston (som/vento, 29/09/2026) 🔶 implantada, execução em jogo pendente
+
+**Decisão do usuário (via `AskUserQuestion`, entre 2 opções):** testar a
+lesão pelo gatilho existente, em vez de inventar um reflexo novo pro
+`startle` só pra ter algo fácil de medir. `startle` continua telemetria
+pura — o único efeito REAL dele hoje é INDIRETO: acordar a abelha do sono
+noturno (F13, `ControlLoop.loudSound`). O experimento testa exatamente
+isso.
+
+**Desenho, bem diferente dos outros (não é ambiente nem scripted-dano
+simples):**
+- [x] Pré-requisitos verificados/forçados UMA VEZ no início (não por
+      trial): jukebox real a até 6 blocos da origem (`AlarmSensor.
+      MUSIC_RADIUS_BLOCKS`, agora pacote-visível) — aborta com aviso se não
+      achar; relógio do mundo forçado pra noite via `World#setTime` se
+      ainda não for (efeito colateral real, avisado no chat).
+- [x] Cada trial tem DUAS fases: **assentamento** (teleporta, jukebox
+      mutada, espera `ControlLoop.isDrowsy()` ficar `true` — timeout de
+      segurança de 20s pra não travar se algo perturbar) e **medição**
+      (liga a jukebox de verdade via `Jukebox#startPlaying()`, som REAL,
+      script — insere disco se estiver vazia, não precisa o jogador
+      gerenciar isso a cada trial; mede `path_length` só a partir daqui).
+- [x] `ControlLoop.setJohnstonLesioned` — mesma filosofia de
+      `setTouchLesioned`: mascara `alarm_explosion`/`alarm_hostile_mob`/
+      `sound_music` ENVIADOS à ponte. `loudSound` (o gatilho de despertar)
+      continua usando os valores REAIS pra saber SE algo aconteceu — só o
+      que chega no circuito muda, refletido de volta em
+      `latestJohnstonMotor`.
+- [x] `ControlLoop.isDrowsy()` — novo acessor público, só pro experimento
+      saber quando pode começar a medir.
+- [x] Direção esperada: normal (som real chega no circuito, `startle`
+      cruza `WAKE_STARTLE_THRESHOLD`, ela desperta) — `path_length` MAIOR.
+      Lesionado (som mascarado antes do circuito, ela continua sonolenta:
+      12% de velocidade, teto de 1 bloco) — `path_length` MENOR. Mesmo
+      sentido de escape/thermo.
+- [x] Compilado, jar reimplantado, servidor reiniciado com desligamento
+      gracioso. 46/46 testes Python inalterados (mudança inteiramente do
+      lado do plugin).
+- [ ] **Execução em jogo** — `/flywirebee johnstonlesion` ainda não foi
+      rodado; cada trial demora mais que os outros (assentamento de até
+      20s + medição), então N=20 trials pode levar bem mais tempo total
+      que os experimentos anteriores.
+
+---
+
 ## Fora de escopo (candidatos a v2+)
 
 | Item | Fase provável |

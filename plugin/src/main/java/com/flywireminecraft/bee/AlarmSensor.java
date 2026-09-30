@@ -53,7 +53,9 @@ public final class AlarmSensor implements Listener {
     // Varredura de bloco, não de entidade — sem API de "nearby blocks" no
     // Bukkit. Raio menor que o do mob hostil por custo (varredura é O(raio³)
     // blocos, não indexada como entidades) — estimativa de engenharia.
-    private static final int MUSIC_RADIUS_BLOCKS = 6;
+    // Pacote-visível — F14 reaproveita em JohnstonLesionExperiment (achar a
+    // MESMA jukebox que este sensor detectaria, não duplicar o raio).
+    static final int MUSIC_RADIUS_BLOCKS = 6;
 
     private final FlywireBeeMarker marker;
     private volatile boolean explosionSinceLastRead = false;

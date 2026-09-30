@@ -29,7 +29,9 @@ import org.bukkit.World;
 final class SleepState {
 
     /** Hora do mundo (0 = 06:00, ticks de 0 a 24000) em que anoitece — mesmo início em que jogador pode dormir. */
-    private static final long NIGHT_START_TICK = 13000;
+    // Pacote-vis00edvel 2014 F14 reaproveita em JohnstonLesionExperiment (for00e7ar
+    // noite antes do experimento, mesmo valor que SleepState j00e1 usa).
+    static final long NIGHT_START_TICK = 13000;
     /** Amanhece. */
     private static final long NIGHT_END_TICK = 23000;
 
