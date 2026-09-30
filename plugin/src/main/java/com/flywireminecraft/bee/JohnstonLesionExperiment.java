@@ -38,10 +38,16 @@ import java.util.logging.Level;
  * <ol>
  *   <li><b>Assentamento</b> — teleporta pra origem, jukebox mutada, espera
  *       ela ficar sonolenta de verdade ({@link ControlLoop#isDrowsy}) antes
- *       de medir qualquer coisa. Timeout de segurança
- *       ({@link #SETTLE_TIMEOUT_TICKS}) — se não ficar sonolenta a tempo
- *       (não é noite, ou algo perturbando), aborta com aviso em vez de
- *       travar pra sempre.</li>
+ *       de medir qualquer coisa. <b>Sempre com {@code johnstonLesioned=true}
+ *       aqui, mesmo em trials "normais" (achado real, corrigido antes da
+ *       1ª execução completa):</b> som/mob hostil real por perto durante a
+ *       espera só derrubava o contador de calma nos trials NÃO mascarados —
+ *       os lesionados ficavam "imunes" à mesma perturbação e assentavam
+ *       rápido, virando timeout sistemático só nos normais. A condição real
+ *       só passa a valer quando a medição começa. Timeout de segurança
+ *       ({@link #SETTLE_TIMEOUT_TICKS}) — se mesmo assim não ficar sonolenta
+ *       a tempo (não é noite, ou dano/ameaça real por perto), ENCERRA o
+ *       experimento salvando os trials já concluídos (não descarta).</li>
  *   <li><b>Medição</b> — liga a jukebox (som REAL, script via
  *       {@code Jukebox#startPlaying()} — não precisa o jogador gerenciar
  *       disco a cada trial) e mede `path_length` só a partir daqui, pelos N
@@ -133,7 +139,17 @@ public final class JohnstonLesionExperiment {
         bee.teleport(origin);
         bee.setVelocity(new Vector(0, 0, 0));
         stopJukebox(jukeboxBlock);
-        controlLoop.setJohnstonLesioned(lesioned);
+        // F15 (29/09/2026, achado real, bug corrigido antes da 1ª execução
+        // completa) — SEMPRE mascarado durante o assentamento, não só nos
+        // trials lesionados. Sem isso, qualquer som/mob hostil REAL por
+        // perto durante a espera derrubava o contador de calma SÓ nos
+        // trials normais (não mascarados) — os lesionados ficavam "imunes"
+        // à mesma perturbação (mascarada) e assentavam rápido, enquanto os
+        // normais nunca conseguiam (viraram timeout sistematicamente).
+        // A condição real (`lesioned`) só passa a valer quando a medição
+        // começa, ver measureTrial — os dois grupos entram sonolentos em
+        // condições simétricas, só a fase de MEDIÇÃO difere.
+        controlLoop.setJohnstonLesioned(true);
 
         plugin.getLogger().info(String.format(
                 "[JohnstonLesionExperiment] trial %d/%d — lesionado=%s (fase: assentamento)",
@@ -156,6 +172,8 @@ public final class JohnstonLesionExperiment {
                     plugin.getLogger().info(String.format(
                             "[JohnstonLesionExperiment] trial %d/%d — sonolenta após %d ticks, iniciando medição",
                             trialIndex + 1, totalTrials, tick));
+                    // F15 — só agora a condição REAL do trial passa a valer (ver comentário acima).
+                    controlLoop.setJohnstonLesioned(lesioned);
                     startPlaying(jukeboxBlock);
                     measureTrial(bee, origin, jukeboxBlock, trialIndex, totalTrials, durationTicks, lesioned,
                             results, notify);
@@ -164,10 +182,14 @@ public final class JohnstonLesionExperiment {
                 tick++;
                 if (tick >= SETTLE_TIMEOUT_TICKS) {
                     plugin.getLogger().warning("[JohnstonLesionExperiment] não ficou sonolenta a tempo "
-                            + "(não é noite, ou algo perturbando por perto) — abortando trial");
-                    notify.sendMessage("Ela não ficou sonolenta a tempo — abortando (confirme que é noite "
-                            + "e não há nada perturbando por perto).");
-                    finishAbort(jukeboxBlock, notify);
+                            + "(não é noite, ou dano/ameaça real por perto — som mascarado durante o "
+                            + "assentamento não deveria mais ser a causa) — encerrando com os trials já feitos");
+                    notify.sendMessage("Ela não ficou sonolenta a tempo neste trial — encerrando o experimento "
+                            + "com os " + results.size() + " trials já concluídos (confirme que é noite e não "
+                            + "há dano/ameaça real por perto).");
+                    // F15 — timeout não é "abelha sumiu": salva o que já foi medido em vez de
+                    // descartar (diferente de finishAbort, usado só pra falha catastrófica de verdade).
+                    finish(results, jukeboxBlock, notify);
                     cancel();
                 }
             }

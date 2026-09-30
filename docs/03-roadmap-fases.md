@@ -2186,7 +2186,7 @@ confirmados por lesão em servidor real**, mesmo padrão de rigor que
 
 ---
 
-## F15 — Lesão do johnston (som/vento, 29/09/2026) 🔶 implantada, execução em jogo pendente
+## F15 — Lesão do johnston (som/vento, 29/09/2026) 🔶 bug real corrigido (assentamento assimétrico entre condições), execução em jogo pendente
 
 **Decisão do usuário (via `AskUserQuestion`, entre 2 opções):** testar a
 lesão pelo gatilho existente, em vez de inventar um reflexo novo pro
@@ -2224,10 +2224,30 @@ simples):**
 - [x] Compilado, jar reimplantado, servidor reiniciado com desligamento
       gracioso. 46/46 testes Python inalterados (mudança inteiramente do
       lado do plugin).
-- [ ] **Execução em jogo** — `/flywirebee johnstonlesion` ainda não foi
-      rodado; cada trial demora mais que os outros (assentamento de até
-      20s + medição), então N=20 trials pode levar bem mais tempo total
-      que os experimentos anteriores.
+### 1ª execução (29/09/2026) — achado real, corrigido antes de fechar
+
+12 trials completaram normalmente, mas o trial 13 (normal, não mascarado)
+nunca ficou sonolento dentro dos 20s de timeout e abortou o experimento
+inteiro (perdendo os 12 já feitos — `finishAbort` descartava resultado
+parcial). Causa real: `controlLoop.setJohnstonLesioned(lesioned)` era
+setado ANTES do assentamento, não só na medição — som/mob hostil real por
+perto durante a espera só derrubava o contador de calma nos trials NÃO
+mascarados (o real chegava ao circuito); os lesionados ficavam "imunes" à
+MESMA perturbação (mascarada) e assentavam rápido — daí quase todo trial
+`true` assentar em 0 ticks e o `false` (13) nunca conseguir. **Corrigido:**
+o assentamento agora é SEMPRE mascarado (`johnstonLesioned=true`
+independente da condição real do trial), e só quando a medição começa a
+condição real passa a valer — os dois grupos entram sonolentos em
+condições simétricas. Timeout de assentamento agora ENCERRA salvando os
+trials já concluídos (`finish`), não descarta (`finishAbort` reservado pra
+abelha sumir de verdade).
+
+- [x] Fix aplicado, compilado, jar reimplantado, servidor reiniciado com
+      desligamento gracioso. 46/46 testes Python inalterados.
+- [ ] **Execução em jogo com o fix** — ainda não repetido; cada trial
+      demora mais que os outros (assentamento de até 20s + medição), então
+      N=20 trials pode levar bem mais tempo total que os experimentos
+      anteriores.
 
 ---
 
