@@ -101,6 +101,18 @@ THERMO_MOTOR_RATE_SCALE = 60.0
 # média=0,976 (p05=0,954) — gap de ~0,67 entre o pior caso de cada lado.
 OLFACTORY_MOTOR_RATE_SCALE = 60.0
 
+# F18 — escala PRÓPRIA do canal `aggression` (grupo excitatório de 25
+# descendentes do `aggression`, semente pC1a-e — literatura de agressão
+# feminina, Schretter et al. 2020/Deutsch et al. 2020). Checado ANTES de
+# fixar limiar (lição F9/F10/F12/F17): baseline 18,6 Hz (p95=24,0),
+# estimulado 128,2 Hz. Escala 60: baseline tanh média=0,300 (p95=0,380),
+# estimulado média=0,972 (p05=0,968) — gap de ~0,59. Grupo inibitório
+# previsto ficou VAZIO (0 descendentes) — 1 salto a partir de um "hub" já
+# integrado como pC1 não alcança caminho inibitório nenhum; canal usa só
+# a taxa excitatória (mesmo mecanismo de sempre, `inh_rate` cai pra 0,0
+# sozinho com grupo vazio, sem precisar de caso especial).
+AGGRESSION_MOTOR_RATE_SCALE = 60.0
+
 # ------------------------------------------------------------ modelo (RN-07)
 DT_MS = 1.0                # passo de integração
 V_REST = 0.0               # potencial de repouso (normalizado)
@@ -209,6 +221,13 @@ SENSOR_SLEEP_AMPLITUDE = 2.0
 # telemetria, mesmo estágio inicial que taste/thermo/johnston tiveram).
 # MESMO valor usado em `tools/olfactory_calibration_check.py`.
 SENSOR_OLFACTORY_AMPLITUDE = 2.0
+
+# F18 — amplitude de estímulo nos 10 neurônios pC1a-e (bilaterais) do
+# subcircuito `aggression` quando o sensor do jogo indica contexto de
+# corte/agressão (a definir — sem sensor no plugin ainda, mesmo estágio
+# inicial que `olfactory` começou). MESMO valor usado em
+# `tools/aggression_calibration_check.py`.
+SENSOR_AGGRESSION_AMPLITUDE = 2.0
 
 # ------------------------------------------------------------------ RN-08
 # Escala usada para normalizar taxa de disparo (Hz) em (-1, 1) via tanh.

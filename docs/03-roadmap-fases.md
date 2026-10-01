@@ -2430,6 +2430,56 @@ real.
 
 ---
 
+## F18 — Circuito de corte/agressividade (checklist, 30/09/2026) ✅ integrado, telemetria — confirmado em Docker real
+
+**Decisão do usuário:** entre "memória: integração de trajetórias" (sem
+semente pequena óbvia) e "corte/agressividade", seguir por este — a
+semente de feromônio do F17 (DA1/Or67d) já é literalmente o gatilho de
+agressão mais documentado da literatura.
+
+**Achado real, medido antes de assumir:** a literatura (Schretter et al.
+2020, eLife; Deutsch et al. 2020) identifica `pC1d` (dsx+) e `aIPg`
+(fru+) como núcleo do circuito de agressão feminina. `aIPg` não existe
+com esse nome nos dados do FlyWire (nomenclatura só do hemibrain, ainda
+sem correspondência mapeada); os 10 `pC1` (pC1a-e, bilaterais) batem
+exato com a literatura. **Testado e confirmado que NÃO é extensão do
+olfativo:** os 74 descendentes alcançados pela semente de feromônio
+(F17) em 2 saltos têm ZERO overlap com os 10 `pC1` — `pC1` integra
+múltiplas modalidades (pedido do usuário "não presumir, medir") e
+funciona como hub de comando, não como alvo direto da via olfativa.
+Semente própria.
+
+**Alcance de salto — o mais raso de todos os circuitos até agora:** 1
+salto já dá 384 nós e 25 descendentes (`pC1` já é nó de integração
+relativamente próximo da saída motora). Custo isolado: 0,096ms/tick, um
+dos mais baratos.
+
+**RN-09 (`tools/aggression_calibration_check.py`, 20 trials pareados):**
+exc +137,20 (p<1e-5). Grupo inibitório previsto ficou VAZIO (achado real:
+1 salto a partir de um hub já integrado não alcança caminho inibitório
+nenhum) — canal usa só a taxa excitatória. Escala própria
+`AGGRESSION_MOTOR_RATE_SCALE=60`: baseline tanh média=0,300 (p95=0,380),
+estimulado média=0,972 (p05=0,968).
+
+- [x] `tools/build_f18_circuit.py` — extração, 384 nós, 10 sementes
+      (`pC1a-e`, `sensory_cell_types` por não serem `super_class==
+      "sensory"`, mesmo mecanismo do `escape`/AD-20), 25 descendentes.
+- [x] `aggression_motor.py` (`AggressionMotorDecoder`, canal
+      `aggression`).
+- [x] `server.py` — nono circuito opcional (`aggression_connectome`),
+      campo `aggression_contact` reservado (sempre `false` — mesmo
+      motivo do `pheromone_contact`: sem equivalente óbvio no Minecraft).
+- [x] Validado em Docker real: `docker top` confirma 9 processos worker;
+      troca TCP manual com `aggression_contact=true` retornou
+      `aggression=0.971`, `active_dn=21/25` — bate com a calibração.
+- [x] 50/50 testes Python passando (2 novos), `ruff check` limpo.
+
+**Pendente:** mesma decisão do F17 — o que dispara `aggression_contact`
+no jogo (duas abelhas por perto? disputa por comida/território?).
+Telemetria pura até essa decisão.
+
+---
+
 ## Fora de escopo (candidatos a v2+)
 
 | Item | Fase provável |

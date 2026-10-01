@@ -255,6 +255,20 @@ plugin ainda** — sempre `false` até a decisão de mapeamento (ligada a
 corte/agressividade). Resposta ganha `olfactory_motor` (canal `pheromone`,
 `OLFACTORY_MOTOR_RATE_SCALE=60`) e `olfactory_active_dn`. Telemetria pura.
 
+**`aggression_contact` (F18/AD-27, 30/09/2026) — nono `Engine`, subcircuito
+`aggression` (corte/agressividade).** Semente = 10 neurônios `pC1a-e`
+(bilaterais) — literatura de agressão feminina (Schretter et al. 2020;
+Deutsch et al. 2020). `super_class=="central"`, não `"sensory"` — mesmo
+mecanismo `sensory_cell_types` do `escape`/AD-20. Confirmado por medição
+que NÃO é extensão do `olfactory`: zero overlap entre os descendentes de
+feromônio (F17) e os `pC1`. 1 salto já basta — 384 nós, 25 descendentes, o
+circuito mais raso de todos (custo isolado 0,096ms/tick). Campo
+`aggression_contact` reservado, mesma situação do `pheromone_contact`
+(sem sensor real, sempre `false`). Resposta ganha `aggression_motor`
+(canal `aggression`, `AGGRESSION_MOTOR_RATE_SCALE=60`, só taxa
+excitatória — grupo inibitório previsto vazio) e `aggression_active_dn`.
+Telemetria pura.
+
 ### Protocolo da ponte
 - TCP em `localhost:8765`, JSON-lines (`\n`), UTF-8.
 - Sem handshake, sem estado de sessão. Reconexão é reinício.

@@ -1110,6 +1110,15 @@ protocolo (sempre `false`) pra não precisar mudar `server.py` de novo
 quando essa decisão vier — provavelmente junto com corte/agressividade,
 outro item do checklist original. Ver `docs/03-roadmap-fases.md` F17.
 
+## Circuito de corte/agressividade (F18, 30/09/2026) — telemetria, sem sensor no plugin ainda
+
+Nono `Engine` do simulador (`aggression_connectome`, semente = 10
+neurônios `pC1a-e`), canal `aggression` na resposta
+(`aggression_motor`). Mesma situação do F17: sem sensor real no plugin,
+campo `aggression_contact` reservado (sempre `false`). O que dispara
+isso no jogo — duas abelhas por perto? disputa por território/comida? —
+ainda não foi decidido. Ver `docs/03-roadmap-fases.md` F18.
+
 ## Regra
 
 O plugin **nunca** altera a simulação. Se o comportamento não emerge, o problema

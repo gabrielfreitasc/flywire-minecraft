@@ -12,6 +12,7 @@ Protocolo: JSON-lines sobre TCP em BRIDGE_PORT. Ver docs/02-arquitetura.md.
                     "food_contact":false,                                # F10, taste (25/09/2026)
                     "thermo_heat":false, "thermo_cold":false,            # F12, thermo (26/09/2026)
                     "pheromone_contact":false,               # F17, olfactory (30/09/2026, sem sensor real ainda)
+                    "aggression_contact":false,              # F18, aggression (30/09/2026, sem sensor real ainda)
                     "mute": ["DNp", "sensory"],               # opcional
                     "stimulate": {"group": "DNg", "amplitude": 3.0}}  # opcional
   sim -> plugin : {"t_ms":.., "motor": {<canal>: valor, ...}, "active_dn":..,
@@ -21,7 +22,8 @@ Protocolo: JSON-lines sobre TCP em BRIDGE_PORT. Ver docs/02-arquitetura.md.
                     "escape_motor": {<canal>: valor, ...}, "escape_active_dn":..,  # se escape_connectome foi passado
                     "taste_motor": {<canal>: valor, ...}, "taste_active_dn":..,  # se taste_connectome foi passado
                     "thermo_motor": {<canal>: valor, ...}, "thermo_active_dn":..,  # se thermo_connectome foi passado
-                    "olfactory_motor": {<canal>: valor, ...}, "olfactory_active_dn":..}  # se olfactory_connectome foi passado
+                    "olfactory_motor": {<canal>: valor, ...}, "olfactory_active_dn":..,  # se olfactory_connectome foi passado
+                    "aggression_motor": {<canal>: valor, ...}, "aggression_active_dn":..}  # se aggression_connectome foi passado
 
 F7/AD-17 — segundo e terceiro `Engine` opcionais pros subcircuitos `bristle`
 (toque) e `hygro` (chuva), independentes do ocelar e entre si (AD-17:
@@ -52,23 +54,26 @@ com `SENSOR_TASTE_AMPLITUDE`; `thermo_heat`/`thermo_cold` (`ThermalSensor.java`
 TRNs de aquecimento e os de frio do `thermo` com `SENSOR_THERMO_AMPLITUDE`
 (cada flag só a sua semente, por `cell_sub_class`); `pheromone_contact`
 (F17, 30/09/2026 — sem sensor real no plugin ainda, sempre `false`) estimula
-a semente do `olfactory` com `SENSOR_OLFACTORY_AMPLITUDE`. Ausência de
-estímulo = só a dinâmica basal (RN-09) roda. Campos `bristle_*`/`hygro_*`/
-`johnston_*`/`escape_*`/`taste_*`/`thermo_*`/`olfactory_*` na resposta só
-aparecem se `SimulationServer` foi construído com o `Connectome`
-correspondente (default `None` nos sete — sem isso, comportamento idêntico
-a antes desta mudança, compatível com `main()` chamado só com o ocelar e
-com os testes existentes).
+a semente do `olfactory` com `SENSOR_OLFACTORY_AMPLITUDE`; `aggression_contact`
+(F18, 30/09/2026 — idem, sem sensor real, sempre `false`) estimula a semente
+do `aggression` (10 neurônios `pC1a-e`) com `SENSOR_AGGRESSION_AMPLITUDE`.
+Ausência de estímulo = só a dinâmica basal (RN-09) roda. Campos `bristle_*`/
+`hygro_*`/`johnston_*`/`escape_*`/`taste_*`/`thermo_*`/`olfactory_*`/
+`aggression_*` na resposta só aparecem se `SimulationServer` foi construído
+com o `Connectome` correspondente (default `None` nos oito — sem isso,
+comportamento idêntico a antes desta mudança, compatível com `main()`
+chamado só com o ocelar e com os testes existentes).
 
 **Quais canais já viraram comportamento real em `MotorMapping.java` (só
-`johnston`/`olfactory` seguem telemetria pura hoje):** `grooming`
-(`bristle`, F7), `hygrotaxis` (`hygro`, F7), `escape_drive` (`escape`, F9,
-confirmado por lesão F14), `appetite` (`taste`, F10, confirmado por lesão
-F14), `thermal` (`thermo`, F12, confirmado por lesão F14). `startle`
-(`johnston`) só tem efeito INDIRETO (acordar do sono noturno, F13,
-confirmado por lesão F15) — o canal em si nunca controla velocidade
-diretamente. `pheromone` (`olfactory`, F17) é telemetria pura, recém
-criado, sem sensor no plugin ainda.
+`johnston`/`olfactory`/`aggression` seguem telemetria pura hoje):**
+`grooming` (`bristle`, F7), `hygrotaxis` (`hygro`, F7), `escape_drive`
+(`escape`, F9, confirmado por lesão F14), `appetite` (`taste`, F10,
+confirmado por lesão F14), `thermal` (`thermo`, F12, confirmado por lesão
+F14). `startle` (`johnston`) só tem efeito INDIRETO (acordar do sono
+noturno, F13, confirmado por lesão F15) — o canal em si nunca controla
+velocidade diretamente. `pheromone` (`olfactory`, F17) e `aggression`
+(`aggression`, F18) são telemetria pura, recém criados, sem sensor no
+plugin ainda — nenhum dos dois tem equivalente óbvio no Minecraft.
 
 Campo `mute` (F5, ferramenta de lesão por comando): lista de nomes de grupo a
 silenciar (os 8 grupos de `motor.groups` + "sensory" = os 273 fotorreceptores).
@@ -163,6 +168,7 @@ import numpy as np
 
 from . import config as C
 from . import graph
+from .aggression_motor import AggressionMotorDecoder
 from .bristle_motor import BristleMotorDecoder
 from .engine import Engine
 from .escape_motor import EscapeMotorDecoder
@@ -175,7 +181,7 @@ from .taste_motor import TasteMotorDecoder
 from .thermo_motor import ThermoMotorDecoder
 
 # F16 — índices no `multiprocessing.Array` de estímulo compartilhado. Um
-# array só, 9 posições, em vez de um por circuito — todos os sensores crus
+# array só, 10 posições, em vez de um por circuito — todos os sensores crus
 # já eram computados juntos em `on_sensor` antes desta mudança, então
 # continuam sendo escritos juntos aqui (mesma seção crítica de sempre, só
 # que agora em memória compartilhada entre processos em vez de atributos de
@@ -195,8 +201,12 @@ _STIM_THERMO_COLD = 7
 # não tem. `pheromone_contact` chega sempre `false` até essa decisão ser
 # tomada (provavelmente junto com corte/agressividade, ver checklist do
 # usuário) — até lá, `olfactory` roda só no regime basal (RN-09).
+# F18 — mesmo motivo do F17: `pC1a-e` não tem equivalente óbvio de sensor
+# no Minecraft (corte/agressividade entre abelhas — precisaria decidir o
+# que conta como "contexto agressivo" no jogo). Reservado, sempre `false`.
 _STIM_PHEROMONE = 8
-_STIM_SIZE = 9
+_STIM_AGGRESSION = 9
+_STIM_SIZE = 10
 
 # F16 — cada circuito tem sua própria "receita" de estímulo (quais nids,
 # que amplitude) — funções puras de nível de módulo (picklable, não
@@ -245,6 +255,10 @@ def _stim_olfactory(vals: Any, cc: Connectome, _heat: np.ndarray, _cold: np.ndar
     return np.asarray(cc.sensory), (C.SENSOR_OLFACTORY_AMPLITUDE if vals[_STIM_PHEROMONE] else 0.0)
 
 
+def _stim_aggression(vals: Any, cc: Connectome, _heat: np.ndarray, _cold: np.ndarray) -> tuple[np.ndarray, float]:
+    return np.asarray(cc.sensory), (C.SENSOR_AGGRESSION_AMPLITUDE if vals[_STIM_AGGRESSION] else 0.0)
+
+
 # nome -> (DecoderFactory, StimulusFn) dos sete circuitos opcionais. "main"
 # (ocelar) é tratado à parte em SimulationServer.__init__ porque é o único
 # obrigatório e o único que aceita mute/stimulate.
@@ -256,6 +270,7 @@ _OPTIONAL_CIRCUITS: dict[str, tuple[type, StimulusFn]] = {
     "taste": (TasteMotorDecoder, _stim_taste),
     "thermo": (ThermoMotorDecoder, _stim_thermo),
     "olfactory": (OlfactoryMotorDecoder, _stim_olfactory),
+    "aggression": (AggressionMotorDecoder, _stim_aggression),
 }
 
 
@@ -407,7 +422,8 @@ class SimulationServer:
     `escape_connectome` (fuga por looming, AD-20). F10 acrescenta
     `taste_connectome` (paladar apetitivo). F12 acrescenta
     `thermo_connectome` (calor/frio). F17 acrescenta `olfactory_connectome`
-    (feromônio). `None` (default, nos sete) preserva o comportamento de
+    (feromônio). F18 acrescenta `aggression_connectome` (corte/
+    agressividade). `None` (default, nos oito) preserva o comportamento de
     antes desta mudança — nenhum teste existente ou chamada antiga precisa
     mudar.
     """
@@ -422,6 +438,7 @@ class SimulationServer:
         taste_connectome: Connectome | None = None,
         thermo_connectome: Connectome | None = None,
         olfactory_connectome: Connectome | None = None,
+        aggression_connectome: Connectome | None = None,
         host: str = C.BRIDGE_HOST,
         port: int = C.BRIDGE_PORT,
     ) -> None:
@@ -433,6 +450,7 @@ class SimulationServer:
         self.taste_connectome = taste_connectome
         self.thermo_connectome = thermo_connectome
         self.olfactory_connectome = olfactory_connectome
+        self.aggression_connectome = aggression_connectome
 
         # F12 — mesma metadata de sempre (7 TRNs de aquecimento, 9 de frio),
         # computada aqui só pra introspecção/testes (ex.: `srv.
@@ -472,6 +490,7 @@ class SimulationServer:
         self._thermo_heat = False  # F12 — thermo_heat, estímulo dos TRNs de aquecimento
         self._thermo_cold = False  # F12 — thermo_cold, estímulo dos TRNs de frio
         self._pheromone = False  # F17 — pheromone_contact, sem sensor real no plugin ainda
+        self._aggression = False  # F18 — aggression_contact, sem sensor real no plugin ainda
         self._latest: dict[str, Any] = {"t_ms": 0, "motor": {}, "active_dn": 0}
         self._latest_by_circuit: dict[str, dict[str, Any]] = {}
 
@@ -491,7 +510,7 @@ class SimulationServer:
             "bristle": bristle_connectome, "hygro": hygro_connectome,
             "johnston": johnston_connectome, "escape": escape_connectome,
             "taste": taste_connectome, "thermo": thermo_connectome,
-            "olfactory": olfactory_connectome,
+            "olfactory": olfactory_connectome, "aggression": aggression_connectome,
         }
         for name, (decoder_cls, stim_fn) in _OPTIONAL_CIRCUITS.items():
             cc = circuit_connectomes[name]
@@ -580,6 +599,8 @@ class SimulationServer:
         # ainda não decidido). Campo já aceito, pra não precisar mudar o
         # protocolo de novo quando essa decisão vier.
         pheromone = bool(sensor.get("pheromone_contact", False))
+        # F18 — mesmo motivo do F17 acima, sem sensor real ainda.
+        aggression = bool(sensor.get("aggression_contact", False))
         mute = sensor.get("mute")
         stimulate = sensor.get("stimulate")
 
@@ -596,6 +617,7 @@ class SimulationServer:
             self._stim_array[_STIM_THERMO_HEAT] = 1.0 if thermo_heat else 0.0
             self._stim_array[_STIM_THERMO_COLD] = 1.0 if thermo_cold else 0.0
             self._stim_array[_STIM_PHEROMONE] = 1.0 if pheromone else 0.0
+            self._stim_array[_STIM_AGGRESSION] = 1.0 if aggression else 0.0
 
         with self._lock:
             self._touch = touch
@@ -606,6 +628,7 @@ class SimulationServer:
             self._thermo_heat = thermo_heat
             self._thermo_cold = thermo_cold
             self._pheromone = pheromone
+            self._aggression = aggression
 
         # F5 — só manda pra fila de controle (worker principal) quando o
         # campo está PRESENTE — mesma semântica "ausente = sem mudança" de
@@ -732,8 +755,18 @@ def main() -> None:
             "(python tools/build_f17_circuit.py pra gerar)",
             flush=True,
         )
+    aggression_cc: Connectome | None = None
+    try:
+        aggression_cc = graph.load(C.PROCESSED / "aggression")
+        print("aggression: subcircuito de corte/agressividade carregado (F18)", flush=True)
+    except FileNotFoundError:
+        print(
+            "aggression: data/processed/aggression/ não encontrado — rodando sem ele "
+            "(python tools/build_f18_circuit.py pra gerar)",
+            flush=True,
+        )
     with SimulationServer(
-        cc, bristle_cc, hygro_cc, johnston_cc, escape_cc, taste_cc, thermo_cc, olfactory_cc
+        cc, bristle_cc, hygro_cc, johnston_cc, escape_cc, taste_cc, thermo_cc, olfactory_cc, aggression_cc
     ) as srv:
         print(f"flywire-sim escutando em {C.BRIDGE_HOST}:{srv.port}", flush=True)
         try:
