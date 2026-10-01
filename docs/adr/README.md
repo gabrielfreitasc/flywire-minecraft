@@ -32,6 +32,7 @@ Decisões com consequência arquitetural. Uma ADR nunca é editada depois de ace
 | AD-25 | `server.py` vira multiprocessing (F16) — um processo por circuito em vez de um laço único numa thread (RN-06 preservada: acoplamento assíncrono, só a implementação interna muda). Medido antes de decidir: laço único usava 99,6% do orçamento de 1ms/tick; multiprocessing sem controlar threads de BLAS deu só 0,666ms/tick; travando `OPENBLAS_NUM_THREADS=1`/`OMP_NUM_THREADS=1`/`MKL_NUM_THREADS=1` (ANTES de qualquer import que traga numpy/scipy) deu 0,407ms/tick, 59,3% livre. Coordenação só por `multiprocessing.Array` compartilhado (estímulo) + fila `maxsize=1` por circuito (saída) — sem mudar o protocolo TCP/JSON | 2026-09-30 | Aceita |
 | AD-26 | Circuito `olfactory` (F17, feromônio): `ingest.expand(exclude=...)`/`ingest.build(exclude_cell_classes=...)` — segunda barreira de BFS, mesmo mecanismo de `descending` (RN-04), por outro motivo: excluir uma via funcional inteira (`Kenyon_Cell`, corpo cogumelo/memória) confirmada por medição (não presumida) como irrelevante pros descendentes alcançados — corta 1.806 nós sem perder nenhum dos 74 descendentes. Semente = 429 ORNs de feromônio (`cell_sub_class=="pheromone"`); escala própria `OLFACTORY_MOTOR_RATE_SCALE=60` | 2026-09-30 | Aceita |
 | AD-27 | Circuito `aggression` (F18, corte/agressividade): semente = 10 neurônios `pC1a-e` (literatura: Schretter et al. 2020, Deutsch et al. 2020), fora de `super_class=="sensory"` — mesmo mecanismo `sensory_cell_types` do `escape`/AD-20. Confirmado por medição que NÃO é extensão do `olfactory` (zero overlap entre os descendentes de feromônio e os `pC1`, semente própria). 1 salto já basta (384 nós, 25 descendentes) — o mais raso de todos os circuitos; escala própria `AGGRESSION_MOTOR_RATE_SCALE=60`, grupo inibitório previsto vazio (achado real) | 2026-09-30 | Aceita |
+| AD-28 | Circuito `path_integration` (F19, integração de trajetórias): semente = 422 neurônios `PFNp/m/a/d` (literatura: Westeinde et al. 2024; Lu & Behbahani et al. 2022 — "P-FN integra direção+velocidade ao longo do tempo", definição literal de path integration), fora de `super_class=="sensory"`. Achado real: sinal líquido (exc−inh) é NEGATIVO sob estímulo, ao contrário de todos os canais anteriores — `tanh` absorve isso sem problema, só documentado. Escala própria `PATH_INTEGRATION_MOTOR_RATE_SCALE=60`. Diferente de `olfactory`/`aggression`, o estímulo real não seria um evento de mundo e sim self-motion da própria abelha (`ControlLoop.heading`) | 2026-10-01 | Aceita |
 
 AD-01 a AD-05 estão detalhadas em [`../01-camada-de-dados.md`](../01-camada-de-dados.md).
 AD-07 a AD-10 e AD-17 estão detalhadas em [`../02-arquitetura.md`](../02-arquitetura.md).
@@ -45,7 +46,8 @@ docstrings de `sim/tools/build_f13_circuit.py` e `plugin/.../SleepState.java`.
 AD-25 está detalhada em F16 e no topo de `sim/src/flywire_sim/server.py`.
 AD-26 está detalhada em F17 e nas docstrings de `sim/tools/build_f17_circuit.py`
 e `sim/src/flywire_sim/ingest.py::expand`. AD-27 está detalhada em F18 e na
-docstring de `sim/tools/build_f18_circuit.py`.
+docstring de `sim/tools/build_f18_circuit.py`. AD-28 está detalhada em F19 e
+na docstring de `sim/tools/build_f19_circuit.py`.
 
 ## Formato para novas ADRs
 

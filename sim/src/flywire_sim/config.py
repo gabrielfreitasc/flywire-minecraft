@@ -113,6 +113,18 @@ OLFACTORY_MOTOR_RATE_SCALE = 60.0
 # sozinho com grupo vazio, sem precisar de caso especial).
 AGGRESSION_MOTOR_RATE_SCALE = 60.0
 
+# F19 — escala PRÓPRIA do canal `path_integration` (grupos de 34
+# excitatórios/15 inibitórios dos 49 descendentes do `path_integration`,
+# semente PFN — literatura: Lu/Behbahani et al. 2022, Westeinde et al.
+# 2024, "P-FN neurons integrate heading e velocidade ao longo do tempo").
+# Checado ANTES de fixar limiar (lição F9/F10/F12/F17/F18): baseline
+# (exc-inh) média=-1,7 Hz (p5=-15,3, p95=11,0), estimulado média=-39,6 Hz
+# (p05=-57,0) — sinal líquido NEGATIVO sob estímulo (inibitório domina
+# mais que excitatório, diferente dos outros canais, tanh lida bem com
+# isso). Escala 60: baseline tanh média=-0,027 (pior caso p5≈-0,25),
+# estimulado média=-0,567 (p05=-0,740) — gap de ~0,3-0,5.
+PATH_INTEGRATION_MOTOR_RATE_SCALE = 60.0
+
 # ------------------------------------------------------------ modelo (RN-07)
 DT_MS = 1.0                # passo de integração
 V_REST = 0.0               # potencial de repouso (normalizado)
@@ -228,6 +240,15 @@ SENSOR_OLFACTORY_AMPLITUDE = 2.0
 # inicial que `olfactory` começou). MESMO valor usado em
 # `tools/aggression_calibration_check.py`.
 SENSOR_AGGRESSION_AMPLITUDE = 2.0
+
+# F19 — amplitude de estímulo nos 422 neurônios PFN (p/m/a/d) do
+# subcircuito `path_integration` quando o sensor do jogo indica mudança de
+# direção/self-motion (a definir — diferente de olfactory/aggression, o
+# estímulo real aqui não seria um evento externo, e sim derivado do
+# próprio movimento comandado da abelha, ver F19 em
+# docs/03-roadmap-fases.md; sem isso no plugin ainda). MESMO valor usado
+# em `tools/path_integration_calibration_check.py`.
+SENSOR_PATH_INTEGRATION_AMPLITUDE = 2.0
 
 # ------------------------------------------------------------------ RN-08
 # Escala usada para normalizar taxa de disparo (Hz) em (-1, 1) via tanh.

@@ -457,6 +457,47 @@ def test_bridge_with_aggression_exposes_aggression_channel():
             sock.close()
 
 
+def test_bridge_without_path_integration_omits_path_integration_fields():
+    """F19 — sem path_integration_connectome (default None), resposta idêntica a antes."""
+    cc = graph.load()
+    with SimulationServer(cc, host="127.0.0.1", port=0) as srv:
+        time.sleep(0.1)
+        sock = socket.create_connection(("127.0.0.1", srv.port), timeout=5.0)
+        sock_file = sock.makefile("rwb")
+        try:
+            sensor = {"t_ms": 0, "light": 0.5, "dorsal_light": 0.0, "damage": False}
+            sock_file.write((json.dumps(sensor) + "\n").encode("utf-8"))
+            sock_file.flush()
+            payload = json.loads(sock_file.readline().decode("utf-8"))
+            assert "path_integration_motor" not in payload
+            assert "path_integration_active_dn" not in payload
+        finally:
+            sock.close()
+
+
+def test_bridge_with_path_integration_exposes_path_integration_channel():
+    """F19 — com path_integration_connectome, a resposta ganha
+    'path_integration_motor' (canal 'path_integration', telemetria — sem
+    sensor real no plugin ainda) e 'path_integration_active_dn'.
+    'path_integration_contact' dispara a semente (422 neurônios PFN
+    p/m/a/d) via SENSOR_PATH_INTEGRATION_AMPLITUDE."""
+    cc = graph.load()
+    path_integration_cc = graph.load(C.PROCESSED / "path_integration")
+    with SimulationServer(
+        cc, path_integration_connectome=path_integration_cc, host="127.0.0.1", port=0
+    ) as srv:
+        sock = socket.create_connection(("127.0.0.1", srv.port), timeout=5.0)
+        sock_file = sock.makefile("rwb")
+        try:
+            sensor = {"light": 0.0, "dorsal_light": 0.0, "damage": False, "path_integration_contact": True}
+            payload = _wait_until(sock_file, sensor, lambda p: "path_integration_motor" in p)
+            assert "path_integration" in payload["path_integration_motor"]
+            assert all(-1.0 < v < 1.0 for v in payload["path_integration_motor"].values())
+            assert isinstance(payload["path_integration_active_dn"], int)
+        finally:
+            sock.close()
+
+
 def test_bridge_survives_client_disconnect():
     """Se o plugin cair, o simulador continua rodando (não deve travar/crashar)."""
     cc = graph.load()

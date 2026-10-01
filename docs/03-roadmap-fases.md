@@ -2480,6 +2480,80 @@ Telemetria pura até essa decisão.
 
 ---
 
+## F19 — Circuito de integração de trajetórias (checklist, 01/10/2026) ✅ integrado, telemetria — confirmado em Docker real
+
+**"Ponto cego" descartado pelo usuário** (nunca teve definição clara desde
+que surgiu no checklist). Entre os dois itens restantes, "memória:
+integração de trajetórias" tinha literatura MUITO mais forte do que o
+esperado — não foi descartado.
+
+**Literatura confirma o checklist tem base real.** O complexo central
+(CX) de *Drosophila* tem circuito de navegação bem caracterizado:
+Westeinde et al. 2024 ("Transforming a head direction signal into a
+goal-oriented steering command"), Lu & Behbahani et al. 2022
+("Transforming representations of movement from body- to world-centric
+space"), Lyu et al. eLife 66039 (conectoma do CX). Cadeia: `EPG`
+(bússola/direção atual) → **`PFN` (integra direção + velocidade ao longo
+do tempo — definição LITERAL de path integration, citação direta: "P-FN
+neurons integrate heading and speed signals over time to calculate
+direction and distance")** → `hDelta` → `PFL3` (projeta DIRETO pra
+descendentes, `DNa02` citado especificamente). Todos os tipos celulares
+existem no FlyWire com contagens plausíveis (EPG=47, PFN=422 somando 4
+subtipos, hDelta~200, PFL3=24).
+
+**Semente: 422 neurônios `PFNp`/`PFNm`/`PFNa`/`PFNd`** — o estágio que a
+literatura identifica como a integração em si (não `EPG`, só bússola sem
+memória temporal; não `PFL3`, já é comando de saída). `super_class==
+"central"` — mesmo mecanismo `sensory_cell_types` do `escape`/
+`aggression` (AD-20/AD-27).
+
+**Alcance de salto:** 1 salto só alcança 1 descendente. 2 saltos dão
+2.572 nós, 49 descendentes (34 excitatórios + 15 inibitórios) — nenhum
+`Kenyon_Cell` arrastado (via de navegação não passa pelo corpo cogumelo).
+Custo isolado: 0,26ms/tick.
+
+**Achado real na calibração:** o sinal líquido (exc−inh) sob estímulo é
+**NEGATIVO** (média=-39,6 Hz) — o caminho inibitório domina mais que o
+excitatório, ao contrário de TODOS os canais anteriores (que saturam
+positivo). `tanh` lida bem com isso, só documentado pra não confundir
+"canal perto de -1" com "sem efeito". Escala própria
+`PATH_INTEGRATION_MOTOR_RATE_SCALE=60`: baseline tanh média=-0,027 (pior
+caso p5=-0,249), estimulado média=-0,567 (p05=-0,740).
+
+**Achado conceitual importante, diferente de F17/F18:** o estímulo real
+de `PFN` em *Drosophila* não é um evento de mundo (feromônio, contexto
+social) — é **self-motion**, o próprio movimento da abelha. Quando um
+sensor for decidido, o candidato natural não é um sensor de ambiente
+novo, e sim `ControlLoop.heading` (mudança de direção já comandada a cada
+tick) — diferente de todos os 9 circuitos anteriores. Telemetria pura por
+enquanto, mesma decisão de adiar que F17/F18.
+
+- [x] `tools/build_f19_circuit.py` — extração, 2.572 nós, 422 sementes,
+      49 descendentes.
+- [x] `path_integration_motor.py` (`PathIntegrationMotorDecoder`, canal
+      `path_integration`).
+- [x] `server.py` — décimo circuito opcional (`path_integration_connectome`),
+      campo `path_integration_contact` reservado (sempre `false`).
+- [x] **Orçamento verificado com os 10 circuitos juntos: 56,0% livre**
+      (medição inicial deu 17,3% por erro de metodologia — rodei o
+      benchmark local ENQUANTO o container Docker também estava de pé,
+      os mesmos 10 processos competindo pelos 4 núcleos físicos duas
+      vezes ao mesmo tempo; corrigido parando o Docker antes de medir).
+      Praticamente igual aos 58,0% de depois do F17 — `aggression`
+      (384 nós) e `path_integration` (2.572 nós) juntos custaram só ~2
+      pontos percentuais.
+- [x] Validado em Docker real: `docker top` confirma 10 processos
+      worker; troca TCP manual com `path_integration_contact=true`
+      retornou `path_integration=-0.443` (negativo, como esperado),
+      `active_dn=25/49`.
+- [x] 52/52 testes Python passando (2 novos), `ruff check` limpo.
+
+**Pendente:** decidir se/como alimentar `path_integration` a partir do
+movimento real da abelha (não um evento de contato/proximidade como os
+outros) — questão de design nova, não urgente.
+
+---
+
 ## Fora de escopo (candidatos a v2+)
 
 | Item | Fase provável |

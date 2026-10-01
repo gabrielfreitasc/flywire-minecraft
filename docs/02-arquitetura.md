@@ -269,6 +269,25 @@ circuito mais raso de todos (custo isolado 0,096ms/tick). Campo
 excitatória — grupo inibitório previsto vazio) e `aggression_active_dn`.
 Telemetria pura.
 
+**`path_integration_contact` (F19/AD-28, 01/10/2026) — décimo `Engine`,
+subcircuito `path_integration` (integração de trajetórias).** Semente =
+422 neurônios `PFNp`/`PFNm`/`PFNa`/`PFNd` — literatura do complexo
+central (Westeinde et al. 2024; Lu & Behbahani et al. 2022): `PFN`
+integra direção (de `EPG`) + velocidade ao longo do tempo, definição
+literal de path integration; projeta via `hDelta` pra `PFL3`, que vai
+DIRETO pra descendentes (`DNa02` citado na literatura). `super_class==
+"central"` — mesmo mecanismo `sensory_cell_types` do `escape`/
+`aggression`. 2 saltos: 2.572 nós, 49 descendentes. **Achado real: o
+sinal líquido fica NEGATIVO sob estímulo**, ao contrário de todos os
+canais anteriores (`tanh` absorve isso normalmente). Campo
+`path_integration_contact` reservado, mas **diferente de
+`pheromone_contact`/`aggression_contact`**: o estímulo real não seria
+um evento de mundo, e sim self-motion da própria abelha — candidato
+natural é `ControlLoop.heading` (mudança de direção já comandada), não
+um sensor de ambiente novo. Resposta ganha `path_integration_motor`
+(canal `path_integration`, `PATH_INTEGRATION_MOTOR_RATE_SCALE=60`) e
+`path_integration_active_dn`. Telemetria pura.
+
 ### Protocolo da ponte
 - TCP em `localhost:8765`, JSON-lines (`\n`), UTF-8.
 - Sem handshake, sem estado de sessão. Reconexão é reinício.

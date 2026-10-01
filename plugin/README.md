@@ -1119,6 +1119,19 @@ campo `aggression_contact` reservado (sempre `false`). O que dispara
 isso no jogo — duas abelhas por perto? disputa por território/comida? —
 ainda não foi decidido. Ver `docs/03-roadmap-fases.md` F18.
 
+## Circuito de integração de trajetórias (F19, 01/10/2026) — telemetria, sem sensor no plugin ainda
+
+Décimo `Engine` do simulador (`path_integration_connectome`, semente =
+422 neurônios `PFNp/m/a/d`), canal `path_integration` na resposta
+(`path_integration_motor`) — valor NEGATIVO sob estímulo (achado real,
+documentado em `path_integration_motor.py`, não é bug). **Diferente do
+F17/F18:** aqui o estímulo real não seria um evento de mundo novo — o
+candidato natural é `ControlLoop.heading` (mudança de direção já
+comandada a cada tick), já que em *Drosophila* de verdade esse circuito
+reage a self-motion, não a um sensor de ambiente. Campo
+`path_integration_contact` reservado (sempre `false`) até essa decisão.
+Ver `docs/03-roadmap-fases.md` F19.
+
 ## Regra
 
 O plugin **nunca** altera a simulação. Se o comportamento não emerge, o problema
