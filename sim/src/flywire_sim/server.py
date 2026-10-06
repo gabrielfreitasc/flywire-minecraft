@@ -308,16 +308,33 @@ def _engine_worker(
     output_queue: mp.Queue,
     stop_event: Any,
     control_queue: mp.Queue | None,
+    record: bool = False,
+    record_db_path: Any = None,
 ) -> None:
     """F16 — laço de um circuito, rodando em PROCESSO próprio a dt=1ms real.
 
     `control_queue` não-`None` só pro worker do `main` (mute/stimulate, F5)
-    — os outros seis sempre recebem `None`. Ver docstring do módulo pro
+    — os outros nove sempre recebem `None`. Ver docstring do módulo pro
     desenho geral (array de estímulo compartilhado + fila de saída
     `maxsize=1`).
+
+    `record` (F20, 06/10/2026) — só tem efeito se `name == "main"`: liga um
+    `telemetry.Recorder` LOCAL a este processo (cada `Recorder` abre sua
+    própria conexão DuckDB — não dá pra compartilhar entre processos, e
+    `telemetry.top_cell_types` só sabe mapear `nid`→`cell_type` do ocelar,
+    ver docstring do módulo `telemetry.py` e F20 em
+    `docs/03-roadmap-fases.md`). Os outros nove circuitos ainda não gravam
+    — precisariam de uma coluna `circuit` no esquema antes de poder
+    compartilhar o mesmo arquivo sem colidir espaço de `nid`.
     """
     engine = Engine(connectome)
     decoder = decoder_cls(connectome)
+
+    recorder = None
+    if record and name == "main":
+        from . import telemetry
+
+        recorder = telemetry.Recorder() if record_db_path is None else telemetry.Recorder(db_path=record_db_path)
 
     # F5 — só o worker principal resolve nome de grupo -> nids (precisa do
     # MotorDecoder.groups DESTE engine específico, RN-08). Construído aqui
@@ -383,11 +400,18 @@ def _engine_worker(
         engine.stimulate(nids, amplitude)
         frame = engine.step()
         decoder.push(frame.t_ms, frame.spikes)
+        if recorder is not None:
+            if amplitude:
+                recorder.log_stimulus(frame.t_ms, nids, amplitude)
+            recorder.log_spikes(frame.t_ms, frame.spikes)
 
         if frame.t_ms % window_steps == 0:
+            channels = decoder.decode()
+            if recorder is not None:
+                recorder.log_motor_frame(frame.t_ms, channels)
             payload = {
                 "t_ms": frame.t_ms,
-                "channels": decoder.decode(),
+                "channels": channels,
                 "active_dn": decoder.active_output_count(),
             }
             # maxsize=1 — sempre substitui o antigo, nunca acumula (RN-06:
@@ -407,6 +431,9 @@ def _engine_worker(
             time.sleep(sleep_for)
         else:
             next_tick = time.monotonic()  # atrasado — não acumula dívida
+
+    if recorder is not None:
+        recorder.close()  # flush final + fecha a conexão DuckDB, nunca deixa aberta
 
 
 class _Handler(socketserver.StreamRequestHandler):
@@ -468,6 +495,8 @@ class SimulationServer:
         path_integration_connectome: Connectome | None = None,
         host: str = C.BRIDGE_HOST,
         port: int = C.BRIDGE_PORT,
+        record_telemetry: bool = False,
+        telemetry_db_path: Any = None,
     ) -> None:
         self.connectome = connectome
         self.bristle_connectome = bristle_connectome
@@ -531,7 +560,8 @@ class SimulationServer:
         self._processes.append(self._mp_ctx.Process(
             target=_engine_worker,
             args=("main", connectome, MotorDecoder, _stim_main, self._stim_array,
-                  main_output_queue, self._stop_event, self._control_queue),
+                  main_output_queue, self._stop_event, self._control_queue, record_telemetry,
+                  telemetry_db_path),
             daemon=True, name="flywire-engine-main",
         ))
 
@@ -809,9 +839,16 @@ def main() -> None:
             "(python tools/build_f19_circuit.py pra gerar)",
             flush=True,
         )
+    # F20 (06/10/2026) — opt-in explícito via variável de ambiente (operador
+    # liga pra uma sessão de calibração, não fica sempre gravando em jogo
+    # normal — arquivo DuckDB cresceria sem limite). Só o `main` (ocelar)
+    # grava por enquanto, ver docstring de `_engine_worker`.
+    record_telemetry = os.environ.get("FLYWIRE_RECORD_TELEMETRY", "").lower() in ("1", "true", "yes")
+    if record_telemetry:
+        print(f"telemetria: gravando o ocelar em {C.DUCKDB_FILE} (FLYWIRE_RECORD_TELEMETRY=1)", flush=True)
     with SimulationServer(
         cc, bristle_cc, hygro_cc, johnston_cc, escape_cc, taste_cc, thermo_cc, olfactory_cc, aggression_cc,
-        path_integration_cc
+        path_integration_cc, record_telemetry=record_telemetry
     ) as srv:
         print(f"flywire-sim escutando em {C.BRIDGE_HOST}:{srv.port}", flush=True)
         try:

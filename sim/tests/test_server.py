@@ -498,6 +498,37 @@ def test_bridge_with_path_integration_exposes_path_integration_channel():
             sock.close()
 
 
+def test_bridge_record_telemetry_writes_duckdb(tmp_path):
+    """F20 (06/10/2026) — `record_telemetry=True` grava spikes/stimuli/
+    motor_frames do ocelar num DuckDB real (só o `main`, ver docstring de
+    `_engine_worker` — os outros nove circuitos ainda não gravam, nid
+    colidiria sem uma coluna `circuit` no esquema)."""
+    import duckdb
+
+    cc = graph.load()
+    db_path = tmp_path / "test_record.duckdb"
+    with SimulationServer(
+        cc, host="127.0.0.1", port=0, record_telemetry=True, telemetry_db_path=db_path
+    ) as srv:
+        sock = socket.create_connection(("127.0.0.1", srv.port), timeout=5.0)
+        sock_file = sock.makefile("rwb")
+        try:
+            sensor = {"light": 1.0, "dorsal_light": 0.0, "damage": False}
+            _wait_until(sock_file, sensor, lambda p: "phototaxis" in p.get("motor", {}))
+        finally:
+            sock.close()
+        time.sleep(0.3)  # dá tempo do worker gravar mais alguns frames antes do stop()
+
+    assert db_path.exists()
+    con = duckdb.connect(str(db_path))
+    try:
+        assert con.execute("SELECT count(*) FROM runs").fetchone()[0] >= 1
+        assert con.execute("SELECT count(*) FROM spikes").fetchone()[0] > 0
+        assert con.execute("SELECT count(*) FROM motor_frames").fetchone()[0] > 0
+    finally:
+        con.close()
+
+
 def test_bridge_survives_client_disconnect():
     """Se o plugin cair, o simulador continua rodando (não deve travar/crashar)."""
     cc = graph.load()

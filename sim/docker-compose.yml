@@ -11,4 +11,9 @@ services:
       - ../data:/data
     environment:
       FLYWIRE_DATA_DIR: /data
+      # F20 (06/10/2026) — opt-in de telemetria (DuckDB, só o ocelar, ver
+      # docs/03-roadmap-fases.md): "" por padrão = desligado. Setar no
+      # ambiente do HOST antes de `docker compose up` pra ligar numa
+      # sessão de calibração; não precisa editar este arquivo.
+      FLYWIRE_RECORD_TELEMETRY: ${FLYWIRE_RECORD_TELEMETRY:-}
     restart: unless-stopped

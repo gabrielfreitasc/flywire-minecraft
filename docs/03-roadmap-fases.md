@@ -2554,6 +2554,53 @@ outros) — questão de design nova, não urgente.
 
 ---
 
+## F20 — Telemetria ligada no ocelar (06/10/2026) ✅ gravação real, opt-in
+
+**Levantamento de pendências (01/10/2026):** `telemetry.py` (DuckDB) existia
+testado desde a F2, mas nunca foi chamado por `server.py` — nenhuma sessão
+real de jogo gravava spikes/estímulo/motor pra análise posterior, só o
+demo isolado (`tools/run_demo.py`). Decisão do usuário: manter (útil pra
+calibrar circuitos e refinar a estrutura do conectoma) e ligar de verdade,
+não deixar morto.
+
+**Dois obstáculos reais, resolvidos escopando pro `main` só:**
+1. `telemetry.top_cell_types` faz `JOIN` com `data/processed/nodes.parquet`
+   — o `nid` do ocelar. Os outros 9 circuitos (F7-F19) têm espaço de `nid`
+   PRÓPRIO (AD-17, "engines separados") — gravar um `thermo`/`taste`/etc.
+   no mesmo esquema sem diferenciar daria leitura errada (`nid=50` do
+   `thermo` apareceria como se fosse o neurônio 50 do ocelar).
+2. DuckDB não aceita bem múltiplos PROCESSOS escrevendo no mesmo arquivo
+   ao mesmo tempo — e desde o F16 cada circuito é um processo próprio.
+   Ligar os 10 ao mesmo tempo arriscaria conflito de lock.
+
+**Decisão:** gravar só o `main` (ocelar) por enquanto — único processo,
+sem conflito, e é o circuito com `nid`→`cell_type` já mapeado
+corretamente. Estender pros outros 9 fica pra quando/se precisar: exigiria
+uma coluna `circuit` no esquema (`runs`/`spikes`/`stimuli`/`motor_frames`)
+e repensar `top_cell_types` pra fazer `JOIN` com o `nodes.parquet` certo
+por circuito.
+
+- [x] `SimulationServer` ganha `record_telemetry: bool = False` e
+      `telemetry_db_path` (testabilidade — `Recorder` default é
+      `C.DUCKDB_FILE`). `_engine_worker` cria o `Recorder` (conexão DuckDB
+      própria do processo) só se `record=True` e `name=="main"`.
+- [x] **Opt-in explícito**, não sempre-ligado: `main()` lê
+      `FLYWIRE_RECORD_TELEMETRY=1` do ambiente — sessão normal de jogo não
+      grava nada (arquivo cresceria sem limite); liga só quando alguém
+      quiser uma sessão de calibração registrada.
+- [x] `tests/test_server.py::test_bridge_record_telemetry_writes_duckdb` —
+      confirma que `runs`/`spikes`/`motor_frames` recebem linhas reais numa
+      troca de verdade via TCP.
+- [x] 53/53 testes Python passando (1 novo), `ruff check` limpo.
+- [ ] Validação em Docker real pendente — Docker Desktop estava fechado
+      no momento desta mudança; rodar `docker compose up` com
+      `FLYWIRE_RECORD_TELEMETRY=1` no ambiente do container antes de
+      confiar nisso em produção.
+- [ ] Estender pros outros 9 circuitos — não feito, exige coluna
+      `circuit` no esquema (ver acima).
+
+---
+
 ## Fora de escopo (candidatos a v2+)
 
 | Item | Fase provável |
