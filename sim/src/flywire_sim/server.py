@@ -171,7 +171,8 @@ import signal
 import socketserver
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Collection
+from pathlib import Path
 from typing import Any, Self
 
 import numpy as np
@@ -319,23 +320,23 @@ def _engine_worker(
     desenho geral (array de estímulo compartilhado + fila de saída
     `maxsize=1`).
 
-    `record` (F20, 06/10/2026) — só tem efeito se `name == "main"`: liga um
-    `telemetry.Recorder` LOCAL a este processo (cada `Recorder` abre sua
-    própria conexão DuckDB — não dá pra compartilhar entre processos, e
-    `telemetry.top_cell_types` só sabe mapear `nid`→`cell_type` do ocelar,
-    ver docstring do módulo `telemetry.py` e F20 em
-    `docs/03-roadmap-fases.md`). Os outros nove circuitos ainda não gravam
-    — precisariam de uma coluna `circuit` no esquema antes de poder
-    compartilhar o mesmo arquivo sem colidir espaço de `nid`.
+    `record` (F20, 06/10/2026) — liga um `telemetry.Recorder` LOCAL a este
+    processo, gravando em `record_db_path` (cada `Recorder` abre sua
+    própria conexão DuckDB — não dá pra compartilhar entre processos).
+    Desde 13/10/2026 vale pra qualquer circuito, cada um no seu arquivo
+    (`telemetry.db_path_for`) — o coordenador decide quais gravam.
     """
     engine = Engine(connectome)
     decoder = decoder_cls(connectome)
 
     recorder = None
-    if record and name == "main":
+    if record:
         from . import telemetry
 
-        recorder = telemetry.Recorder() if record_db_path is None else telemetry.Recorder(db_path=record_db_path)
+        recorder = telemetry.Recorder(
+            db_path=record_db_path if record_db_path is not None else telemetry.db_path_for(name),
+            processed_dir=telemetry.processed_dir_for(name),
+        )
 
     # F5 — só o worker principal resolve nome de grupo -> nids (precisa do
     # MotorDecoder.groups DESTE engine específico, RN-08). Construído aqui
@@ -445,6 +446,32 @@ def _engine_worker(
             recorder.close()  # flush final + fecha a conexão DuckDB, nunca deixa aberta
 
 
+def parse_record_telemetry(value: str) -> frozenset[str]:
+    """F20 — lê `FLYWIRE_RECORD_TELEMETRY`: vazio = nada; `1`/`true`/`yes` =
+    só o ocelar (`main`, comportamento original); `all` = todos; senão,
+    lista separada por vírgula (`main,taste`). Nome desconhecido é avisado
+    e ignorado — não derruba o simulador por um erro de digitação.
+    Circuito pedido mas sem dados em data/processed/ simplesmente não grava
+    (o processo dele nem sobe)."""
+    known = {"main", *_OPTIONAL_CIRCUITS}
+    v = value.strip().lower()
+    if not v:
+        return frozenset()
+    if v in ("1", "true", "yes"):
+        return frozenset({"main"})
+    if v == "all":
+        return frozenset(known)
+    names = {n.strip() for n in v.split(",") if n.strip()}
+    unknown = names - known
+    if unknown:
+        print(
+            f"telemetria: circuito(s) desconhecido(s) ignorado(s): {', '.join(sorted(unknown))} "
+            f"(válidos: {', '.join(sorted(known))})",
+            flush=True,
+        )
+    return frozenset(names & known)
+
+
 class _Handler(socketserver.StreamRequestHandler):
     def handle(self) -> None:
         bridge: SimulationServer = self.server.bridge  # type: ignore[attr-defined]
@@ -504,7 +531,7 @@ class SimulationServer:
         path_integration_connectome: Connectome | None = None,
         host: str = C.BRIDGE_HOST,
         port: int = C.BRIDGE_PORT,
-        record_telemetry: bool = False,
+        record_telemetry: bool | Collection[str] = False,
         telemetry_db_path: Any = None,
     ) -> None:
         self.connectome = connectome
@@ -564,13 +591,31 @@ class SimulationServer:
         self._processes: list[Any] = []
         self._output_queues: dict[str, mp.Queue] = {}
 
+        # F20 — `record_telemetry`: `True` = só o ocelar (compatível com o
+        # F20 original); coleção = nomes de circuito (`main`, `taste`...).
+        # `telemetry_db_path` é o arquivo do `main`; os outros ficam ao lado
+        # (`telemetry.db_path_for`).
+        if record_telemetry is True:
+            recorded: frozenset[str] = frozenset({"main"})
+        elif not record_telemetry:
+            recorded = frozenset()
+        else:
+            recorded = frozenset(record_telemetry)
+
+        def _db_path(name: str) -> Any:
+            if telemetry_db_path is None:
+                return None  # o worker usa telemetry.db_path_for(name) padrão
+            from .telemetry import db_path_for
+
+            return db_path_for(name, Path(telemetry_db_path))
+
         main_output_queue = self._mp_ctx.Queue(maxsize=1)
         self._output_queues["_main"] = main_output_queue
         self._processes.append(self._mp_ctx.Process(
             target=_engine_worker,
             args=("main", connectome, MotorDecoder, _stim_main, self._stim_array,
-                  main_output_queue, self._stop_event, self._control_queue, record_telemetry,
-                  telemetry_db_path),
+                  main_output_queue, self._stop_event, self._control_queue, "main" in recorded,
+                  _db_path("main")),
             daemon=True, name="flywire-engine-main",
         ))
 
@@ -590,7 +635,7 @@ class SimulationServer:
             self._processes.append(self._mp_ctx.Process(
                 target=_engine_worker,
                 args=(name, cc, decoder_cls, stim_fn, self._stim_array, oq,
-                      self._stop_event, None),
+                      self._stop_event, None, name in recorded, _db_path(name)),
                 daemon=True, name=f"flywire-engine-{name}",
             ))
 
@@ -852,9 +897,12 @@ def main() -> None:
     # liga pra uma sessão de calibração, não fica sempre gravando em jogo
     # normal — arquivo DuckDB cresceria sem limite). Só o `main` (ocelar)
     # grava por enquanto, ver docstring de `_engine_worker`.
-    record_telemetry = os.environ.get("FLYWIRE_RECORD_TELEMETRY", "").lower() in ("1", "true", "yes")
+    record_telemetry = parse_record_telemetry(os.environ.get("FLYWIRE_RECORD_TELEMETRY", ""))
     if record_telemetry:
-        print(f"telemetria: gravando o ocelar em {C.DUCKDB_FILE} (FLYWIRE_RECORD_TELEMETRY=1)", flush=True)
+        from .telemetry import db_path_for
+
+        for name in sorted(record_telemetry):
+            print(f"telemetria: gravando {name} em {db_path_for(name)}", flush=True)
     # F20 (13/10/2026) — `docker stop`/`compose up` recriando o container
     # mandam SIGTERM pro PID 1; o padrão do Python mata na hora, sem sair do
     # `with` — stop() nunca roda e os Recorders nunca fazem o flush final.

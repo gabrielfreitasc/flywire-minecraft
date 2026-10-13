@@ -508,9 +508,9 @@ def test_bridge_with_path_integration_exposes_path_integration_channel():
 
 def test_bridge_record_telemetry_writes_duckdb(tmp_path):
     """F20 (06/10/2026) — `record_telemetry=True` grava spikes/stimuli/
-    motor_frames do ocelar num DuckDB real (só o `main`, ver docstring de
-    `_engine_worker` — os outros nove circuitos ainda não gravam, nid
-    colidiria sem uma coluna `circuit` no esquema)."""
+    motor_frames do ocelar num DuckDB real (só o `main` — compatível com o
+    F20 original; outros circuitos são pedidos por nome, ver o teste
+    seguinte)."""
     import duckdb
 
     cc = graph.load()
@@ -535,6 +535,53 @@ def test_bridge_record_telemetry_writes_duckdb(tmp_path):
         assert con.execute("SELECT count(*) FROM motor_frames").fetchone()[0] > 0
     finally:
         con.close()
+
+
+def test_bridge_record_telemetry_one_file_per_circuit(tmp_path):
+    """F20 (13/10/2026) — com uma coleção de nomes, cada circuito pedido
+    grava no SEU arquivo (`runs.duckdb` pro main, `runs_bristle.duckdb`...);
+    circuito não pedido não cria arquivo."""
+    import duckdb
+
+    cc = graph.load()
+    bristle_cc = graph.load(C.PROCESSED / "bristle")
+    hygro_cc = graph.load(C.PROCESSED / "hygro")
+    db_path = tmp_path / "runs.duckdb"
+    with SimulationServer(
+        cc, bristle_cc, hygro_cc, host="127.0.0.1", port=0,
+        record_telemetry={"main", "bristle"}, telemetry_db_path=db_path,
+    ) as srv:
+        sock = socket.create_connection(("127.0.0.1", srv.port), timeout=5.0)
+        sock_file = sock.makefile("rwb")
+        try:
+            sensor = {"light": 1.0, "dorsal_light": 0.0, "damage": True, "touch_proximity": True}
+            _wait_until(sock_file, sensor, lambda p: "bristle_motor" in p and "phototaxis" in p.get("motor", {}))
+        finally:
+            sock.close()
+        time.sleep(0.3)
+
+    for path in (db_path, tmp_path / "runs_bristle.duckdb"):
+        assert path.exists(), path
+        con = duckdb.connect(str(path))
+        try:
+            assert con.execute("SELECT count(*) FROM runs").fetchone()[0] == 1
+            assert con.execute("SELECT count(*) FROM spikes").fetchone()[0] > 0
+            assert con.execute("SELECT count(*) FROM motor_frames").fetchone()[0] > 0
+        finally:
+            con.close()
+    assert not (tmp_path / "runs_hygro.duckdb").exists()
+
+
+def test_parse_record_telemetry():
+    """F20 — leitura de FLYWIRE_RECORD_TELEMETRY."""
+    from flywire_sim.server import _OPTIONAL_CIRCUITS, parse_record_telemetry
+
+    assert parse_record_telemetry("") == frozenset()
+    assert parse_record_telemetry("1") == frozenset({"main"})
+    assert parse_record_telemetry("TRUE") == frozenset({"main"})
+    assert parse_record_telemetry("all") == frozenset({"main", *_OPTIONAL_CIRCUITS})
+    assert parse_record_telemetry(" main, taste ") == frozenset({"main", "taste"})
+    assert parse_record_telemetry("main,tastee") == frozenset({"main"})  # erro de digitação ignorado
 
 
 def test_bridge_survives_client_disconnect():

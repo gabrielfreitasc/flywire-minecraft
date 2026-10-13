@@ -2707,8 +2707,20 @@ por circuito.
       Docker, CPU ~73%) — baseline sem gravação não medido nas mesmas
       condições. Gravação é opt-in, só pra sessão de calibração; não
       comparar dinâmica gravada com tempo de jogo sem levar isso em conta.
-- [ ] Estender pros outros 9 circuitos — não feito, exige coluna
-      `circuit` no esquema (ver acima).
+- [x] Estendido pros outros 9 circuitos (13/10/2026) — **um arquivo por
+      circuito** (decisão do usuário), não coluna `circuit`: `main` em
+      `runs.duckdb`, os outros em `runs_<circuito>.duckdb`
+      (`telemetry.db_path_for`); `Recorder`/`top_cell_types` ganham
+      `processed_dir` (manifest e `nodes.parquet` do próprio circuito — nid
+      de um não vale no outro). `FLYWIRE_RECORD_TELEMETRY`: `1` = só o
+      ocelar (como antes), `main,taste` = esses, `all` = todos; nome
+      desconhecido é avisado e ignorado. 56/56 testes (2 novos), ruff limpo.
+      Docker real com `all`, 40 s: os 10 arquivos gravados, flush final OK.
+      **Custo:** com os 10 gravando, o simulador fica entre 0,45x e 0,9x
+      do tempo real conforme o circuito (hygro/olfactory/thermo, os que
+      mais disparam, ~22 s simulados em ~45 s; taste/escape ~39 s) — sem
+      estímulo nenhum nessa rodada (abelha tinha morrido de fome, plugin
+      sem sensores). Gravar só os circuitos que interessam à sessão.
 
 ---
 

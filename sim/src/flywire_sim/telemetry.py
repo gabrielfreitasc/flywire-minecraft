@@ -8,6 +8,13 @@ Esquema:
   stimuli(run_id, t_ms, nid, amplitude)        -- só quando o estímulo MUDA
   motor_frames(run_id, t_ms, channel, value)
 
+Um arquivo por circuito (13/10/2026): o ocelar (`main`) grava em
+`runs.duckdb`, cada outro circuito em `runs_<circuito>.duckdb` (ver
+`db_path_for`). Cada circuito tem seu próprio espaço de `nid` (AD-17) e
+roda em processo próprio (F16) — DuckDB não aceita vários processos
+escrevendo no mesmo arquivo, e arquivo separado evita uma coluna `circuit`
+no esquema.
+
 DuckDB lê data/processed/nodes.parquet nativamente, então dá para cruzar
 spikes com cell_type sem ETL — ver `top_cell_types()` abaixo, que é a
 consulta de exemplo exigida pelo critério de saída da F2.
@@ -64,6 +71,19 @@ CREATE TABLE IF NOT EXISTS motor_frames (
 """
 
 
+def db_path_for(circuit: str, base: Path = C.DUCKDB_FILE) -> Path:
+    """Arquivo DuckDB de um circuito: `main` usa `base` como está; os outros,
+    `<base>_<circuito><sufixo>` na mesma pasta (`runs_taste.duckdb`...)."""
+    if circuit == "main":
+        return base
+    return base.with_name(f"{base.stem}_{circuit}{base.suffix}")
+
+
+def processed_dir_for(circuit: str) -> Path:
+    """Pasta do subcircuito em data/processed/ (`main` é a raiz)."""
+    return C.PROCESSED if circuit == "main" else C.PROCESSED / circuit
+
+
 def _as_posix(path: Path) -> str:
     """Caminho seguro para embutir em SQL (read_parquet), inclusive no Windows."""
     return str(path).replace("\\", "/")
@@ -81,6 +101,7 @@ class Recorder:
         db_path: Path = C.DUCKDB_FILE,
         config_json: str = "{}",
         flush_every: int = 50_000,
+        processed_dir: Path = C.PROCESSED,
     ) -> None:
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self.con = duckdb.connect(str(db_path))
@@ -88,7 +109,7 @@ class Recorder:
         self.run_id = str(uuid.uuid4())
         self.flush_every = flush_every
 
-        manifest_path = C.PROCESSED / "manifest.json"
+        manifest_path = processed_dir / "manifest.json"
         manifest_sha = ""
         if manifest_path.exists():
             manifest_sha = json.dumps(json.loads(manifest_path.read_text())["source_checksums"])
@@ -213,8 +234,13 @@ def top_cell_types(
     db_path: Path = C.DUCKDB_FILE,
     limit: int = 20,
     stimulus_nid: int | None = None,
+    processed_dir: Path = C.PROCESSED,
 ) -> pd.DataFrame:
     """Consulta de exemplo da F2: quais tipos celulares mais dispararam num run.
+
+    `processed_dir` tem que ser o do circuito que gravou `db_path` — `nid`
+    de um circuito não vale no `nodes.parquet` de outro (ver
+    `processed_dir_for`).
 
     Com `stimulus_nid`, restringe aos disparos a partir do instante em que
     aquele nid foi estimulado (junta com `stimuli`) — responde "sob estímulo
@@ -231,7 +257,7 @@ def top_cell_types(
     """
     con = duckdb.connect(str(db_path))
     try:
-        nodes_path = _as_posix(C.PROCESSED / "nodes.parquet")
+        nodes_path = _as_posix(processed_dir / "nodes.parquet")
         if stimulus_nid is None:
             query = f"""
                 SELECT n.cell_type, count(*) AS disparos
