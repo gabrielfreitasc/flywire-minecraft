@@ -662,7 +662,10 @@ falhou 3 vezes por diluição (RN-09/F1, F4 primeiro experimento, RN-08/F6).
 
 ### Decisão de arquitetura a registrar via ADR antes de extrair qualquer seed
 
-- [ ] **AD-17** — como múltiplos subcircuitos coexistem no simulador. Hoje
+- [x] **AD-17** — ✅ decidido (19/09/2026): engines separados, um por
+      subcircuito — ver `docs/02-arquitetura.md`, "Múltiplos subcircuitos
+      (AD-17)". Texto original da pendência:
+      como múltiplos subcircuitos coexistem no simulador. Hoje
       `select_seed` (`ingest.py`) e `SEED_PATTERN`/`HOPS`/`SYN_THRESHOLD`
       (`config.py`) assumem **um** subcircuito hardcoded ("ocell"). Opções a
       decidir, não a inventar durante a extração:
@@ -1225,13 +1228,16 @@ falhou 3 vezes por diluição (RN-09/F1, F4 primeiro experimento, RN-08/F6).
       novo não confiável de interpretar). Ver RN-08 em
       `04-regras-de-negocio.md`, `sim/src/flywire_sim/bristle_motor.py`,
       `sim/tests/test_bristle_motor.py` (24/24 testes passam).
-- [ ] **Falta pra fechar a fase real:** sensor de toque no plugin — usuário
+- [x] ✅ fechado (ver cabeçalho do F7: `TouchSensor.java` no plugin,
+      lesão do `bristle` p=0,0025). Texto original:
+      **Falta pra fechar a fase real:** sensor de toque no plugin — usuário
       decidiu (20/09/2026) que "toque" engloba contato com bloco, dano,
       aproximação de mob/jogador/objeto (visão ampla, não só um evento
       Bukkit); precisa desenhar como isso vira sinal no simulador sem virar
       ruído constante — e validação por lesão em servidor real, mesmo padrão
       da F4.
-- [ ] Validação — idem: lesão comparando estímulo de toque real vs.
+- [x] ✅ feita (lesão do `bristle`, p=0,0025 — ver cabeçalho do F7).
+      Texto original: lesão comparando estímulo de toque real vs.
       mascarado, mesmo padrão estatístico (Welch + Mann-Whitney) já usado em
       todos os experimentos desde a F4.
 
@@ -1458,7 +1464,7 @@ permitindo `echo "stop" > server_stdin.fifo` pra desligamento gracioso
 
 ---
 
-## F8 — Multi-sensor v3: órgão de Johnston (vento/som) 🔶 integrado ponta a ponta (sensor+simulador+visualização) — falta validação por lesão
+## F8 — Multi-sensor v3: órgão de Johnston (vento/som) ✅ integrado ponta a ponta, confirmado por lesão no F15
 
 Continuação natural do F7 (chuva, toque), pedido do usuário (23/09/2026)
 depois de compartilhar referências novas (BANC v888, MaleCNS v1.0, e
@@ -1546,14 +1552,16 @@ nunca tocado neste projeto (só o ocelar foi usado até aqui).
       jukebox tocando, `startle` subiu beirando 1 (quase saturado, mesma
       faixa medida isolado contra o Docker). Sensor de som ambiente
       funcionando ponta a ponta.
-- [ ] **Validação por lesão em servidor real** — pendente, mesmo padrão
+- [x] ✅ **Feita no F15** (29/09/2026): `johnstonlesion`, Welch e
+      Mann-Whitney p=0,00030, pelo gatilho existente (despertar do sono).
+      Texto original: **Validação por lesão em servidor real** — pendente, mesmo padrão
       do bristle/hygro (`alarm_hostile_mob` mascarado/real sorteado trial
       a trial). `startle` continua telemetria pura, não entra em
       `MotorMapping.java` ainda.
 
 ---
 
-## F9 — Circuito de fuga por looming (checklist de 7 itens, 24/09/2026) 🔶 comportamento real implantado, falta reteste em jogo + lesão
+## F9 — Circuito de fuga por looming (checklist de 7 itens, 24/09/2026) 🔶 comportamento real; circuito `escape` confirmado por lesão no F14 (via dano) — lesão com looming como estímulo pendente
 
 **Contexto:** usuário pediu prosseguir por um checklist de 7 sistemas
 comportamentais novos (medo/fuga, ponto cego, tato+audição, paladar/fome/olfato,
@@ -1636,7 +1644,11 @@ quando o circuito pede (default `None` preserva os outros 4 circuitos). Ver RN-0
       circuito em `ActivityVisualizer`. `startle` (johnston) aparece como
       informativo só (verbo mais fraco, "percebendo") porque ainda não
       controla movimento de verdade.
-- [ ] **Validação por lesão em servidor real** — pendente, agora que o canal
+- [ ] **Parcial (revisto 13/10/2026):** o circuito `escape` foi confirmado
+      por lesão no F14 (Welch p=0,00011, MW p=0,00049) — mas com DANO
+      como estímulo (`EscapeLesionExperiment`), não looming. Lesão com
+      looming como estímulo continua não feita. Texto original:
+      **Validação por lesão em servidor real** — pendente, agora que o canal
       controla comportamento de verdade. Precisa de um
       `LoomingLesionExperiment.java` (mascarar `looming_threat`, medir se a
       abelha realmente foge menos/menos rápido), mesmo padrão de
@@ -1744,7 +1756,7 @@ quando o circuito pede (default `None` preserva os outros 4 circuitos). Ver RN-0
 
 ---
 
-## F10 — Paladar apetitivo (checklist "Paladar, fome", 25/09/2026) 🔶 sensor+simulador+visualização integrados, telemetria só (decisão do usuário)
+## F10 — Paladar apetitivo (checklist "Paladar, fome", 25/09/2026) ✅ virou comportamento real (pousa na comida), confirmado por lesão no F14
 
 **Contexto:** segundo item do checklist de 7 sistemas comportamentais
 (ver F9). Usuário trouxe achado biológico decisivo: diferente de humanos
@@ -1897,7 +1909,7 @@ protocolo/simulador envolvido) — 44/44 continuam passando.
 
 ---
 
-## F12 — Calor/frio (checklist "Calor, água, atrativo, sono e clima", 26/09/2026) ✅ circuito real integrado e confirmado em servidor real (27/09/2026); falta lesão
+## F12 — Calor/frio (checklist "Calor, água, atrativo, sono e clima", 26/09/2026) ✅ circuito real integrado e confirmado em servidor real (27/09/2026); lesão confirmada no F14
 
 **Circuito real (`thermo`, 7º `Engine`, AD-17).** Semente: 16 neurônios
 receptores de temperatura (TRNs, `cell_class == "thermosensory"`) —
@@ -1940,8 +1952,8 @@ sensoriais NÃO relacionados — daí `ingest.build(sensory_only_seed=True)`
       expõe `thermal`, 7 TRNs heating / 9 cold separados).
 - [x] **Teste em jogo (27/09/2026)** — confirmado pelo usuário em servidor
       real: fuga de calor perigoso e balões de frio/calor funcionando.
-- [ ] **Lesão** (silenciar `thermo`) validando que a fuga de calor é do
-      circuito — como todo circuito anterior, ainda não feita.
+- [x] **Lesão** (silenciar `thermo`) — ✅ feita no F14 (4ª rodada, N=40:
+      Welch p=0,00114, Mann-Whitney p=0,00002).
 
 ---
 
@@ -2756,8 +2768,10 @@ severidade.
       fica em 0,30-0,39 (o piso, não o extremo), então quase nunca
       aparecia. Agora combina com `coldNear` (sim/não) em qualquer
       severidade.
-- [ ] Calibração em jogo da busca por comida com fome (raio até 8,0
-      blocos) ainda pendente — só o frio foi validado nesta rodada.
+- [x] Busca por comida com fome funcionando em jogo (F29 e F30,
+      13/10/2026: com `hunger`≈0,56 o raio estava em 6,2 e ela avistou a
+      melancia 9s depois de começar a buscar). Calibração FINA do teto de
+      8,0 blocos não feita — não há sintoma pedindo.
 
 ---
 
@@ -2839,7 +2853,8 @@ mesma disciplina provisória já aceita em `LoomingSensor`/`AlarmSensor`.
 - [x] Limiar de travamento escalado por ele em vez de fixo.
 - [x] Log de recuperação ganha `limiar efetivo`/`fadiga` pra depurar.
 - [x] `./gradlew build` limpo.
-- [ ] Validação em jogo pendente — repetir o cenário exato (faminta + frio
+- [x] ✅ Validado no F29 (07/10/2026, F24–F28 em conjunto) e de novo no
+      F30 (13/10/2026). Texto original: repetir o cenário exato (faminta + frio
       extremo + comida no chão) e confirmar que ela chega na comida sem
       divergir.
 
@@ -2978,7 +2993,8 @@ max(teto, minWorldY − chão)). Sem comida à vista, sem efeito. Sono
       limiar de chegada 0,3) e ficou 18s sem nenhum empurrão de
       recuperação. Antes travava a 0,85 na lateral.
 - [x] Reproduzido 3/3 só com frio (sem fome): chega e para em cima.
-- [ ] Caso faminta (`hunger=1,0`) + frio testado (07/10/2026) — **ainda
+- [x] ✅ Resolvido no F29 (melancia num buraco; ela chegou e comeu).
+      Registro original: caso faminta (`hunger=1,0`) + frio testado (07/10/2026) — **ainda
       falha**: avistou a 6,60, chegou a 2,55 em ~17s, travou (0,00 bloco),
       3 recuperações em 7s, perdeu a comida de vista. Leitura do log: a
       comida estava ABAIXO dela (`applied.y` −0,11 a −0,16), mas a
