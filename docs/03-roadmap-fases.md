@@ -2478,6 +2478,21 @@ estimulado média=0,972 (p05=0,968).
 no jogo (duas abelhas por perto? disputa por comida/território?).
 Telemetria pura até essa decisão.
 
+**Achado real (07/10/2026) — `data/raw/labels.csv` (Community Labels,
+direto de codex.flywire.ai) revela ambiguidade real de identidade em 2
+dos 10 `pC1`.** `root_id` 720575940618984475 e 720575940619855296 foram
+rotulados **"pC1-projection (not pC1)"** por Dudi Deutsch (provável
+autor do próprio Deutsch et al. 2020), mas depois rotulados "pC1c"/"pC1b"
+(citando o MESMO artigo) por outro anotador (Minsik Yun) — discordância
+real na anotação-base, não um erro nosso. Também achamos uma citação
+nova pra `pC1d` especificamente não documentada antes: Taisz, Galili et
+al. 2022, bioRxiv (doi:10.1101/2022.05.13.491877). `connectivity_tags.csv`
+confirma os 10 como `rich_club` (hub de rede) — suporte estrutural
+independente de que são neurônios de integração, não periféricos.
+**Não corrigido** — registrado como incerteza de dado-base, mesma
+disciplina de não contornar validação (RN-02): se os próprios
+anotadores da literatura discordam, não cabe a nós decidir por eles.
+
 ---
 
 ## F19 — Circuito de integração de trajetórias (checklist, 01/10/2026) ✅ integrado, telemetria — confirmado em Docker real
@@ -2616,6 +2631,6 @@ por circuito.
 
 | # | Item | Impacto |
 |---|---|---|
-| DT-1 | Dados vêm de espelho GitHub, não da fonte primária | Proveniência para publicação |
+| DT-1 | Dados de conectividade/anotação principais vêm de espelho GitHub, não da fonte primária. Progresso parcial (06/10/2026): `data/raw/consolidated_cell_types.csv`, direto de [codex.flywire.ai](https://codex.flywire.ai) (fonte primária), adicionado como referência de nomenclatura (não entra no pipeline de ingestão, não tem validação de totais — ver `data/raw/README.md`). Não resolve DT-1 por completo — conectividade/anotação principal (os dois arquivos que `ingest` valida) continuam do espelho GitHub. | Proveniência para publicação |
 | DT-2 | Regra de sinal herdada de Shiu et al., não validada por nós | Correção científica |
 | DT-3 | Override de histamina é hipótese nossa, não dado | Correção científica |

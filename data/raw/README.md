@@ -27,6 +27,19 @@ se os totais não baterem com o artigo:
 Se falhar, o arquivo está truncado, corrompido ou é de outra materialização — **não é
 para contornar o check**. Baixe de novo.
 
+## Arquivos de referência (não entram na ingestão)
+
+Diferente da tabela acima, estes NÃO são lidos por `flywire_sim.ingest` — não têm
+validação de totais, não alimentam `data/processed/`. Servem só de cross-check manual
+(nomenclatura de tipo celular, proveniência). Depositados aqui pela mesma regra de
+imutabilidade, não por participarem do pipeline.
+
+| Arquivo | Origem | Nota |
+|---|---|---|
+| `consolidated_cell_types.csv` | [codex.flywire.ai](https://codex.flywire.ai) (fonte primária, não espelho GitHub) | `root_id`→`primary_type`/`additional_type(s)`, sem descrição de função. 138.327 linhas, 96,4% de acordo com `cell_type` de `Supplemental_file1_neuron_annotations.tsv` (diferenças são sobretudo formatação — rótulo múltiplo com vírgula vira só o primeiro — ou nome alternativo mais padronizado, ex. `IPC`→`m_NSC_DILP`, consistente com o achado do F11 de que são endócrinos). |
+| `connectivity_tags.csv` | [codex.flywire.ai](https://codex.flywire.ai) (fonte primária) | `root_id`→tags de TOPOLOGIA de rede (`rich_club`, `reciprocal`, `feedforward_loop_participant`, `3_cycle_participant`...) — não é função biológica, é estrutura do grafo. Usado pra confirmar que `pC1`/`DNa02` são hubs (`rich_club`), não periféricos — ver F18/F19 em `docs/03-roadmap-fases.md`. |
+| `labels.csv` | [codex.flywire.ai](https://codex.flywire.ai) (fonte primária — "Community Labels", export bruto) | `root_id`→rótulo de texto livre + autor/data/lab, um por anotação manual feita por pesquisadores durante o proofreading (pode ter várias linhas por neurônio, inclusive conflitantes entre anotadores). 160.045 linhas, 110.038 `root_id` únicos. **Achado real usando este arquivo:** revelou ambiguidade de identidade em 2 dos 10 `pC1` do `aggression` (F18) e recaracterizou os 47 descendentes "incidentais" do `path_integration` (F19) como várias vias descendentes distintas e documentadas (esterçamento, postura de ovos, canto de corte), não ruído sem identidade. |
+
 ## Não versionar
 
 Esta pasta está no `.gitignore`. Os arquivos são grandes e públicos; cada pessoa baixa
