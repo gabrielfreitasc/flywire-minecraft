@@ -41,3 +41,20 @@ o plugin carregou e se conseguiu conectar no simulador
 `sim/`) antes do servidor Minecraft — o plugin tenta conectar no `onEnable` e
 só loga um warning se falhar (não trava o servidor), mas sem o simulador de
 pé ele não vai ter nada pra conversar.
+
+## Rodando em segundo plano (sem console)
+
+Iniciado como processo em segundo plano (ex.: por um agente ou `&` no Git
+Bash), o servidor **não tem console pra digitar `stop`, e o Windows faz o
+processo ignorar Ctrl+C** — o único jeito de parar vira matar o processo,
+sem o salvamento final do mundo. Achado em 13/10/2026. Pra ter um console
+utilizável, alimentar o stdin a partir de um arquivo:
+
+```bash
+: > cmds.txt
+tail -n 0 -f cmds.txt | java -jar paper-1.21.1-133.jar --nogui
+```
+
+Qualquer comando de console vira `echo "<comando>" >> cmds.txt` — em
+especial `echo stop >> cmds.txt`, que desliga salvando todas as dimensões.
+Trocar o `.jar` do plugin só com o servidor parado.

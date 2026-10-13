@@ -309,6 +309,7 @@ public final class ControlLoop {
     private volatile boolean hygroLesioned = false; // F7/AD-17 — ver setHygroLesioned
     private volatile boolean bristleSuppressedForExperiment = false; // F7/AD-17 — ver setBristleSuppressedForExperiment
     private volatile boolean escapeLesioned = false; // F9/F14 — ver setEscapeLesioned
+    private volatile boolean ignoringPlayer = false; // F22 — ver setIgnorePlayer/isIgnoringPlayer
     private volatile boolean tasteLesioned = false; // F10/F14 — ver setTasteLesioned
     private volatile boolean thermoLesioned = false; // F12/F14 — ver setThermoLesioned
     private volatile boolean johnstonLesioned = false; // F8/F14 — ver setJohnstonLesioned
@@ -410,9 +411,25 @@ public final class ControlLoop {
      * excluído.
      */
     public void setIgnorePlayer(boolean ignore) {
+        this.ignoringPlayer = ignore;
         touchSensor.setIgnorePlayer(ignore);
         loomingSensor.setIgnorePlayer(ignore);
         tasteSensor.setIgnorePlayer(ignore);
+    }
+
+    /** Estado atual de {@link #setIgnorePlayer} — experimentos que forçam o modo restauram o anterior no fim. */
+    public boolean isIgnoringPlayer() {
+        return ignoringPlayer;
+    }
+
+    /**
+     * Enche a energia ({@link EnergyTracker}) — mesmo papel do
+     * {@code setHealth(max)} por trial do {@link EscapeLesionExperiment}:
+     * num experimento de minutos, a fome (F11/F21) desaceleraria a abelha
+     * aos poucos, ruído que não tem a ver com o circuito testado.
+     */
+    public void refillEnergyForExperiment() {
+        energyTracker.reset();
     }
 
     /**
@@ -1027,8 +1044,19 @@ public final class ControlLoop {
         // o circuito real está acima do limiar; só deixa a contagem cair
         // quando o circuito real já desativou.
         if (MotorMapping.isEscapeActive(latestEscapeMotor)) {
+            // F9 (13/10/2026, achado no `loominglesion`): sem ameaça no raio
+            // AGORA (saiu dos 12 blocos, ou o mob do experimento sumiu) mas o
+            // circuito ainda ativo, a fuga em curso mantém a última direção
+            // "pra longe" — antes caía em `currentHeading` (a direção do voo
+            // ANTERIOR à fuga) e ela dava meia-volta rumo à ameaça. Heading
+            // só vale se a fuga está começando sem ameaça localizável.
+            boolean fleeingAlready = escapeLatchTicksLeft > 0;
             escapeLatchTicksLeft = ESCAPE_LATCH_TICKS;
-            escapeLatchDirection = nearestThreatFleeDirection != null ? nearestThreatFleeDirection : currentHeading;
+            if (nearestThreatFleeDirection != null) {
+                escapeLatchDirection = nearestThreatFleeDirection;
+            } else if (!fleeingAlready) {
+                escapeLatchDirection = currentHeading;
+            }
         } else if (escapeLatchTicksLeft > 0) {
             escapeLatchTicksLeft--;
         }

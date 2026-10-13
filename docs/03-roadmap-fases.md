@@ -1561,7 +1561,7 @@ nunca tocado neste projeto (só o ocelar foi usado até aqui).
 
 ---
 
-## F9 — Circuito de fuga por looming (checklist de 7 itens, 24/09/2026) 🔶 comportamento real; circuito `escape` confirmado por lesão no F14 (via dano) — lesão com looming como estímulo pendente
+## F9 — Circuito de fuga por looming (checklist de 7 itens, 24/09/2026) ✅ comportamento real; confirmado por lesão com dano (F14) e com LOOMING (13/10/2026)
 
 **Contexto:** usuário pediu prosseguir por um checklist de 7 sistemas
 comportamentais novos (medo/fuga, ponto cego, tato+audição, paladar/fome/olfato,
@@ -1644,10 +1644,46 @@ quando o circuito pede (default `None` preserva os outros 4 circuitos). Ver RN-0
       circuito em `ActivityVisualizer`. `startle` (johnston) aparece como
       informativo só (verbo mais fraco, "percebendo") porque ainda não
       controla movimento de verdade.
-- [ ] **Parcial (revisto 13/10/2026):** o circuito `escape` foi confirmado
-      por lesão no F14 (Welch p=0,00011, MW p=0,00049) — mas com DANO
-      como estímulo (`EscapeLesionExperiment`), não looming. Lesão com
-      looming como estímulo continua não feita. Texto original:
+- [x] **✅ Confirmado por lesão com LOOMING como estímulo (13/10/2026).**
+      O F14 já tinha confirmado o `escape` com DANO como estímulo
+      (Welch p=0,00011, MW p=0,00049); faltava o looming, que dá nome ao
+      circuito. `LoomingLesionExperiment.java` (`/flywirebee loominglesion`):
+      a cada trial um husk real (sem IA, sem gravidade, invulnerável) surge
+      a 10 blocos (+X da abelha) e avança em linha reta a 0,4 bloco/tick
+      até 4 blocos (limiar do sensor 0,25; fora do raio de toque 3) —
+      trajetória e duração fixas, estímulo idêntico nas duas condições.
+      Jogador ignorado durante o experimento, energia cheia a cada trial,
+      aviso se ela estiver sonolenta. Lesão = `setEscapeLesioned`.
+
+      **Rodada final** (20 trials x 10s, `goals off`, dia, origem
+      3039/126/1429): normal=43,36 (desvio 2,72, N=10) > lesionado=28,05
+      (desvio 0,95, N=10) — Welch p<0,00001, Mann-Whitney p=0,00018; os
+      grupos não se sobrepõem (menor normal 39,97 > maior lesionado
+      29,46). Uma recuperação por trial, no MESMO ponto (degrau de grama a
+      ~2 blocos da origem, na direção do voo normal), distribuída igual
+      entre as condições (10 lesionados, 8 normais) — ruído comum aos dois
+      grupos, não confundidor (ver armadilha de recuperação concentrada
+      numa condição, F14).
+
+      **Piloto descartado** (mesma origem, IA nativa LIGADA — `goals off`
+      aplicado antes de `kill`, abelha nova veio com os goals default):
+      normal=57,12 vs lesionado=26,73, p<0,00001. Mesmo sentido, efeito
+      ~2x maior — a IA nativa INFLOU a diferença aqui (no dia/noite do F6
+      ela mascarava): mais uma confirmação de que a direção do viés não é
+      previsível, medir sempre com `goals off`.
+
+      **Bug real achado no piloto, corrigido antes da rodada final:** a
+      fuga dava meia-volta. Enquanto o circuito está acima do limiar, a
+      direção é recapturada a cada tick como "pra longe da ameaça mais
+      próxima"; sem ameaça no raio (o mob some, ou no jogo normal sai dos
+      12 blocos) com o circuito ainda ativo, caía em `currentHeading` — a
+      direção do voo ANTERIOR à fuga — e ela voltava rumo à ameaça.
+      Corrigido em `ControlLoop`: fuga já em curso mantém a última direção
+      de fuga; `currentHeading` só se a fuga começa sem ameaça localizável.
+      Confirmado na rodada final: `vel=(-0,45; 0,2; 0)` (−X, longe do mob)
+      pelos ~2,5s inteiros.
+
+      Texto original:
       **Validação por lesão em servidor real** — pendente, agora que o canal
       controla comportamento de verdade. Precisa de um
       `LoomingLesionExperiment.java` (mascarar `looming_threat`, medir se a

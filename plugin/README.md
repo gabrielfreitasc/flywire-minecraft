@@ -1085,6 +1085,24 @@ Mesmo CSV/`sim/tools/lesion_analysis.py` dos anteriores. Ver
 `EscapeLesionExperiment.java`/`TasteLesionExperiment.java`/
 `ThermoLesionExperiment.java`, `docs/03-roadmap-fases.md` F14.
 
+**Looming como estímulo (F9, 13/10/2026) — ✅ confirmado:** normal=43,36 >
+lesionado=28,05 blocos, Welch p<0,00001, Mann-Whitney p=0,00018 (20 trials,
+`goals off`; detalhes e piloto descartado em `docs/03-roadmap-fases.md` F9). O
+`escapelesion` acima confirma o `escape` com DANO; o looming, que dá nome
+ao circuito, nunca foi testado assim:
+
+- `/flywirebee loominglesion [trials=20] [segundos=10] [x y z]` — mesma
+  lesão (`setEscapeLesioned`). A cada trial um husk real (sem IA, sem
+  gravidade, invulnerável) surge a 10 blocos no lado +X da abelha e
+  avança em linha reta a 0,4 bloco/tick até 4 blocos, e some — o
+  `LoomingSensor` lê como qualquer ameaça. Trajetória e duração fixas
+  (não persegue), então o estímulo é igual nas duas condições. Jogador
+  ignorado durante o experimento (estado anterior restaurado no fim),
+  energia cheia a cada trial. Rodar de DIA (o mob também aciona o alarme
+  do johnston, que acorda do sono) e com o lado -X da origem livre (pra
+  onde ela foge — ver armadilha de obstáculo na direção de fuga, F14).
+  Ver `LoomingLesionExperiment.java`.
+
 ## Lesão do johnston (F15, 29/09/2026) — som/vento ✅ confirmado
 
 `startle` continua telemetria pura — o único efeito real é indireto

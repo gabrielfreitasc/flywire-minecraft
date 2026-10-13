@@ -41,6 +41,11 @@ import java.util.logging.Level;
  *       {@link EscapeLesionExperiment}). Estímulo SCRIPTED (dano real
  *       aplicado pelo próprio experimento) — não precisa de ameaça externa,
  *       mas segundosPorTrial >= 4 (a fuga dura ~2,5s);</li>
+ *   <li>{@code loominglesion [trials] [segundos] [x y z]} — lesão do
+ *       `escape` com LOOMING como estímulo, F9 (ver
+ *       {@link LoomingLesionExperiment}): o experimento faz um mob real
+ *       avançar até a abelha; origem em ar aberto, sem obstáculo do lado
+ *       -X (pra onde ela foge), segundosPorTrial >= 4;</li>
  *   <li>{@code tastelesion [trials] [segundos] [x y z]} — experimento de
  *       lesão do subcircuito `taste` (paladar), F14 (ver
  *       {@link TasteLesionExperiment}). Escolher x/y/z a até 4 blocos de
@@ -180,6 +185,7 @@ public final class FlywireBeePlugin extends JavaPlugin {
             case "touchlesion" -> handleTouchLesion(player, args);
             case "hygrolesion" -> handleHygroLesion(player, args);
             case "escapelesion" -> handleEscapeLesion(player, args);
+            case "loominglesion" -> handleLoomingLesion(player, args);
             case "tastelesion" -> handleTasteLesion(player, args);
             case "thermolesion" -> handleThermoLesion(player, args);
             case "johnstonlesion" -> handleJohnstonLesion(player, args);
@@ -388,6 +394,37 @@ public final class FlywireBeePlugin extends JavaPlugin {
             return;
         }
         new EscapeLesionExperiment(this, controlLoop).run(bee.get(), trials, secondsPerTrial, origin, player);
+    }
+
+    private void handleLoomingLesion(Player player, String[] args) {
+        Optional<Bee> bee = player.getWorld().getEntitiesByClass(Bee.class).stream()
+                .filter(marker::isMarked)
+                .findFirst();
+        if (bee.isEmpty()) {
+            player.sendMessage("Nenhuma abelha do FlyWire encontrada neste mundo. Use /flywirebee give primeiro.");
+            return;
+        }
+        int trials = 20;
+        int secondsPerTrial = 10;
+        Location origin = null;
+        try {
+            if (args.length >= 2) {
+                trials = Integer.parseInt(args[1]);
+            }
+            if (args.length >= 3) {
+                secondsPerTrial = Integer.parseInt(args[2]);
+            }
+            if (args.length == 6) {
+                origin = parseXyz(player, args, 3);
+            } else if (args.length != 3 && args.length != 2 && args.length != 1) {
+                throw new NumberFormatException(String.join(" ", args));
+            }
+        } catch (NumberFormatException e) {
+            player.sendMessage("Uso: /flywirebee loominglesion [trials=20] [segundosPorTrial=10] [x y z]"
+                    + " — segundosPorTrial >= 4, a fuga dura ~2,5s.");
+            return;
+        }
+        new LoomingLesionExperiment(this, controlLoop).run(bee.get(), trials, secondsPerTrial, origin, player);
     }
 
     /**
@@ -778,6 +815,7 @@ public final class FlywireBeePlugin extends JavaPlugin {
                 + "lesion [trials] [segundos] [x y z] | touchlesion [trials] [segundos] [x y z] | "
                 + "hygrolesion [trials] [segundos] [x y z] | "
                 + "escapelesion [trials] [segundos] [x y z] | "
+                + "loominglesion [trials] [segundos] [x y z] | "
                 + "tastelesion [trials] [segundos] [x y z] | "
                 + "thermolesion [trials] [segundos] [x y z] | "
                 + "johnstonlesion [trials] [segundos] [x y z] | "
