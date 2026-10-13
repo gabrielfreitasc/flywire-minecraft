@@ -2567,6 +2567,67 @@ enquanto, mesma decisão de adiar que F17/F18.
 movimento real da abelha (não um evento de contato/proximidade como os
 outros) — questão de design nova, não urgente.
 
+**Correção real (06/10/2026) — o "negativo" era diluição, não ausência de
+sinal.** Investigação pedida pelo usuário antes de usar este circuito pra
+decidir busca/exploração por comida: `DNa02` (o descendente que Westeinde
+et al. 2024 cita como o comando de esterçamento de PFL3→DNa02) já está
+dentro deste subcircuito de 2 saltos — não precisava de mais saltos — e é
+classificado EXCITATÓRIO. Isolado dos outros 47 descendentes (via
+incidental, não documentada na literatura), o par DNa02 dá diff
+média=8,35 disparos, p≈0,00000 em 20 trials pareados — sinal limpo e
+POSITIVO. O agregado de 49 só dava negativo porque os outros 47
+dominavam a soma — mesma armadilha de RN-08/RN-09 ("somar canais de
+fontes diferentes cancela o efeito"), agora confirmada do lado da SAÍDA
+do circuito, não da entrada.
+
+**Mesmo assim, não virou comportamento.** DNa02 na literatura é "esterçar
+rumo a uma direção JÁ CALCULADA" (vetor de retorno pra um lugar
+conhecido) — problema diferente de "estou perdida, explorar em busca de
+algo novo" (o que o usuário queria pra "desceu, não achou comida,
+procura em outro lugar"). Decisão do usuário (via `AskUserQuestion`,
+entre 3 opções): registrar o achado como telemetria adicional
+(`path_integration_dna02_hz`, taxa crua sem tanh — baseline espontâneo
+já é ~53Hz, perto do teto de qualquer tanh direto sem design de
+centralização de baseline, que nenhum canal deste projeto tem ainda),
+sem decidir comportamento a partir dele. A busca ativa por comida foi
+implementada separadamente como proxy de engenharia, sem usar este
+circuito — ver F25.
+
+- [x] `path_integration_motor.py` ganha campo `path_integration_dna02_hz`
+      (taxa crua, telemetria, sem consumidor ainda).
+- [x] `tests/test_server.py` atualizado (53/53 passando), `ruff check` limpo.
+
+**Segunda correção real (07/10/2026) — os outros 47 descendentes NÃO são
+"via incidental não documentada" como escrito acima; `data/raw/labels.csv`
+(Community Labels, codex.flywire.ai) mostra que quase todos TÊM
+identidade documentada, só que são VÁRIAS vias descendentes distintas,
+não uma só.** Cruzando os 47 `root_id` contra os rótulos:
+
+| Categoria | Qtd | Sinal |
+|---|---|---|
+| Família `DNa` (esterçamento, mesma família de `DNa02`) | ~13 | majoritariamente excitatório |
+| "DN similar a aSP3" (canto de corte, courtship song) | 8 | excitatório (100%) |
+| `oviDN` (postura de ovos — `putative fru`+`oviDNa`/`oviDN`) | 3 | **inibitório (100%)** |
+| Família `DNb` | 7 | majoritariamente excitatório |
+| Família `DNd` | 3 | majoritariamente inibitório |
+| Família `DNg` | 6 | excitatório (100%) |
+| Sem categoria clara no rótulo | 16 (9 exc/7 inh) | misto |
+
+Os rótulos vêm do projeto de rastreamento sistemático do conectivo do
+pescoço (Cambridge Connectomics Group, anotadora principal Katharina
+Eichler — "Part of comprehensive neck connective tracing"). **Revisão da
+conclusão do F19 original:** o sinal "negativo" não era diluição por
+ruído incidental — era a MISTURA de pelo menos 3 comportamentos
+documentados e distintos (esterçamento via família DNa, postura de ovos
+via `oviDN`, canto de corte via DN-tipo-aSP3) que compartilham `PFN`
+como entrada a 2 saltos, cada um com seu próprio sinal. `oviDN` ser
+100% inibitório explica uma fração real do "inibitório domina" — eram
+3 das 15 saídas inibitórias vindo de um comportamento completamente
+diferente (postura de ovos), não esterçamento nenhum. Reforça, não
+muda, a decisão de isolar `DNa02` em vez do agregado de 49 (ver acima)
+— e sugere que, se algum dia uma `oviDN` ou `aSP3`-like virar canal
+próprio, seria outro circuito/comportamento, não uma variante deste.
+
 ---
 
 ## F20 — Telemetria ligada no ocelar (06/10/2026) ✅ gravação real, opt-in

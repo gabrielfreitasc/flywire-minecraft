@@ -27,6 +27,33 @@ responde, não que o COMPORTAMENTO responde. Telemetria pura, não entra em
 `MotorMapping.java` ainda (sem sensor no plugin — diferente de
 `olfactory`/`aggression`, aqui o estímulo real seria derivado do próprio
 movimento da abelha, não de um evento de ambiente).
+
+**Correção real (06/10/2026, investigação pedida pelo usuário) — o
+"negativo" era diluição, mesma armadilha de RN-08/RN-09 ("somar canais de
+fontes diferentes cancela o efeito"), só que do lado da SAÍDA em vez da
+entrada.** `DNa02` — o descendente que Westeinde et al. 2024 cita
+explicitamente como o comando de esterçamento do circuito PFN→PFL3→DNa02
+— já está dentro deste subcircuito de 2 saltos (não precisava de mais
+saltos) e é classificado EXCITATÓRIO pela topologia de sinal. Isolado dos
+outros 47 descendentes (heterogêneos, não documentados na literatura —
+ver docstring da classe), o par DNa02 (2 neurônios, esquerda/direita) dá
+diff média=8,35 disparos, p≈0,00000 em 20 trials pareados — sinal limpo e
+positivo, consistente com a literatura. O agregado de 49 só ficava
+negativo porque os outros 47 descendentes (via incidental, não a via de
+Westeinde) dominavam a soma.
+
+**Ainda NÃO vira comportamento.** DNa02 na literatura é "esterçar rumo a
+uma direção JÁ CALCULADA" (vetor de retorno pra um lugar conhecido) — um
+problema diferente de "estou perdida, explorar em busca de algo novo".
+Usar este sinal pra decidir busca/exploração seria esticar o papel da
+literatura sem validação (RN-09) — decisão do usuário (06/10/2026, via
+`AskUserQuestion`): registrar o achado como telemetria adicional
+(`path_integration_dna02_hz`, taxa crua, sem normalização tanh — baseline
+espontâneo já é alto, ~53Hz, perto do teto de qualquer `tanh` direto sem
+um design de centralização que ainda não existe neste projeto), sem
+decidir comportamento nenhum a partir dele ainda. Uso futuro mais
+plausível: "voltar pra onde a comida já foi encontrada" (home vector),
+não busca exploratória.
 """
 from __future__ import annotations
 
@@ -53,6 +80,12 @@ class PathIntegrationMotorDecoder:
         self._excitatory, self._inhibitory = topology.group_outputs_by_predicted_sign(
             connectome, C.PROCESSED / "path_integration"
         )
+        # F19 (correção 06/10/2026) — DNa02 isolado, ver docstring do
+        # módulo. `.to_numpy()` porque `connectome.nodes` é indexado por
+        # nid (mesmo padrão de `_rate_hz`, que espera um array de nids).
+        self._dna02 = connectome.nodes.index[
+            connectome.nodes.cell_type == "DNa02"
+        ].to_numpy()
         self._history: deque[tuple[int, NDArray[np.bool_]]] = deque()
 
     def push(self, t_ms: int, spikes: NDArray[np.bool_]) -> None:
@@ -75,7 +108,14 @@ class PathIntegrationMotorDecoder:
         return {
             "path_integration": float(
                 np.tanh((exc_rate - inh_rate) / C.PATH_INTEGRATION_MOTOR_RATE_SCALE)
-            )
+            ),
+            # F19 (correção 06/10/2026) — taxa CRUA de DNa02, sem tanh/
+            # normalização: baseline espontâneo já é ~53Hz (ver docstring
+            # do módulo), perto do teto de qualquer tanh direto sem um
+            # design de centralização de baseline que este projeto ainda
+            # não tem em nenhum canal. Telemetria pura, nenhum consumidor
+            # ainda (RN-08 — não decide comportamento sem validação).
+            "path_integration_dna02_hz": self._rate_hz(self._dna02),
         }
 
     def active_output_count(self) -> int:

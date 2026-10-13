@@ -480,7 +480,12 @@ def test_bridge_with_path_integration_exposes_path_integration_channel():
     'path_integration_motor' (canal 'path_integration', telemetria — sem
     sensor real no plugin ainda) e 'path_integration_active_dn'.
     'path_integration_contact' dispara a semente (422 neurônios PFN
-    p/m/a/d) via SENSOR_PATH_INTEGRATION_AMPLITUDE."""
+    p/m/a/d) via SENSOR_PATH_INTEGRATION_AMPLITUDE.
+
+    F19 (correção 06/10/2026) — 'path_integration_dna02_hz' é taxa CRUA
+    de DNa02 (sem tanh, ver docstring de path_integration_motor.py),
+    fora do limite [-1,1] dos canais normalizados de propósito — checado
+    separado, só tipo e não-negatividade (é uma taxa, nunca < 0)."""
     cc = graph.load()
     path_integration_cc = graph.load(C.PROCESSED / "path_integration")
     with SimulationServer(
@@ -491,8 +496,11 @@ def test_bridge_with_path_integration_exposes_path_integration_channel():
         try:
             sensor = {"light": 0.0, "dorsal_light": 0.0, "damage": False, "path_integration_contact": True}
             payload = _wait_until(sock_file, sensor, lambda p: "path_integration_motor" in p)
-            assert "path_integration" in payload["path_integration_motor"]
-            assert all(-1.0 < v < 1.0 for v in payload["path_integration_motor"].values())
+            motor = payload["path_integration_motor"]
+            assert "path_integration" in motor
+            assert -1.0 < motor["path_integration"] < 1.0
+            assert isinstance(motor["path_integration_dna02_hz"], float)
+            assert motor["path_integration_dna02_hz"] >= 0.0
             assert isinstance(payload["path_integration_active_dn"], int)
         finally:
             sock.close()
