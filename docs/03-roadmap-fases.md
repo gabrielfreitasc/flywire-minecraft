@@ -26,8 +26,9 @@ O simulador roda headless, sem Minecraft, e produz disparos plausíveis.
 - [x] `graph.py` — L1→L2, CSR + vetor de sinal + **override de histamina (RN-02)**
 - [x] `neuron.py` — LIF com parâmetros de Shiu et al. (RN-07)
 - [x] `engine.py` — laço de integração, dt=1 ms, + corrente tônica/ruído (RN-09)
-- [ ] `telemetry.py` — gravação em DuckDB (⚠️ docstring do arquivo diz "Fase 2";
-      roadmap original listava em F1 — reconciliado, tratando como F2)
+- [x] `telemetry.py` — gravação em DuckDB (⚠️ docstring do arquivo diz "Fase 2";
+      roadmap original listava em F1 — reconciliado, tratando como F2;
+      ligada de verdade no F20)
 - [x] Testes RN-01/02/03/04/05/07 (`test_business_rules.py`, 7/7 passam)
 
 **Critério de saída:** estimular os 273 fotorreceptores produz efeito **estatisticamente
@@ -2668,10 +2669,32 @@ por circuito.
       confirma que `runs`/`spikes`/`motor_frames` recebem linhas reais numa
       troca de verdade via TCP.
 - [x] 53/53 testes Python passando (1 novo), `ruff check` limpo.
-- [ ] Validação em Docker real pendente — Docker Desktop estava fechado
-      no momento desta mudança; rodar `docker compose up` com
-      `FLYWIRE_RECORD_TELEMETRY=1` no ambiente do container antes de
-      confiar nisso em produção.
+- [x] Validação em Docker real (13/10/2026), com jogo rodando — achou 3
+      problemas reais, corrigidos:
+      1. **Flush final nunca rodava.** `docker stop`/`compose up` mandam
+         SIGTERM pro PID 1; o padrão do Python mata na hora, sem sair do
+         `with` — `stop()` e `recorder.close()` não rodavam. Sessão real
+         gravou ~900 mil spikes e **zero** `motor_frames` (o buffer de
+         motor nunca chega a 50 mil linhas numa sessão curta). Correção:
+         SIGTERM tratado como Ctrl+C em `main()`, `recorder.close()` num
+         `finally` no worker, workers ignoram SIGINT (quem para é o
+         coordenador). O teste unitário não pegava porque chama `stop()`.
+      2. **Gravar deixava o simulador mais lento que o tempo real.**
+         `log_stimulus` fazia uma tupla Python por nid por tick (273 nids
+         no ocelar): 1,47 ms/passo só nisso, contra dt=1 ms — 12,8 s
+         simulados em ~56 s de relógio. Correção: buffer colunar (igual
+         `spikes`) e `run_id` como parâmetro SQL no flush em vez de coluna
+         de string repetida (flush de 50k linhas: 129 → 51 ms).
+      3. **`stimuli` gravava o mesmo estímulo todo tick** (~200 mil
+         linhas/s). Agora só grava quando muda (nids ou amplitude);
+         `top_cell_types(stimulus_nid=...)` (usa `min(t_ms)`) não muda.
+      Depois das três: 40 s gravando → 1,42M spikes, 19.227
+      `motor_frames`, 2.730 `stimuli` (10 mudanças), flush final OK.
+      **Ainda ~1,5x mais lento que o tempo real** (33,2 s simulados em
+      ~50 s) com a máquina carregada (cliente + servidor Minecraft +
+      Docker, CPU ~73%) — baseline sem gravação não medido nas mesmas
+      condições. Gravação é opt-in, só pra sessão de calibração; não
+      comparar dinâmica gravada com tempo de jogo sem levar isso em conta.
 - [ ] Estender pros outros 9 circuitos — não feito, exige coluna
       `circuit` no esquema (ver acima).
 

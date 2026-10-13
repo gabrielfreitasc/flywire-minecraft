@@ -5,7 +5,7 @@ Esquema:
 
   runs(run_id, started_at, manifest_sha, config_json)
   spikes(run_id, t_ms, nid)                    -- append-only, em lote
-  stimuli(run_id, t_ms, nid, amplitude)
+  stimuli(run_id, t_ms, nid, amplitude)        -- só quando o estímulo MUDA
   motor_frames(run_id, t_ms, channel, value)
 
 DuckDB lê data/processed/nodes.parquet nativamente, então dá para cruzar
@@ -104,7 +104,13 @@ class Recorder:
         # magnitude mais lento que inserção colunar em lote.
         self._spike_chunks: list[tuple[int, NDArray[np.int64]]] = []
         self._spike_buffered = 0
-        self._stim_buf: list[tuple[str, int, int, float]] = []
+        # Estímulo no mesmo formato colunar dos disparos (13/10/2026): uma
+        # tupla Python por nid custava 1,47 ms/passo com o ocelar (273 nids
+        # estimulados a cada tick) — mais que o dt de 1 ms, o simulador
+        # gravando rodava ~2,5x mais lento que o tempo real.
+        self._stim_chunks: list[tuple[int, NDArray[np.integer], float]] = []
+        self._stim_buffered = 0
+        self._last_stim: tuple[NDArray[np.integer], float] | None = None
         self._motor_buf: list[tuple[str, int, str, float]] = []
 
     def log_spikes(self, t_ms: int, spikes: NDArray[np.bool_]) -> None:
@@ -117,9 +123,22 @@ class Recorder:
             self._flush_spikes()
 
     def log_stimulus(self, t_ms: int, nids: NDArray[np.integer], amplitude: float) -> None:
-        for nid in nids:
-            self._stim_buf.append((self.run_id, t_ms, int(nid), float(amplitude)))
-        if len(self._stim_buf) >= self.flush_every:
+        """Grava o estímulo só quando ele MUDA (nids ou amplitude) — cada
+        linha é "a partir de t_ms, estes nids com esta amplitude". Gravar todo
+        tick dava ~200 mil linhas/s em jogo real (13/10/2026), quase todas
+        repetidas. Chamar também com amplitude 0/sem nids (estímulo
+        desligado): não grava nada, mas faz o próximo "ligado" ser gravado
+        mesmo se igual ao anterior."""
+        if len(nids) == 0 or not amplitude:
+            self._last_stim = None
+            return
+        last = self._last_stim
+        if last is not None and last[1] == amplitude and np.array_equal(last[0], nids):
+            return
+        self._last_stim = (nids, float(amplitude))
+        self._stim_chunks.append((t_ms, nids, float(amplitude)))
+        self._stim_buffered += len(nids)
+        if self._stim_buffered >= self.flush_every:
             self._flush_stimuli()
 
     def log_motor_frame(self, t_ms: int, vec: dict[str, float]) -> None:
@@ -135,22 +154,43 @@ class Recorder:
             [np.full(len(nids), t, dtype=np.int64) for t, nids in self._spike_chunks]
         )
         nid_arr = np.concatenate([nids for _, nids in self._spike_chunks])
-        df = pd.DataFrame({"run_id": self.run_id, "t_ms": t_arr, "nid": nid_arr})
-        self.con.append("spikes", df)
+        self._append_numeric("spikes", pd.DataFrame({"t_ms": t_arr, "nid": nid_arr}))
         self._spike_chunks.clear()
         self._spike_buffered = 0
 
     def _flush_stimuli(self) -> None:
-        if self._stim_buf:
-            df = pd.DataFrame(self._stim_buf, columns=["run_id", "t_ms", "nid", "amplitude"])
-            self.con.append("stimuli", df)
-            self._stim_buf.clear()
+        if not self._stim_chunks:
+            return
+        t_arr = np.concatenate(
+            [np.full(len(nids), t, dtype=np.int64) for t, nids, _ in self._stim_chunks]
+        )
+        nid_arr = np.concatenate([np.asarray(nids, dtype=np.int64) for _, nids, _ in self._stim_chunks])
+        amp_arr = np.concatenate(
+            [np.full(len(nids), a, dtype=np.float64) for _, nids, a in self._stim_chunks]
+        )
+        self._append_numeric("stimuli", pd.DataFrame({"t_ms": t_arr, "nid": nid_arr, "amplitude": amp_arr}))
+        self._stim_chunks.clear()
+        self._stim_buffered = 0
 
     def _flush_motor(self) -> None:
         if self._motor_buf:
             df = pd.DataFrame(self._motor_buf, columns=["run_id", "t_ms", "channel", "value"])
             self.con.append("motor_frames", df)
             self._motor_buf.clear()
+
+    def _append_numeric(self, table: str, df: pd.DataFrame) -> None:
+        """Insere `df` (só colunas numéricas) em `table`, com `run_id` como
+        parâmetro SQL em vez de coluna. Uma coluna de string repetida em
+        50k linhas custava mais que o resto do flush inteiro na conversão
+        pandas → DuckDB (medido 13/10/2026)."""
+        cols = ", ".join(df.columns)
+        self.con.register("_flush_buf", df)
+        try:
+            self.con.execute(
+                f"INSERT INTO {table} (run_id, {cols}) SELECT ?, {cols} FROM _flush_buf", [self.run_id]
+            )
+        finally:
+            self.con.unregister("_flush_buf")
 
     def flush(self) -> None:
         self._flush_spikes()

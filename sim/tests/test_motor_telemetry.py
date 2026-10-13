@@ -7,6 +7,7 @@ agrupamento, normalização, e que o esquema DuckDB grava/lê o que promete.
 """
 from __future__ import annotations
 
+import duckdb
 import numpy as np
 import pytest
 
@@ -149,3 +150,28 @@ def test_telemetry_roundtrip(tmp_path, connectome):
     df = top_cell_types(run_id, db_path=db_path)
     assert len(df) > 0
     assert {"cell_type", "disparos"} <= set(df.columns)
+
+
+def test_telemetry_stimulus_logged_only_on_change(tmp_path, connectome):
+    """Estímulo repetido tick a tick grava UMA vez; mudança de amplitude e
+    religar depois de desligado (mesmo valor) gravam de novo."""
+    db_path = tmp_path / "test_runs.duckdb"
+    nids = np.asarray(connectome.sensory[:5])
+
+    with Recorder(db_path=db_path) as rec:
+        for t in range(10):
+            rec.log_stimulus(t, nids, 2.0)  # 1 evento
+        rec.log_stimulus(10, nids, 3.0)  # mudou amplitude: 1 evento
+        rec.log_stimulus(11, np.array([], dtype=np.int64), 0.0)  # desligou: nada
+        rec.log_stimulus(12, nids, 3.0)  # religou igual: 1 evento
+        run_id = rec.run_id
+
+    con = duckdb.connect(str(db_path))
+    try:
+        rows = con.execute(
+            "SELECT t_ms, count(*), min(amplitude) FROM stimuli WHERE run_id = ? GROUP BY 1 ORDER BY 1",
+            [run_id],
+        ).fetchall()
+    finally:
+        con.close()
+    assert rows == [(0, 5, 2.0), (10, 5, 3.0), (12, 5, 3.0)]

@@ -167,6 +167,7 @@ os.environ.setdefault("MKL_NUM_THREADS", "1")
 import json
 import multiprocessing as mp
 import queue as queue_module
+import signal
 import socketserver
 import threading
 import time
@@ -363,77 +364,85 @@ def _engine_worker(
     window_steps = max(int(C.MOTOR_WINDOW_MS), 1)
     next_tick = time.monotonic()
 
-    while not stop_event.is_set():
-        if control_queue is not None:
-            # F5 — drena tudo que chegou desde o último tick, mas só aplica
-            # o MAIS RECENTE de cada tipo (mesma semântica "só o pendente
-            # mais novo vale" da versão de thread única — não acumula).
-            last_mute: list[str] | None = None
-            last_stimulate: dict[str, Any] | None = None
-            while True:
-                try:
-                    kind, payload = control_queue.get_nowait()
-                except queue_module.Empty:
-                    break
-                if kind == "mute":
-                    last_mute = payload
-                else:
-                    last_stimulate = payload
-            if last_mute is not None:
-                nids: list[int] = []
-                for gname in last_mute:
-                    group = group_lookup.get(gname)  # type: ignore[union-attr]
-                    if group is not None:
-                        nids.extend(int(n) for n in group)
-                engine.set_silenced(np.array(nids, dtype=np.int64))
-            if last_stimulate is not None:
-                gname = last_stimulate.get("group")
-                amplitude = float(last_stimulate.get("amplitude", 0.0))
-                group = group_lookup.get(gname) if gname else None  # type: ignore[union-attr]
-                if group is None:
-                    engine.set_directed_stimulus(np.array([], dtype=np.int64), 0.0)
-                else:
-                    engine.set_directed_stimulus(np.asarray(group, dtype=np.int64), amplitude)
+    # Ctrl+C no terminal manda SIGINT pro grupo inteiro: sem isto o worker
+    # morreria com KeyboardInterrupt no meio do laço, antes do coordenador
+    # sinalizar `stop_event`. Quem decide parar é o coordenador (stop()).
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-        vals = stim_array[:]  # cópia rápida da memória compartilhada, sem segurar lock além disso
-        nids, amplitude = stimulus_fn(vals, connectome, heating_nids, cold_nids)
-        engine.stimulate(nids, amplitude)
-        frame = engine.step()
-        decoder.push(frame.t_ms, frame.spikes)
-        if recorder is not None:
-            if amplitude:
-                recorder.log_stimulus(frame.t_ms, nids, amplitude)
-            recorder.log_spikes(frame.t_ms, frame.spikes)
+    try:
+        while not stop_event.is_set():
+            if control_queue is not None:
+                # F5 — drena tudo que chegou desde o último tick, mas só aplica
+                # o MAIS RECENTE de cada tipo (mesma semântica "só o pendente
+                # mais novo vale" da versão de thread única — não acumula).
+                last_mute: list[str] | None = None
+                last_stimulate: dict[str, Any] | None = None
+                while True:
+                    try:
+                        kind, payload = control_queue.get_nowait()
+                    except queue_module.Empty:
+                        break
+                    if kind == "mute":
+                        last_mute = payload
+                    else:
+                        last_stimulate = payload
+                if last_mute is not None:
+                    nids: list[int] = []
+                    for gname in last_mute:
+                        group = group_lookup.get(gname)  # type: ignore[union-attr]
+                        if group is not None:
+                            nids.extend(int(n) for n in group)
+                    engine.set_silenced(np.array(nids, dtype=np.int64))
+                if last_stimulate is not None:
+                    gname = last_stimulate.get("group")
+                    amplitude = float(last_stimulate.get("amplitude", 0.0))
+                    group = group_lookup.get(gname) if gname else None  # type: ignore[union-attr]
+                    if group is None:
+                        engine.set_directed_stimulus(np.array([], dtype=np.int64), 0.0)
+                    else:
+                        engine.set_directed_stimulus(np.asarray(group, dtype=np.int64), amplitude)
 
-        if frame.t_ms % window_steps == 0:
-            channels = decoder.decode()
+            vals = stim_array[:]  # cópia rápida da memória compartilhada, sem segurar lock além disso
+            nids, amplitude = stimulus_fn(vals, connectome, heating_nids, cold_nids)
+            engine.stimulate(nids, amplitude)
+            frame = engine.step()
+            decoder.push(frame.t_ms, frame.spikes)
             if recorder is not None:
-                recorder.log_motor_frame(frame.t_ms, channels)
-            payload = {
-                "t_ms": frame.t_ms,
-                "channels": channels,
-                "active_dn": decoder.active_output_count(),
-            }
-            # maxsize=1 — sempre substitui o antigo, nunca acumula (RN-06:
-            # o coordenador só quer o mais recente, nunca espera).
-            try:
-                output_queue.get_nowait()
-            except queue_module.Empty:
-                pass
-            try:
-                output_queue.put_nowait(payload)
-            except queue_module.Full:
-                pass
+                recorder.log_stimulus(frame.t_ms, nids, amplitude)  # só grava se mudou
+                recorder.log_spikes(frame.t_ms, frame.spikes)
 
-        next_tick += period_s
-        sleep_for = next_tick - time.monotonic()
-        if sleep_for > 0:
-            time.sleep(sleep_for)
-        else:
-            next_tick = time.monotonic()  # atrasado — não acumula dívida
+            if frame.t_ms % window_steps == 0:
+                channels = decoder.decode()
+                if recorder is not None:
+                    recorder.log_motor_frame(frame.t_ms, channels)
+                payload = {
+                    "t_ms": frame.t_ms,
+                    "channels": channels,
+                    "active_dn": decoder.active_output_count(),
+                }
+                # maxsize=1 — sempre substitui o antigo, nunca acumula (RN-06:
+                # o coordenador só quer o mais recente, nunca espera).
+                try:
+                    output_queue.get_nowait()
+                except queue_module.Empty:
+                    pass
+                try:
+                    output_queue.put_nowait(payload)
+                except queue_module.Full:
+                    pass
 
-    if recorder is not None:
-        recorder.close()  # flush final + fecha a conexão DuckDB, nunca deixa aberta
+            next_tick += period_s
+            sleep_for = next_tick - time.monotonic()
+            if sleep_for > 0:
+                time.sleep(sleep_for)
+            else:
+                next_tick = time.monotonic()  # atrasado — não acumula dívida
+    finally:
+        # F20 (13/10/2026) — no `finally`: o Recorder bufferiza até
+        # `flush_every` linhas; sem flush final, o resto se perde (achado
+        # real: sessão em Docker gravou spikes mas ZERO motor_frames).
+        if recorder is not None:
+            recorder.close()  # flush final + fecha a conexão DuckDB, nunca deixa aberta
 
 
 class _Handler(socketserver.StreamRequestHandler):
@@ -846,6 +855,11 @@ def main() -> None:
     record_telemetry = os.environ.get("FLYWIRE_RECORD_TELEMETRY", "").lower() in ("1", "true", "yes")
     if record_telemetry:
         print(f"telemetria: gravando o ocelar em {C.DUCKDB_FILE} (FLYWIRE_RECORD_TELEMETRY=1)", flush=True)
+    # F20 (13/10/2026) — `docker stop`/`compose up` recriando o container
+    # mandam SIGTERM pro PID 1; o padrão do Python mata na hora, sem sair do
+    # `with` — stop() nunca roda e os Recorders nunca fazem o flush final.
+    # Tratado igual a Ctrl+C: sai do `with`, stop() avisa os workers.
+    signal.signal(signal.SIGTERM, signal.default_int_handler)
     with SimulationServer(
         cc, bristle_cc, hygro_cc, johnston_cc, escape_cc, taste_cc, thermo_cc, olfactory_cc, aggression_cc,
         path_integration_cc, record_telemetry=record_telemetry
