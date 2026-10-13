@@ -78,6 +78,13 @@ public final class LoomingSensor {
 
     private Location lastThreatLocation = null;
     private volatile boolean loomingNow = false;
+    // F22 (06/10/2026, pedido do usuário) — ver ControlLoop#setIgnorePlayer.
+    private volatile boolean ignorePlayer = false;
+
+    /** Ver docstring do campo {@link #ignorePlayer}. */
+    void setIgnorePlayer(boolean ignore) {
+        this.ignorePlayer = ignore;
+    }
 
     /**
      * Chamar uma vez por tick. Mede quanto a ameaça mais próxima se
@@ -124,10 +131,11 @@ public final class LoomingSensor {
     }
 
     private Entity nearestThreat(Bee bee) {
+        boolean ignorePlayerNow = ignorePlayer;
         return bee.getWorld()
                 .getNearbyEntities(bee.getLocation(), SEARCH_RADIUS_BLOCKS, SEARCH_RADIUS_BLOCKS, SEARCH_RADIUS_BLOCKS)
                 .stream()
-                .filter(e -> e instanceof Monster || e instanceof Player)
+                .filter(e -> e instanceof Monster || (e instanceof Player && !ignorePlayerNow))
                 .min(Comparator.comparingDouble(e -> e.getLocation().distanceSquared(bee.getLocation())))
                 .orElse(null);
     }

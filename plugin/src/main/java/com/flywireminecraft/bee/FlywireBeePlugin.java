@@ -193,6 +193,7 @@ public final class FlywireBeePlugin extends JavaPlugin {
             case "stimulate" -> handleStimulate(player, args);
             case "goals" -> handleGoals(player, args);
             case "goto" -> handleGoto(player, args);
+            case "ignoreplayer" -> handleIgnorePlayer(player, args);
             default -> sender.sendMessage(usage());
         }
         return true;
@@ -654,6 +655,29 @@ public final class FlywireBeePlugin extends JavaPlugin {
                 + "sempre false na ponte, grooming não deveria mais dominar)" : "voltou ao normal") + ".");
     }
 
+    /**
+     * F22 (06/10/2026, pedido do usuário) — "todos os circuitos não
+     * reagem à presença do jogador". Mesma raiz do problema de
+     * {@link #handleTouchMute} (F9: jogador perto pra observar/testar
+     * conta como estímulo real), mas mais cirúrgico — {@code touchmute}
+     * mascara o circuito `bristle` INTEIRO (perde toque real de mob/parede
+     * também); isto só exclui o JOGADOR especificamente, nos três sensores
+     * que de fato o tratam como fonte ({@link ControlLoop#setIgnorePlayer}:
+     * touch/proximidade, looming/ameaça-fuga, taste/comida-na-mão). Mob,
+     * item e bloco continuam contando normal nos três.
+     */
+    private void handleIgnorePlayer(Player player, String[] args) {
+        if (args.length < 2 || (!args[1].equalsIgnoreCase("on") && !args[1].equalsIgnoreCase("off"))) {
+            player.sendMessage("Uso: /flywirebee ignoreplayer <on|off>");
+            return;
+        }
+        boolean on = args[1].equalsIgnoreCase("on");
+        controlLoop.setIgnorePlayer(on);
+        player.sendMessage("Presença do jogador " + (on
+                ? "ignorada (touch/looming/taste não contam mais o jogador como estímulo — mob/item/bloco continuam)"
+                : "voltou a contar normal") + ".");
+    }
+
     private void handleMute(Player player, String[] args) {
         if (args.length < 2 || !VALID_GROUPS.contains(args[1])) {
             player.sendMessage("Uso: /flywirebee mute <" + String.join("|", VALID_GROUPS) + ">");
@@ -760,7 +784,7 @@ public final class FlywireBeePlugin extends JavaPlugin {
                 + "daynight [trials] [segundos] [blind] | "
                 + "doseresponse [trials] [segundos] [x y z] | "
                 + "validateyaw [trials] [segundos] [amplitude] [x y z] | "
-                + "visualize <on|off> | touchmute <on|off> | "
+                + "visualize <on|off> | touchmute <on|off> | ignoreplayer <on|off> | "
                 + "mute <grupo> | unmute <grupo|all> | stimulate <grupo> <amplitude> | goals off | "
                 + "goto <x> <y> <z>";
     }

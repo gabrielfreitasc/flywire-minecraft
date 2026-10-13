@@ -23,7 +23,7 @@ import java.util.Set;
  * comida conta, não só ingestão.
  *
  * <p><b>Comportamento (25/09/2026, pedido do usuário, ver
- * {@link MotorMapping}).</b> Não é só sim/não — {@link #findNearestFood}
+ * {@link MotorMapping}).</b> Não é só sim/não — {@link #findNearestFood(Bee)}
  * localiza ONDE a comida está, pra ela poder voar até lá. Bloco/item
  * dropado: pousa em cima. Jogador segurando comida: segue o jogador
  * enquanto o item estiver na mão.
@@ -70,7 +70,26 @@ public final class TasteSensor {
     );
 
     /** Raio de busca por bloco/item/jogador com comida, em blocos. Provisório. */
-    private static final double FOOD_SEARCH_RADIUS_BLOCKS = 4.0;
+    static final double FOOD_SEARCH_RADIUS_BLOCKS = 4.0;
+
+    /**
+     * F21 (06/10/2026) — pedido do usuário: "seria interessante estigarmos
+     * essa busca por comida quando estiver com fome". Biologia real: insetos
+     * em privação alimentar aumentam o esforço/raio de forrageamento (busca
+     * mais ampla, não só espera passiva). Soma a {@link #FOOD_SEARCH_RADIUS_BLOCKS}
+     * proporcional a {@link EnergyTracker#hungerFactor}: no máximo (faminta),
+     * o raio DOBRA (4,0 → 8,0). Não é sensor novo — mesma varredura de
+     * {@link #findNearestFood(Bee, double)}, só o raio muda.
+     */
+    static final double HUNGRY_SEARCH_RADIUS_EXTRA_BLOCKS = 4.0;
+
+    // F22 (06/10/2026, pedido do usuário) — ver ControlLoop#setIgnorePlayer.
+    private volatile boolean ignorePlayer = false;
+
+    /** Ver docstring do campo {@link #ignorePlayer}. */
+    void setIgnorePlayer(boolean ignore) {
+        this.ignorePlayer = ignore;
+    }
 
     /**
      * Deslocamento em Y pra mirar exatamente na SUPERFÍCIE DE CIMA de um
@@ -108,11 +127,21 @@ public final class TasteSensor {
 
     /**
      * Sinal de nível — a fonte de comida mais próxima agora, ou
-     * {@code null} se nenhuma estiver no raio. Roda a varredura de blocos E
-     * de entidades numa passada só (reaproveitada tanto pro estímulo do
-     * circuito quanto pro alvo de voo — ver {@code ControlLoop}).
+     * {@code null} se nenhuma estiver no raio padrão
+     * ({@link #FOOD_SEARCH_RADIUS_BLOCKS}). Ver {@link #findNearestFood(Bee, double)}
+     * pra busca com raio ampliado pela fome.
      */
     public FoodTarget findNearestFood(Bee bee) {
+        return findNearestFood(bee, FOOD_SEARCH_RADIUS_BLOCKS);
+    }
+
+    /**
+     * Mesma varredura de {@link #findNearestFood(Bee)}, com raio explícito —
+     * F21: permite {@code ControlLoop} ampliar o raio com a fome
+     * ({@link #HUNGRY_SEARCH_RADIUS_EXTRA_BLOCKS}) sem duplicar a lógica de
+     * varredura de blocos e entidades.
+     */
+    public FoodTarget findNearestFood(Bee bee, double searchRadiusBlocks) {
         Location center = bee.getLocation();
         World world = center.getWorld();
         if (world == null) {
@@ -122,7 +151,7 @@ public final class TasteSensor {
         FoodTarget best = null;
         double bestDistanceSquared = Double.MAX_VALUE;
 
-        int radius = (int) Math.ceil(FOOD_SEARCH_RADIUS_BLOCKS);
+        int radius = (int) Math.ceil(searchRadiusBlocks);
         int bx = center.getBlockX();
         int by = center.getBlockY();
         int bz = center.getBlockZ();
@@ -135,7 +164,7 @@ public final class TasteSensor {
                     }
                     Location above = block.getLocation().add(0.5, BLOCK_TOP_SURFACE_Y_OFFSET, 0.5);
                     double distanceSquared = above.distanceSquared(center);
-                    if (distanceSquared <= FOOD_SEARCH_RADIUS_BLOCKS * FOOD_SEARCH_RADIUS_BLOCKS
+                    if (distanceSquared <= searchRadiusBlocks * searchRadiusBlocks
                             && distanceSquared < bestDistanceSquared) {
                         bestDistanceSquared = distanceSquared;
                         best = new FoodTarget(above, false);
@@ -144,8 +173,12 @@ public final class TasteSensor {
             }
         }
 
+        boolean ignorePlayerNow = ignorePlayer;
         for (Entity entity : world.getNearbyEntities(
-                center, FOOD_SEARCH_RADIUS_BLOCKS, FOOD_SEARCH_RADIUS_BLOCKS, FOOD_SEARCH_RADIUS_BLOCKS)) {
+                center, searchRadiusBlocks, searchRadiusBlocks, searchRadiusBlocks)) {
+            if (ignorePlayerNow && entity instanceof Player) {
+                continue;
+            }
             FoodTarget candidate = asFoodTarget(entity);
             if (candidate == null) {
                 continue;

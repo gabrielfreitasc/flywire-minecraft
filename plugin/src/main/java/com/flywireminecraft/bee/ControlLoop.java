@@ -48,6 +48,22 @@ public final class ControlLoop {
     private final LoomingSensor loomingSensor = new LoomingSensor(); // F9/AD-20 — looming (escape)
     private final TasteSensor tasteSensor = new TasteSensor(); // F10 — comida (taste)
     private volatile boolean tasteTargetHeldByPlayer = false; // F10 — ver StatusLabel
+    // F25 (06/10/2026) — ver applyForagingSearchModifiers. Mesma defasagem
+    // de 1 tick já aceita em tasteTargetHeldByPlayer/coldNear.
+    private volatile boolean foodVisible = false;
+    // F30 — ver EnergyTracker.SEEK_FOOD_BELOW. Mesma defasagem de 1 tick de foodVisible.
+    private volatile boolean seekingFood = false;
+    private volatile boolean satietyGateSuppressedForExperiment = false; // F30 — ver setSatietyGateSuppressedForExperiment
+    // F28 (07/10/2026) — ver foodTargetMinWorldY. Mesma defasagem de 1 tick de foodVisible.
+    private volatile Location foodTargetLocation = null;
+    /**
+     * F28 — folga acima do alvo de comida que o teto de fome/frio sempre
+     * respeita. Achado real em jogo: teto relativo ao chão LOGO ABAIXO
+     * deixava o fundo da abelha ~0,014 abaixo do topo de uma melancia num
+     * degrau 1 bloco mais alto — travou a 0,85 do alvo (= 0,5 meia largura
+     * da melancia + 0,35 da abelha), batendo na lateral.
+     */
+    private static final double FOOD_TARGET_CLEARANCE_BLOCKS = 0.5;
     // F14 (29/09/2026, achado real) — ver docstring do stuck-check
     // (intentionalLanding): sem isto, o sistema de recuperação confundia
     // "chegou na comida e parou de propósito" com "travou contra
@@ -67,6 +83,8 @@ public final class ControlLoop {
     /** F13 — `startle` acima disto, com alarme real ativo, conta como "som alto" que desperta. */
     private static final double WAKE_STARTLE_THRESHOLD = 0.5;
     private volatile boolean coldNear = false;
+    /** F21 — 0,0-1,0, mesma defasagem de 1 tick de heatNear/coldNear. Ver {@code applyColdModifiers}. */
+    private volatile double coldSeverity = 0.0;
     private final String bridgeHost;
     private final int bridgePort;
 
@@ -152,6 +170,16 @@ public final class ControlLoop {
     private static final double STUCK_DISPLACEMENT_THRESHOLD_BLOCKS = 0.3;
     private static final double RECOVERY_BOOST_BLOCKS_PER_TICK = 0.15;
     private static final int RECOVERY_BOOST_TICKS = 30; // 1,5s de empurrão
+    // F26 (07/10/2026, achado do usuário em jogo) — faminta e sem comida, o
+    // teto forçado (1,5 bloco: fome F11 na inanição e busca F25) descia ela
+    // de volta pra altura do MESMO obstáculo assim que o empurrão de
+    // recuperação acabava; a direção horizontal (circuito) não muda, então
+    // batia de novo — ciclo. Folga: após o empurrão, o teto de fome/busca
+    // fica suspenso por este tempo (velocidade reduzida continua valendo).
+    // F27 — frio também entra (primeira versão deixou de fora; no frio
+    // letárgico é justamente o teto mais baixo). Sono não: quase parada.
+    private static final int OBSTACLE_GRACE_TICKS = 20; // 1s
+    private int obstacleGraceTicksLeft = 0;
     // F7 — polimento (pendência registrada em docs/03-roadmap-fases.md,
     // 20/09/2026): o empurrão era só vertical, sem componente horizontal pra
     // longe do obstáculo nem giro do corpo, por isso parecia um solavanco em
@@ -367,6 +395,27 @@ public final class ControlLoop {
     }
 
     /**
+     * F22 (06/10/2026, pedido do usuário) — "todos os circuitos não reagem
+     * à presença do jogador". Diferente de {@link #setTouchLesioned} (que
+     * mascara a LEITURA de um circuito inteiro pra lesão), isto muda a
+     * VARREDURA de entidades dentro de {@link #touchSensor}/
+     * {@link #loomingSensor}/{@link #tasteSensor} — os três únicos sensores
+     * que tratam {@code Player} como fonte de estímulo (proximidade/
+     * grooming, ameaça/fuga, jogador segurando comida). Útil pra calibrar
+     * QUALQUER outro circuito sem o jogador precisar ficar perto da abelha
+     * pra observar/testar contaminando o resultado — mesmo problema que já
+     * apareceu nos logs de calibração do F21 (`proximity=true
+     * grooming=0,99` enquanto o usuário testava frio/fome por perto).
+     * Outros mobs/itens continuam contando normalmente — só o jogador é
+     * excluído.
+     */
+    public void setIgnorePlayer(boolean ignore) {
+        touchSensor.setIgnorePlayer(ignore);
+        loomingSensor.setIgnorePlayer(ignore);
+        tasteSensor.setIgnorePlayer(ignore);
+    }
+
+    /**
      * F7/AD-17 — experimento de lesão pro `hygro` (chuva): quando true,
      * {@code raining} sempre chega `false` na ponte, não importa o que
      * {@code World#hasStorm()} diga de verdade — mesma filosofia de
@@ -396,6 +445,16 @@ public final class ControlLoop {
      */
     public void setBristleSuppressedForExperiment(boolean suppressed) {
         this.bristleSuppressedForExperiment = suppressed;
+    }
+
+    /**
+     * F30 — durante {@link TasteLesionExperiment}, a saciedade não pode
+     * filtrar a comida: cheia, ela ignoraria a comida nas DUAS condições
+     * (normal e lesionada) e o experimento daria nulo por um motivo que
+     * não tem nada a ver com o circuito.
+     */
+    public void setSatietyGateSuppressedForExperiment(boolean suppressed) {
+        this.satietyGateSuppressedForExperiment = suppressed;
     }
 
     /**
@@ -520,6 +579,7 @@ public final class ControlLoop {
         stuckCheckAnchor = null;
         stuckCheckTicksLeft = STUCK_CHECK_TICKS;
         recoveryBoostTicksLeft = 0;
+        obstacleGraceTicksLeft = 0;
         recoveryEscapeDirection = new Vector(0, 0, 0);
         consecutiveStuckCount = 0;
         groomingEpisodeIsDodge = false;
@@ -534,6 +594,9 @@ public final class ControlLoop {
         heatAvoidDirection = null;
         heatNear = false;
         coldNear = false;
+        coldSeverity = 0.0;
+        foodVisible = false;
+        foodTargetLocation = null;
         ticksSinceGroundOrWaterContact = LANDED_GRACE_TICKS;
         shelterFoundThisEpisode = false;
         hasTouchedThisEpisode = false;
@@ -658,7 +721,26 @@ public final class ControlLoop {
                         || (shelterFoundThisEpisode
                                 && MotorMapping.isSeekingShelterActive(latestHygroMotor))
                         || tasteArrived;
-                if (moved < STUCK_DISPLACEMENT_THRESHOLD_BLOCKS && !intentionalLanding) {
+                // F24 (06/10/2026) — achado real do usuário: faminta E com
+                // frio extremo ao mesmo tempo (hunger×cold chega a 0,035 da
+                // velocidade normal, F11/F21), ela voa tão devagar de
+                // propósito até a comida que nunca passa do limiar fixo
+                // abaixo — o sistema confundia "lenta por fadiga" com
+                // "travada contra obstáculo" e empurrava ela pra longe,
+                // repetindo e divergindo mais a cada ciclo (mesma classe do
+                // bug de intentionalLanding em F14, variante nova: não é
+                // "parar", é "mover devagar demais por fadiga combinada").
+                // Escala o limiar pela MESMA fadiga que reduz a velocidade
+                // de verdade (fome × frio × sono, ver applyHungerModifiers/
+                // applyColdModifiers/sleepState.isDrowsy) — se ela está
+                // comandada a se mover a 3,5% da velocidade, exigir só 3,5%
+                // do deslocamento normal pra não achar que travou.
+                // Limitação conhecida: não distingue se a fadiga esteve
+                // realmente ativa nos últimos 20 ticks (ex.: medo venceu
+                // fadiga nesse meio tempo) — leitura do estado AGORA, mesma
+                // disciplina provisória de LoomingSensor/AlarmSensor.
+                double effectiveStuckThreshold = STUCK_DISPLACEMENT_THRESHOLD_BLOCKS * fatigueSpeedFraction();
+                if (moved < effectiveStuckThreshold && !intentionalLanding) {
                     consecutiveStuckCount++;
                     recoveryBoostTicksLeft = RECOVERY_BOOST_TICKS;
                     if (consecutiveStuckCount == 1) {
@@ -675,9 +757,14 @@ public final class ControlLoop {
                         recoveryEscapeDirection = randomHorizontalDirection();
                     }
                     plugin.getLogger().info(String.format(Locale.ROOT,
-                            "[ControlLoop] recuperação (tentativa %d): só %.2f blocos em %d ticks — "
-                                    + "empurrão pra cima e pra longe (%s)",
-                            consecutiveStuckCount, moved, STUCK_CHECK_TICKS, recoveryEscapeDirection));
+                            "[ControlLoop] recuperação (tentativa %d): só %.2f blocos em %d ticks "
+                                    + "(limiar efetivo %.2f, fadiga %.2f) — empurrão pra cima e pra longe (%s)",
+                            consecutiveStuckCount, moved, STUCK_CHECK_TICKS, effectiveStuckThreshold,
+                            fatigueSpeedFraction(), recoveryEscapeDirection));
+                    plugin.getLogger().info("[Geometria] (na recuperação) "
+                            + geometryDescription(bee, tasteSensor.findNearestFood(bee,
+                                    TasteSensor.FOOD_SEARCH_RADIUS_BLOCKS
+                                            + energyTracker.hungerFactor() * TasteSensor.HUNGRY_SEARCH_RADIUS_EXTRA_BLOCKS)));
                 } else {
                     consecutiveStuckCount = 0;
                 }
@@ -704,6 +791,9 @@ public final class ControlLoop {
                     RECOVERY_BOOST_BLOCKS_PER_TICK,
                     recoveryEscapeDirection.getZ() * RECOVERY_BOOST_HORIZONTAL_BLOCKS_PER_TICK);
             recoveryBoostTicksLeft--;
+            if (recoveryBoostTicksLeft == 0) {
+                obstacleGraceTicksLeft = OBSTACLE_GRACE_TICKS;
+            }
         } else if (dodgeBoostTicksLeft > 0) {
             // F7/AD-17 — episódio de grooming sorteado como "desvio" (ver
             // groomingEpisodeIsDodge): empurrão breve pra longe, puramente
@@ -717,7 +807,13 @@ public final class ControlLoop {
             // F11 — fuga NÃO é reduzida pela fome (medo vence cansaço).
             velocityToApply = latestVelocity;
         } else {
-            velocityToApply = applyHungerModifiers(bee, latestVelocity);
+            boolean obstacleGrace = obstacleGraceTicksLeft > 0;
+            if (obstacleGrace) {
+                obstacleGraceTicksLeft--;
+            }
+            velocityToApply = applyHungerModifiers(bee, latestVelocity, obstacleGrace);
+            velocityToApply = applyColdModifiers(bee, velocityToApply, obstacleGrace);
+            velocityToApply = applyForagingSearchModifiers(bee, velocityToApply, obstacleGrace);
             if (sleepState.isDrowsy()) {
                 // F13 — sonolenta: quase parada e baixa. Só neste ramo: fuga,
                 // fuga de calor, recuperação e desvio já ficam de fora.
@@ -749,7 +845,7 @@ public final class ControlLoop {
 
         if (visualize && tickCount % VISUALIZE_EVERY_TICKS == 0) {
             visualizer.render(bee, latestMotor, latestBristleMotor, latestHygroMotor, latestJohnstonMotor,
-                    latestEscapeMotor, latestTasteMotor, latestThermoMotor);
+                    latestEscapeMotor, latestTasteMotor, latestThermoMotor, heatNear, coldNear, coldSeverity);
             // F9 — mesma cadência das partículas, texto não precisa de 20Hz.
             // escapeLatchTicksLeft é campo (não local), seguro de ler aqui
             // mesmo computado mais abaixo nesta troca — reflete o valor do
@@ -758,7 +854,7 @@ public final class ControlLoop {
                     groomingEpisodeIsDodge, shelterFoundThisEpisode, escapeLatchTicksLeft > 0,
                     tasteTargetHeldByPlayer, energyTracker.level(),
                     latestThermoMotor, heatNear, coldNear, heatAvoidDirection != null,
-                    sleepState.isDrowsy(), sleepState.isWokenAtNight());
+                    sleepState.isDrowsy(), sleepState.isWokenAtNight(), coldSeverity);
         }
         if (tickCount % HUD_EVERY_TICKS == 0) {
             LiveHud.update(plugin, latestMotor, latestActiveDn, latestBristleMotor, latestHygroMotor,
@@ -801,20 +897,39 @@ public final class ControlLoop {
             String thermal = latestThermoMotor.has("thermal")
                     ? String.format(Locale.ROOT, "%.3f", latestThermoMotor.get("thermal").getAsDouble())
                     : "-";
-            TasteSensor.FoodTarget loggedFood = tasteSensor.findNearestFood(bee);
+            // F21 (06/10/2026) — mesmo raciocínio do F14: calibrar busca por
+            // comida com fome e desaceleração por frio exige ver os dois
+            // valores contínuos no log, não só o sim/não.
+            double loggedHunger = energyTracker.hungerFactor();
+            double loggedFoodSearchRadius = TasteSensor.FOOD_SEARCH_RADIUS_BLOCKS
+                    + loggedHunger * TasteSensor.HUNGRY_SEARCH_RADIUS_EXTRA_BLOCKS;
+            TasteSensor.FoodTarget loggedFood = seekingFood
+                    ? tasteSensor.findNearestFood(bee, loggedFoodSearchRadius)
+                    : null; // F30 — saciada não "vê" comida
             String tasteDist = loggedFood != null
                     ? String.format(Locale.ROOT, "%.2f", loggedFood.location().distance(bee.getLocation()))
                     : "-";
             ThermalSensor.Reading loggedThermal = thermalSensor.read(bee);
+            // F21 — `vel` é a decisão CRUA dos circuitos (latestVelocity,
+            // antes de fome/frio/sono); `applied` é o que de fato foi mandado
+            // pro `setVelocity()` no fim do tick anterior (lastAppliedVelocity,
+            // já com os moduladores de embodiment). Precisa dos dois lado a
+            // lado pra calibrar se applyColdModifiers está reduzindo de
+            // verdade quando outro canal (ex.: hygro/chuva) domina a direção.
             plugin.getLogger().info(String.format(Locale.ROOT,
-                    "[ControlLoop] light=%.2f (real=%.2f, forçado=%s) vel=%s trocas=%d falhas=%d "
+                    "[ControlLoop] light=%.2f (real=%.2f, forçado=%s) vel=%s applied=%s trocas=%d falhas=%d "
                             + "proximity=%s grooming=%s onGround=%s raining=%s hygrotaxis=%s "
                             + "hostileMob=%s startle=%s looming=%s escapeDrive=%s food=%s appetite=%s "
-                            + "tasteDist=%s heatNear=%s coldNear=%s thermal=%s",
-                    light, realLight, forced, latestVelocity, exchangeCount, exchangeFailures,
+                            + "tasteDist=%s hunger=%.2f energy=%.2f seekingFood=%s foodSearchRadius=%.2f "
+                            + "heatNear=%s coldNear=%s coldSeverity=%.2f thermal=%s",
+                    light, realLight, forced, latestVelocity, lastAppliedVelocity, exchangeCount, exchangeFailures,
                     touchSensor.isNearSomething(bee), grooming, bee.isOnGround(), raining, hygrotaxis,
                     alarmSensor.isHostileMobNearby(bee), startle, loomingSensor.isLoomingThreat(), escapeDrive,
-                    loggedFood != null, appetite, tasteDist, loggedThermal.heat(), loggedThermal.cold(), thermal));
+                    loggedFood != null, appetite, tasteDist, loggedHunger, energyTracker.level(), seekingFood,
+                    loggedFoodSearchRadius,
+                    loggedThermal.heat(), loggedThermal.cold(),
+                    loggedThermal.coldSeverity(), thermal));
+            plugin.getLogger().info("[Geometria] " + geometryDescription(bee, loggedFood));
         }
         tickCount++;
 
@@ -863,13 +978,28 @@ public final class ControlLoop {
         // getNearbyEntities internamente) — sempre computado na thread
         // principal. A localização (não só sim/não) é reaproveitada mais
         // abaixo pra decidir a velocidade de busca de comida.
-        TasteSensor.FoodTarget nearestFoodTarget = tasteSensor.findNearestFood(bee);
+        // F21 (06/10/2026) — pedido do usuário: busca ativa por comida
+        // quando com fome. hungerFactor() ainda reflete a energia ANTES do
+        // tick() desta volta (chamado mais abaixo) — mesma defasagem de 1
+        // tick já aceita em tasteTargetHeldByPlayer/escapeLatchTicksLeft.
+        double foodSearchRadius = TasteSensor.FOOD_SEARCH_RADIUS_BLOCKS
+                + energyTracker.hungerFactor() * TasteSensor.HUNGRY_SEARCH_RADIUS_EXTRA_BLOCKS;
+        // F30 — saciada (cheia até cair a SEEK_FOOD_BELOW), ela não "vê"
+        // comida: sem estímulo do taste, sem alvo, sem "comendo". O appetite
+        // decai sozinho e o phototaxis volta a guiar o voo.
+        seekingFood = energyTracker.isSeekingFood() || satietyGateSuppressedForExperiment;
+        TasteSensor.FoodTarget nearestFoodTarget = seekingFood
+                ? tasteSensor.findNearestFood(bee, foodSearchRadius)
+                : null;
         boolean foodContact = nearestFoodTarget != null;
+        foodVisible = foodContact; // F25 — ver applyForagingSearchModifiers
+        foodTargetLocation = nearestFoodTarget != null ? nearestFoodTarget.location() : null; // F28
         // F12 — sensor do subcircuito thermo (ver ThermalSensor): varre blocos,
         // só na thread principal; cacheado a cada 5 ticks lá dentro.
         ThermalSensor.Reading thermal = thermalSensor.read(bee);
         heatNear = thermal.heat();
         coldNear = thermal.cold();
+        coldSeverity = thermal.coldSeverity();
         // F10 — campo (não local), pra StatusLabel poder ler no início do
         // PRÓXIMO tick (o balão atualiza antes deste trecho rodar de novo
         // nesta mesma troca) — mesma defasagem de 1 tick já aceita em
@@ -1137,17 +1267,105 @@ public final class ControlLoop {
      * circuito calcula (RN-08), é fadiga física de embodiment, mesmo
      * status do sistema de recuperação. Fuga e empurrões mecânicos ficam de
      * fora (ver chamada). Roda na thread principal (rayTraceBlocks). Sem
-     * chão a até 16 blocos abaixo, só a redução de velocidade vale.
+     * chão a até {@link #GROUND_RAYTRACE_DISTANCE_BLOCKS} abaixo (achado
+     * real do F25 — 16 blocos originais não alcançavam o chão em testes a
+     * grande altura), só a redução de velocidade horizontal vale.
      */
-    private Vector applyHungerModifiers(Bee bee, Vector velocity) {
+    /**
+     * F24 (06/10/2026) — fração combinada de velocidade horizontal (fome ×
+     * frio × sono) aplicada agora pelo trio de moduladores de fadiga do
+     * embodiment ({@link #applyHungerModifiers}/{@link #applyColdModifiers}/
+     * {@code sleepState.isDrowsy()}) — usada pelo sistema anti-travamento pra
+     * não confundir "voando devagar de propósito por fadiga" com "travada
+     * contra obstáculo" (ver chamada). Não recomputa um estado novo, só
+     * replica as mesmas três fórmulas já em uso, numa leitura isolada.
+     */
+    private double fatigueSpeedFraction() {
+        double hunger = energyTracker.hungerFactor();
+        double hungerFraction = hunger > 0.0
+                ? 1.0 - hunger * (1.0 - EnergyTracker.MIN_SPEED_FRACTION)
+                : 1.0;
+        double cold = coldSeverity;
+        double coldFraction = cold > 0.0
+                ? 1.0 - cold * (1.0 - ThermalSensor.COLD_LETHARGIC_SPEED_FRACTION)
+                : 1.0;
+        double drowsyFraction = sleepState.isDrowsy() ? SleepState.DROWSY_SPEED_FRACTION : 1.0;
+        return hungerFraction * coldFraction * drowsyFraction;
+    }
+
+    /**
+     * F28 — com comida à vista, o teto de fome/frio nunca fica abaixo do
+     * alvo + {@link #FOOD_TARGET_CLEARANCE_BLOCKS}: ela tem que conseguir
+     * chegar onde está indo. Sem comida, sem efeito.
+     */
+    private double foodTargetMinWorldY() {
+        Location target = foodTargetLocation;
+        return target == null ? Double.NEGATIVE_INFINITY : target.getY() + FOOD_TARGET_CLEARANCE_BLOCKS;
+    }
+
+    private Vector applyHungerModifiers(Bee bee, Vector velocity, boolean obstacleGrace) {
         double hunger = energyTracker.hungerFactor();
         if (hunger <= 0.0) {
             return velocity;
         }
         double speedFraction = 1.0 - hunger * (1.0 - EnergyTracker.MIN_SPEED_FRACTION);
-        double ceiling = EnergyTracker.STARVING_CEILING_BLOCKS
-                + (1.0 - hunger) * EnergyTracker.FED_CEILING_EXTRA_BLOCKS;
-        return limitSpeedAndHeight(bee, velocity, speedFraction, ceiling);
+        // F26 — durante a folga pós-recuperação, sem teto (ver OBSTACLE_GRACE_TICKS).
+        double ceiling = obstacleGrace
+                ? Double.MAX_VALUE
+                : EnergyTracker.STARVING_CEILING_BLOCKS + (1.0 - hunger) * EnergyTracker.FED_CEILING_EXTRA_BLOCKS;
+        return limitSpeedAndHeight(bee, velocity, speedFraction, ceiling, foodTargetMinWorldY());
+    }
+
+    /**
+     * F21 (06/10/2026, pedido do usuário) — reação ao frio: moscas são
+     * ectotérmicas, metabolismo desacelera com a temperatura ambiente.
+     * Mesmo mecanismo de {@link #applyHungerModifiers} (reduz horizontal,
+     * limita altura via {@link #limitSpeedAndHeight}), empilhado por cima —
+     * faminta E com frio fica mais lenta que só um dos dois. Ver
+     * {@link ThermalSensor.Reading#coldSeverity} pra como a severidade é
+     * calculada a partir da temperatura de bioma do jogo.
+     */
+    private Vector applyColdModifiers(Bee bee, Vector velocity, boolean obstacleGrace) {
+        double cold = coldSeverity;
+        if (cold <= 0.0) {
+            return velocity;
+        }
+        double speedFraction = 1.0 - cold * (1.0 - ThermalSensor.COLD_LETHARGIC_SPEED_FRACTION);
+        // F26/F27 — folga pós-recuperação também vale pro frio (ver OBSTACLE_GRACE_TICKS).
+        double ceiling = obstacleGrace
+                ? Double.MAX_VALUE
+                : ThermalSensor.COLD_LETHARGIC_CEILING_BLOCKS + (1.0 - cold) * ThermalSensor.COLD_WARM_CEILING_EXTRA_BLOCKS;
+        return limitSpeedAndHeight(bee, velocity, speedFraction, ceiling, foodTargetMinWorldY());
+    }
+
+    /**
+     * F25 (06/10/2026, pedido do usuário) — "ela estava numa altura muito
+     * alta e como ela não encontrou nenhum alimento, o certo é ela usar
+     * essa memória e descer ou andar para outros locais para buscar
+     * alimento". Proxy de engenharia (decisão do usuário via
+     * {@code AskUserQuestion}, 06/10/2026) — deliberadamente NÃO usa
+     * `path_integration`/`DNa02` (ver achado real em
+     * `path_integration_motor.py`: o papel de DNa02 na literatura é
+     * "voltar pra um lugar já conhecido", não "explorar à procura de algo
+     * novo" — usar o sinal pra decidir busca seria esticar a literatura
+     * sem validação, RN-09).
+     *
+     * <p>Não muda a direção horizontal (continua a do circuito ativo,
+     * phototaxis por padrão) — só força descida mais agressiva que a
+     * fadiga de fome sozinha já causa ({@link #applyHungerModifiers}, cujo
+     * teto só fica baixo perto da inanição total). Flores/plantações ficam
+     * perto do chão; flutuar alto nunca vai achar comida. Só dispara com
+     * fome ATIVA ({@code hungerFactor() > 0}) E nenhuma comida à vista
+     * ({@link #foodVisible}, mesmo com o raio ampliado do F21) — faminta
+     * mas com comida por perto não precisa descer à força, phototaxis
+     * já guia até perto o bastante do taste assumir.
+     */
+    private Vector applyForagingSearchModifiers(Bee bee, Vector velocity, boolean obstacleGrace) {
+        // F30 — saciada (mesmo já com fome entre 40% e 20%) não está procurando comida.
+        if (energyTracker.hungerFactor() <= 0.0 || foodVisible || obstacleGrace || !seekingFood) {
+            return velocity;
+        }
+        return limitSpeedAndHeight(bee, velocity, 1.0, EnergyTracker.STARVING_CEILING_BLOCKS);
     }
 
     /** Texto do painel pro estado de sono (F13) — proxy de engenharia, sem canal do simulador. */
@@ -1162,22 +1380,50 @@ public final class ControlLoop {
     }
 
     /**
-     * Limitador de fadiga de embodiment compartilhado por fome (F11) e sono
-     * (F13): reduz a velocidade horizontal a {@code speedFraction} e limita a
-     * altura acima do chão a {@code ceiling} blocos (desce quando passa do teto,
-     * não sobe além dele). Roda na thread principal (rayTraceBlocks). Sem chão a
-     * até 16 blocos abaixo, só a redução de velocidade vale.
+     * F25 (07/10/2026) — achado real do usuário, confirmado no log E
+     * visualmente ("ela está parada na altura que foi colocada"): 16
+     * blocos bastava pra fome (F11)/sono (F13), que nunca testaram acima
+     * disso, mas a busca ativa por comida (F25) é PRA JUSTAMENTE o caso
+     * de altura extrema (ela testou a 150, chão real ~30-40 blocos
+     * abaixo) — a varredura voltava `null` (nada achado em 16 blocos) e
+     * o ajuste de altura era pulado por completo, silenciosamente.
+     * Aumentado pra cobrir qualquer altura real do mundo (limite de
+     * construção do Overworld é Y -64 a 320, no máximo ~384 de vão).
+     */
+    private static final double GROUND_RAYTRACE_DISTANCE_BLOCKS = 384.0;
+
+    /**
+     * Limitador de fadiga de embodiment compartilhado por fome (F11), sono
+     * (F13) e busca ativa por comida (F25): reduz a velocidade horizontal a
+     * {@code speedFraction} e limita a altura acima do chão a {@code ceiling}
+     * blocos (desce quando passa do teto, não sobe além dele). Roda na
+     * thread principal (rayTraceBlocks). Sem chão a até
+     * {@link #GROUND_RAYTRACE_DISTANCE_BLOCKS} abaixo, só a redução de
+     * velocidade horizontal vale (acontece só em borda de mundo/vazio).
      */
     private Vector limitSpeedAndHeight(Bee bee, Vector velocity, double speedFraction, double ceiling) {
+        return limitSpeedAndHeight(bee, velocity, speedFraction, ceiling, Double.NEGATIVE_INFINITY);
+    }
+
+    /**
+     * F28 — {@code minWorldY}: altura ABSOLUTA abaixo da qual o teto nunca
+     * fica (ver {@link #foodTargetMinWorldY}). O teto é relativo ao chão logo
+     * abaixo da abelha; sem isto, um alvo num degrau mais alto fica fora
+     * de alcance.
+     */
+    private Vector limitSpeedAndHeight(
+            Bee bee, Vector velocity, double speedFraction, double ceiling, double minWorldY) {
         Vector adjusted = velocity.clone();
         adjusted.setX(adjusted.getX() * speedFraction);
         adjusted.setZ(adjusted.getZ() * speedFraction);
 
         Location location = bee.getLocation();
         RayTraceResult ground = bee.getWorld().rayTraceBlocks(
-                location, new Vector(0, -1, 0), 16.0, FluidCollisionMode.NEVER, true);
+                location, new Vector(0, -1, 0), GROUND_RAYTRACE_DISTANCE_BLOCKS, FluidCollisionMode.NEVER, true);
         if (ground != null) {
-            double height = location.getY() - ground.getHitPosition().getY();
+            double groundY = ground.getHitPosition().getY();
+            double height = location.getY() - groundY;
+            ceiling = Math.max(ceiling, minWorldY - groundY);
             if (height > ceiling) {
                 adjusted.setY(Math.min(adjusted.getY(), -EnergyTracker.HUNGRY_DESCENT_BLOCKS_PER_TICK));
             } else if (adjusted.getY() > 0) {
@@ -1185,6 +1431,37 @@ public final class ControlLoop {
             }
         }
         return adjusted;
+    }
+
+    /**
+     * F29 (07/10/2026) — diagnóstico, sem efeito em comportamento. O caso
+     * faminta + frio travava perto da comida e o log não dizia O QUE
+     * separava ela do alvo. Registra: posição; bloco logo abaixo; bloco à
+     * frente na direção do movimento aplicado (altura dos pés e +1); e,
+     * com comida à vista, o alvo, o bloco no ponto-alvo (tem que ser AR
+     * pra ela conseguir chegar) e o bloco de comida embaixo dele.
+     */
+    private String geometryDescription(Bee bee, TasteSensor.FoodTarget food) {
+        Location loc = bee.getLocation();
+        StringBuilder sb = new StringBuilder(String.format(Locale.ROOT,
+                "pos=%.2f,%.2f,%.2f abaixo=%s", loc.getX(), loc.getY(), loc.getZ(),
+                loc.clone().subtract(0, 0.1, 0).getBlock().getType()));
+        Vector horizontal = new Vector(lastAppliedVelocity.getX(), 0, lastAppliedVelocity.getZ());
+        if (horizontal.lengthSquared() > 1.0E-10) {
+            Location ahead = loc.clone().add(horizontal.normalize().multiply(0.6));
+            sb.append(" frente=").append(ahead.getBlock().getType())
+                    .append(" frente+1=").append(ahead.clone().add(0, 1, 0).getBlock().getType());
+        } else {
+            sb.append(" frente=- (parada)");
+        }
+        if (food != null) {
+            Location target = food.location();
+            sb.append(String.format(Locale.ROOT, " alvo=%.2f,%.2f,%.2f dy=%.2f",
+                    target.getX(), target.getY(), target.getZ(), target.getY() - loc.getY()));
+            sb.append(" noAlvo=").append(target.getBlock().getType())
+                    .append(" sobAlvo=").append(target.clone().subtract(0, 0.5, 0).getBlock().getType());
+        }
+        return sb.toString();
     }
 
     /**

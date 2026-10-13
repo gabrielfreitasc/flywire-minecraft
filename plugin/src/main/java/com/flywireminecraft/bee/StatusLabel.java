@@ -50,6 +50,8 @@ final class StatusLabel {
     private static final double HEIGHT_OFFSET_BLOCKS = 1.0;
     private static final double STARTLE_LABEL_THRESHOLD = 0.5; // só cosmético, ver docstring
     private static final double LOW_ENERGY_LABEL_THRESHOLD = 0.2; // só cosmético, ver docstring
+    /** F21 — a partir disto, o frio já é a causa dominante de "quase parada", mesmo nível de sonolência. */
+    private static final double COLD_LETHARGIC_LABEL_THRESHOLD = 0.6;
 
     // F11 (26/09/2026, pedido do usuário) — barra de fome ABAIXO da abelha:
     // 5 ícones que vão esvaziando conforme o percentual do EnergyTracker.
@@ -72,7 +74,7 @@ final class StatusLabel {
             JsonObject tasteMotor, boolean groomingEpisodeIsDodge, boolean sheltered, boolean escapeActive,
             boolean tasteFollowingPlayer, double energyLevel,
             JsonObject thermoMotor, boolean heatNear, boolean coldNear, boolean heatAvoiding,
-            boolean drowsy, boolean wokenAtNight
+            boolean drowsy, boolean wokenAtNight, double coldSeverity
     ) {
         if (stand == null || !stand.isValid()) {
             stand = spawn(bee, HEIGHT_OFFSET_BLOCKS);
@@ -80,7 +82,7 @@ final class StatusLabel {
         stand.teleport(bee.getLocation().add(0, HEIGHT_OFFSET_BLOCKS, 0));
         stand.setCustomName(pickMessage(bristleMotor, hygroMotor, johnstonMotor, tasteMotor,
                 thermoMotor, heatNear, coldNear, heatAvoiding, drowsy, wokenAtNight,
-                groomingEpisodeIsDodge, sheltered, escapeActive, tasteFollowingPlayer, energyLevel));
+                groomingEpisodeIsDodge, sheltered, escapeActive, tasteFollowingPlayer, energyLevel, coldSeverity));
 
         if (hungerStand == null || !hungerStand.isValid()) {
             hungerStand = spawn(bee, HUNGER_BAR_OFFSET_BLOCKS);
@@ -134,7 +136,7 @@ final class StatusLabel {
             JsonObject bristleMotor, JsonObject hygroMotor, JsonObject johnstonMotor, JsonObject tasteMotor,
             JsonObject thermoMotor, boolean heatNear, boolean coldNear, boolean heatAvoiding,
             boolean drowsy, boolean wokenAtNight, boolean groomingEpisodeIsDodge, boolean sheltered, boolean escapeActive, boolean tasteFollowingPlayer,
-            double energyLevel
+            double energyLevel, double coldSeverity
     ) {
         // F9/AD-20 — mesma ordem de prioridade de MotorMapping.toVelocity:
         // o texto tem que bater com o que está REALMENTE no controle.
@@ -151,9 +153,31 @@ final class StatusLabel {
             return ChatColor.GOLD + "Muito calor — fugindo do perigo!";
         }
         if (MotorMapping.isSeekingShelterActive(hygroMotor)) {
-            return sheltered
-                    ? ChatColor.DARK_AQUA + "Abrigada da chuva"
-                    : ChatColor.DARK_AQUA + "Não gosta de chuva — buscando abrigo";
+            // F21 (06/10/2026) — achado do usuário: chuva ativa hygrotaxis
+            // (direção) e, ao mesmo tempo, frio real reduz a velocidade por
+            // baixo (applyColdModifiers) — os dois ficam em controle juntos
+            // (um a direção, outro a magnitude), mas o balão só mostrava o
+            // de chuva, escondendo o de frio por completo mesmo quando
+            // coldSeverity estava bem acima do limiar letárgico. Medido:
+            // `ThermalSensor`/`applyColdModifiers` nunca pararam de agir
+            // durante a chuva (log `vel` vs `applied` confere com a
+            // fórmula) — só o texto escondia. Combinado, não substituído.
+            // Primeira correção só cobria coldSeverity acima do limiar
+            // letárgico (0,6) — na prática a maioria das medições reais
+            // fica em 0,30-0,39 (piso de "gelo/neve por perto", ver
+            // ThermalSensor.COLD_SOURCE_NEARBY_SEVERITY_FLOOR), bem abaixo
+            // disso, então o balão continuava mostrando só "buscando
+            // abrigo" na maior parte do tempo. `coldNear` (sim/não) é o
+            // mesmo sinal que já virava "Sente frio" no bloco informativo
+            // mais abaixo — também precisa aparecer aqui combinado.
+            String shelterPart = sheltered ? "Abrigada da chuva" : "Não gosta de chuva — buscando abrigo";
+            if (coldSeverity > COLD_LETHARGIC_LABEL_THRESHOLD) {
+                return ChatColor.DARK_AQUA + shelterPart + ChatColor.AQUA + " — letárgica de frio";
+            }
+            if (coldNear) {
+                return ChatColor.DARK_AQUA + shelterPart + ChatColor.AQUA + " — sente frio";
+            }
+            return ChatColor.DARK_AQUA + shelterPart;
         }
         boolean tasteActive = MotorMapping.isTasteSeekingActive(tasteMotor);
         if (tasteActive && tasteFollowingPlayer) {
@@ -180,6 +204,11 @@ final class StatusLabel {
         if (drowsy) {
             // F13 (26/09/2026, pedido do usuário) — noite calma: quase parada e baixa.
             return ChatColor.DARK_BLUE + "Sonolenta — quase dormindo";
+        }
+        if (coldSeverity > COLD_LETHARGIC_LABEL_THRESHOLD) {
+            // F21 (06/10/2026, pedido do usuário) — frio extremo: mesma prioridade
+            // de drowsy, mesmo efeito visível (quase parada, baixa), causa diferente.
+            return ChatColor.AQUA + "Letárgica de frio";
         }
         if (johnstonMotor != null && johnstonMotor.has("startle")
                 && johnstonMotor.get("startle").getAsDouble() > STARTLE_LABEL_THRESHOLD) {

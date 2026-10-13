@@ -260,6 +260,41 @@ Minecraft. Subcircuito ocelar: 625 neurônios, 2.981 conexões.
   `sim/src/flywire_sim/server.py` (topo do arquivo) e F16 em
   `docs/03-roadmap-fases.md`.
 
+- **Modulador de altura que depende de achar o chão falha em SILÊNCIO
+  quando o chão está fora do alcance da varredura.** Achado real (F25,
+  07/10/2026): `limitSpeedAndHeight` usava `rayTraceBlocks` com 16 blocos;
+  a abelha posta a 150 de altura (chão ~30-40 abaixo) ficou parada no
+  lugar — `ground == null` pulava o ajuste inteiro, sem log nenhum. Fome
+  (F11) e sono (F13) tinham o mesmo limite desde sempre, só nunca foram
+  testados tão alto. Corrigido com `GROUND_RAYTRACE_DISTANCE_BLOCKS = 384`.
+  **Ao testar comportamento ligado a altura, testar também BEM alto** —
+  o caso "não achou nada" não é erro, é no-op silencioso.
+- **Teto de altura forçado + sistema de recuperação podem formar ciclo
+  contra o mesmo obstáculo.** Achado real (F26, 07/10/2026): o empurrão de
+  recuperação tira a abelha do obstáculo, mas o teto baixo (fome/busca,
+  1,5 bloco) devolve ela à altura dele assim que o empurrão acaba, e a
+  direção do circuito não mudou — bate de novo. Corrigido com folga
+  pós-recuperação (`OBSTACLE_GRACE_TICKS`). Ao criar modulador novo que
+  FORÇA altura, perguntar: ele briga com o empurrão de recuperação?
+  **E o teto em si precisa ser ≥ ~2 blocos** (F27): com 1,0 bloco
+  (frio letárgico) a abelha ficava presa a ~0,99 do chão e nenhum degrau
+  de 1 bloco era transponível (degrau 1,0 + corpo ~0,6) — morria de
+  fome ao lado da comida. Teto de altura abaixo disso = terreno
+  intransponível, não "voar baixo". **E teto relativo ao chão logo abaixo
+  não basta quando há ALVO** (F28): melancia num degrau 1 bloco acima
+  ficou fora de alcance mesmo com teto 2,0 — travou a 0,85 (meia largura
+  da melancia + da abelha), na lateral. Com alvo à vista, o teto respeita
+  a altura absoluta do alvo (`minWorldY`).
+
+- **Abelha longe do jogador congela no ar — não é travamento do plugin.**
+  Medido (F30, 13/10/2026): ela voou ~200 blocos e parou no meio do ar,
+  0,00 bloco por tentativa de recuperação, ar em volta. Fora do
+  `simulation-distance` (10 chunks ≈ 160 blocos do jogador) o servidor não
+  tica física de entidade: `setVelocity` e o empurrão de recuperação viram
+  no-op. Em teste/experimento longo, ficar perto dela ou trazê-la com
+  `goto`; recuperações seguidas com 0,00 bloco e ar em volta = checar a
+  distância do jogador antes de procurar bug.
+
 ## Papéis no projeto
 
 | Papel | Responsabilidade | Fronteira |

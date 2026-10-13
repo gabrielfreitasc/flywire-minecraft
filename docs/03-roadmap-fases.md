@@ -2677,6 +2677,372 @@ por circuito.
 
 ---
 
+## F21 — Busca ativa por comida com fome + frio desacelera (06/10/2026) ✅ plugin, pendente calibração em jogo
+
+**Levantamento de pendências (01/10/2026):** da lista de 6 itens que o
+usuário escolheu atacar, dois eram comportamento de embodiment (proxy de
+engenharia, mesmo padrão de `EnergyTracker`/`SleepState`, **não** circuito
+neural novo):
+
+**B2 — busca ativa por comida quando com fome.** Pedido do usuário:
+"seria interessante estigarmos essa busca por comida quando estiver com
+fome". `TasteSensor.findNearestFood` ganhou uma sobrecarga com raio
+explícito (`findNearestFood(Bee, double)`); `ControlLoop` escala o raio
+com `EnergyTracker.hungerFactor()`:
+
+```
+raio efetivo = FOOD_SEARCH_RADIUS_BLOCKS (4,0)
+             + hungerFactor() × HUNGRY_SEARCH_RADIUS_EXTRA_BLOCKS (4,0)
+```
+
+Faminta, o raio dobra (8,0 blocos). `findNearestFood(Bee)` sem raio
+continua existindo pra log e `TasteLesionExperiment` — uma comparação de
+lesão não pode variar o raio por condição. Ver `plugin/README.md`.
+
+**B4 — frio desacelera.** Pedido do usuário, com biologia específica:
+moscas são ectotérmicas — abaixo de ~18°C a locomoção já cai
+visivelmente, perto de ~10-12°C o voo fica praticamente impossível
+(estado letárgico). Minecraft não tem °C — `ThermalSensor.Reading` ganhou
+`coldSeverity` (0,0-1,0), interpolando a escala de temperatura de bioma do
+próprio jogo entre `COLD_ONSET_BIOME_TEMPERATURE` (≈18°C) e
+`COLD_LETHARGIC_BIOME_TEMPERATURE` (≈10-12°C), com piso quando há
+gelo/neve por perto mesmo em bioma ameno. `ControlLoop.applyColdModifiers`
+reaproveita `limitSpeedAndHeight` (mesma função de F11/F13): horizontal
+reduzido até `COLD_LETHARGIC_SPEED_FRACTION` (0,1) e teto de altura até
+`COLD_LETHARGIC_CEILING_BLOCKS` (1,0 bloco — subiu pra 2,0 no F27). Empilha com fome e sono —
+fuga de calor/medo/recuperação mecânica ficam de fora, mesma exceção que
+fome/sono já têm. Balão ganhou "Letárgica de frio" acima de 0,6 de
+severidade.
+
+- [x] `TasteSensor.findNearestFood(Bee, double)`, raio escalado por fome em `ControlLoop`.
+- [x] `ThermalSensor.Reading.coldSeverity`, `applyColdModifiers`, label no balão.
+- [x] `./gradlew build` limpo (compilação + jar).
+- [x] Calibração em jogo do frio (06/10/2026) — teleportada pra
+      `frozen_peaks` (temperatura -0,7), `coldSeverity` saturou em 1,00 de
+      forma estável; log `vel` vs `applied` confirmou razão = 0,10,
+      batendo exatamente com `COLD_LETHARGIC_SPEED_FRACTION`. Modificador
+      confirmado ativo também durante chuva (não é sobreposto, só o balão
+      escondia — ver achado abaixo).
+- [x] **Achado do usuário — balão escondia o frio atrás da mensagem de
+      chuva.** `StatusLabel.pickMessage` retornava a mensagem de abrigo
+      (hygrotaxis ativo) sem nunca chegar na checagem de frio, mesmo com
+      `coldSeverity` correto por baixo. Corrigido combinando as mensagens
+      em vez de uma esconder a outra; ampliado numa segunda rodada porque
+      a primeira correção só cobria `coldSeverity > 0,6` (limiar
+      letárgico) — a maioria das medições reais de gelo/neve por perto
+      fica em 0,30-0,39 (o piso, não o extremo), então quase nunca
+      aparecia. Agora combina com `coldNear` (sim/não) em qualquer
+      severidade.
+- [ ] Calibração em jogo da busca por comida com fome (raio até 8,0
+      blocos) ainda pendente — só o frio foi validado nesta rodada.
+
+---
+
+## F22 — Comando pra ignorar presença do jogador (06/10/2026) ✅ plugin
+
+Pedido do usuário: "crie um comando em que todos os circuitos não reagem
+à presença do jogador (possível ativar e desativar)". Motivação concreta,
+vista nos próprios logs de calibração do F21: pra observar/testar a
+abelha, o jogador precisa estar perto dela, e três sensores tratam
+`Player` como estímulo igual a um mob de verdade:
+
+- `TouchSensor.isNearSomething` → dispara `grooming` (mesma raiz que já
+  motivou `touchmute` no F9 — mas aquele mascara o circuito `bristle`
+  inteiro, perdendo toque real de mob/parede também).
+- `LoomingSensor` → jogador conta como ameaça pro `escape`.
+- `TasteSensor` → jogador segurando comida conta pro `taste`/`appetite`.
+
+Novo comando `/flywirebee ignoreplayer <on|off>` — mais cirúrgico que
+`touchmute`: liga um filtro (`setIgnorePlayer`) direto nos três sensores
+que exclui só `Player` da varredura de entidades, mob/item/bloco
+continuam contando normal. `ControlLoop.setIgnorePlayer` repassa pros
+três sensores, cada um com seu próprio campo (mesmo padrão de
+`touchLesioned`, só que no sensor em vez de mascarar a leitura depois).
+
+- [x] `TouchSensor`/`LoomingSensor`/`TasteSensor` ganham `setIgnorePlayer`.
+- [x] `ControlLoop.setIgnorePlayer` repassa pros três.
+- [x] Comando `/flywirebee ignoreplayer <on|off>` registrado.
+- [x] `./gradlew build` limpo (compilação + jar).
+- [x] Validado em jogo (06/10/2026) — usuário confirmou "funcionou certinho".
+
+---
+
+## F23 — Partículas de clima (06/10/2026) ✅ plugin, validado em jogo
+
+Pedido do usuário: partícula de neve com frio, partícula de calor em
+ambiente muito quente. `ActivityVisualizer.renderEnvironment` — diferente
+do DUST laranja que já existia pro circuito `thermo` (representa
+ATIVIDADE NEURAL do canal `thermal`, não a leitura crua do sensor). Puro
+cosmético, direto de `ThermalSensor.Reading` (`heatNear`/`coldNear`/
+`coldSeverity`), sem tocar a simulação: `Particle.SNOWFLAKE` com `coldNear`
+(quantidade escala com `coldSeverity`), `Particle.FLAME` com `heatNear`.
+Liga/desliga junto com `/flywirebee visualize <on|off>` já existente.
+
+- [x] `ActivityVisualizer.renderEnvironment`, chamado de `ControlLoop`.
+- [x] `./gradlew build` limpo.
+- [x] Validado em jogo (06/10/2026) — usuário confirmou "apareceu certinho".
+
+---
+
+## F24 — Fadiga combinada confundida com travamento (06/10/2026) ✅ corrigido
+
+**Bug real, achado do usuário em jogo (06/10/2026):** faminta
+(`hunger=1,0`) e em frio extremo (`coldSeverity=1,0`) ao mesmo tempo, com
+melancia no chão pra ela buscar — ela ia em direção à comida, "saía
+voando" (empurrão de recuperação), virava de costas pra comida, tentava
+voltar, e a cada ciclo ficava MAIS longe, nunca mais perto.
+
+**Causa:** `applyHungerModifiers` × `applyColdModifiers` no máximo dos
+dois dá `0,35 × 0,10 = 0,035` da velocidade normal (F11/F21) — voando de
+propósito, mas tão devagar que nunca passa do limiar fixo do sistema
+anti-travamento (`STUCK_DISPLACEMENT_THRESHOLD_BLOCKS = 0,3` blocos em 20
+ticks). O sistema confundia "lenta por fadiga" com "travada contra
+obstáculo" e empurrava ela EMBORA da comida (`horizontalOpposite` da
+direção que ela estava tentando seguir) — mesma classe do bug de
+`intentionalLanding` já corrigido no F14 (tastelesion), mas uma variante
+nova: não é "parar" de propósito, é "mover devagar demais" de propósito.
+
+**Correção:** novo método `ControlLoop.fatigueSpeedFraction()` (fome ×
+frio × sono — os três moduladores que já reduzem a velocidade de
+verdade) escala o limiar do sistema anti-travamento na mesma proporção.
+Se ela está comandada a se mover a 3,5% da velocidade normal, só precisa
+de 3,5% do deslocamento normal pra não ser considerada travada.
+**Limitação conhecida, documentada no código:** não distingue se a
+fadiga esteve de fato ativa durante toda a janela de 20 ticks medida
+(ex.: medo venceu fadiga nesse meio tempo) — leitura do estado AGORA,
+mesma disciplina provisória já aceita em `LoomingSensor`/`AlarmSensor`.
+
+- [x] `ControlLoop.fatigueSpeedFraction()` adicionado.
+- [x] Limiar de travamento escalado por ele em vez de fixo.
+- [x] Log de recuperação ganha `limiar efetivo`/`fadiga` pra depurar.
+- [x] `./gradlew build` limpo.
+- [ ] Validação em jogo pendente — repetir o cenário exato (faminta + frio
+      extremo + comida no chão) e confirmar que ela chega na comida sem
+      divergir.
+
+---
+
+## F25 — Busca ativa descendo quando não acha comida (06/10/2026) ✅ plugin
+
+Pedido do usuário, no mesmo relato do F24: "ela estava numa altura muito
+alta e como ela não encontrou nenhum alimento, o certo é ela usar essa
+memória e descer ou andar para outros locais para buscar alimento".
+
+**Investigação do `path_integration` antes de implementar (pedido
+explícito do usuário):** achado real documentado no F19 acima — `DNa02`
+isolado responde limpo e positivo (não é mais "sinal negativo sem uso"),
+mas o papel dele na literatura é "voltar pra lugar conhecido", não
+"explorar à procura de algo novo". Decisão do usuário (via
+`AskUserQuestion`, opção recomendada): proxy de engenharia pra busca,
+SEM usar `path_integration`/`DNa02` — registrar o achado separado (ver
+F19), não forçar um uso que a literatura não sustenta.
+
+**Implementação:** `ControlLoop.applyForagingSearchModifiers` — novo
+campo `foodVisible` (mesma defasagem de 1 tick de `coldNear`/
+`tasteTargetHeldByPlayer`). Só dispara com fome ativa
+(`hungerFactor() > 0`) E nenhuma comida à vista (nem com o raio ampliado
+do F21) — força o teto de altura pro mesmo valor da inanição total
+(`EnergyTracker.STARVING_CEILING_BLOCKS`, 1,5 blocos — subiu pra 2,0 no F27), SEM reduzir
+velocidade horizontal (`speedFraction=1.0`) — não muda a direção que o
+circuito ativo já decidiu (phototaxis por padrão), só obriga ela a
+descer mais agressivamente do que a fadiga de fome sozinha (que só fica
+tão baixa perto da inanição total) — flores/plantações ficam perto do
+chão, flutuar alto nunca acha comida.
+
+- [x] Campo `foodVisible`, `applyForagingSearchModifiers`.
+- [x] Encaixado na cadeia fome→frio→busca→sono (mesmo padrão de
+      `limitSpeedAndHeight` compartilhado).
+- [x] `./gradlew build` limpo.
+- [x] Validação em jogo (07/10/2026) — primeira tentativa FALHOU (achado
+      do usuário: "ela está parada na altura que foi colocada", a 150 de
+      altura). Causa: `limitSpeedAndHeight` só procurava o chão até 16
+      blocos abaixo (`rayTraceBlocks`); com o chão ~30-40 blocos abaixo,
+      voltava `null` e o ajuste de altura era pulado em silêncio — o mesmo
+      limite valia pra fome (F11) e sono (F13), nunca testados tão alto.
+      Corrigido: `GROUND_RAYTRACE_DISTANCE_BLOCKS = 384` (vão máximo do
+      Overworld). Segunda tentativa: desceu até o solo (confirmado pelo
+      usuário). Expôs o problema do F26.
+
+---
+
+## F26 — Teto baixo forçado x obstáculo rente ao chão (07/10/2026) ✅ plugin
+
+**Achado do usuário em jogo, confirmado no log:** faminta (`hunger=1,0`),
+sem comida, já no solo — "ficou voando pra frente barrada por um bloco".
+O sistema de recuperação disparava e funcionava (empurrão pra cima e
+pra longe, `applied.y=0,15`; limiar efetivo 0,08 = 0,3 × fadiga 0,26,
+batendo com o F24), mas assim que o empurrão acabava o teto forçado de
+1,5 bloco descia ela de volta pra altura do MESMO obstáculo, e a direção
+horizontal (decidida pelo circuito, não muda) apontava pro mesmo lugar
+— batia de novo, ciclo. **Não é exclusivo do F25:** fome sozinha
+(`STARVING_CEILING_BLOCKS` na inanição, F11) já produzia o mesmo teto; o
+F25 só faz esse teto chegar mais cedo (qualquer fome + sem comida).
+
+**Correção (decisão do usuário via `AskUserQuestion`, opção
+recomendada):** `OBSTACLE_GRACE_TICKS = 20` (1s) — ao fim de cada
+empurrão de recuperação, o teto de fome e de busca fica suspenso por esse
+tempo (velocidade reduzida continua valendo), dando tempo dela se afastar
+do obstáculo antes de ser forçada a descer de novo. Frio e sono ficaram
+de fora (não implicados no ciclo observado) — **errado pro frio, ver
+F27.**
+
+- [x] `obstacleGraceTicksLeft`, ligado ao fim do `recoveryBoostTicksLeft`.
+- [x] `applyHungerModifiers`/`applyForagingSearchModifiers` respeitam a folga.
+- [x] `./gradlew build` limpo.
+- [x] Testado em jogo (07/10/2026) — não bastou, ver F27.
+
+---
+
+## F27 — Teto letárgico de 1,0 bloco tornava degrau intransponível (07/10/2026) ✅ plugin
+
+**Teste em jogo do F24/F26 (07/10/2026)**, pico gelado, de dia, sem
+chuva: faminta (`hunger=1,0`), frio máximo (`coldSeverity=1,0`), comida
+à vista. **F24 confirmado:** as 3 recuperações do trecho foram bloqueio
+físico de verdade (0,00 blocos em 20 ticks, limiar efetivo 0,01 = 0,3 ×
+fadiga 0,035) — nenhum falso positivo. **Mas ela divergiu da comida de
+novo, por outra causa:** distância 1,02 → empurrada pra 3,77/6,33 →
+volta a 3,03 → 7,15 → 7,16 → perde de vista (`food=false`).
+
+**Causa, medida no log:** o teto do frio letárgico era 1,0 bloco — ela
+ficava presa nele (`applied.y=0,0025` = `(1,0 − altura) × 0,2` →
+altura ≈ 0,99). Com o corpo da abelha (~0,6), voando a ~1 bloco ela não
+passa por cima de um degrau de 1 bloco, e o pico gelado é cheio deles.
+Batia, a recuperação empurrava pra LONGE da comida, e o teto do frio
+(que o F26 tinha deixado fora da folga — erro meu) a descia de volta
+(`applied.y=-0,1` logo após o empurrão).
+
+**Correção (decisão do usuário via `AskUserQuestion`, opção
+recomendada):** `ThermalSensor.COLD_LETHARGIC_CEILING_BLOCKS` 1,0 → 2,0 e
+`EnergyTracker.STARVING_CEILING_BLOCKS` 1,5 → 2,0 (degrau 1,0 + corpo
+~0,6 + folga) — continua voando baixa e lenta, mas passa por cima de
+degrau. Vale também pra busca do F25 (reaproveita `STARVING_CEILING_BLOCKS`).
+Frio entra na folga pós-recuperação do F26. Sono (`DROWSY_CEILING_BLOCKS`
+= 1,0) ficou como está — sonolenta ela já quase não se move.
+
+- [x] Constantes alteradas, frio na folga.
+- [x] `./gradlew build` limpo.
+- [x] Testado em jogo (07/10/2026) — melhorou (convergiu 2,82 → 0,85 sem
+      divergir no caminho), mas ainda não comeu: ver F28.
+
+---
+
+## F28 — Teto relativo ao chão impedia alcançar comida num degrau (07/10/2026) ✅ plugin
+
+**Teste em jogo do F27**, mesmo cenário: ela convergiu limpo (2,82 →
+0,85, ~0,21 bloco/s = fome × frio no máximo) e travou de verdade (0,00
+blocos) a **0,85** do alvo — exatamente 0,5 (meia largura da melancia) +
+0,35 (meia largura da abelha): encostou na LATERAL da melancia. Relato
+do usuário bate: "uns jump pra cima e depois desce novamente, e fica
+indo beeeem lentamente até o alimento, porém não chega a se alimentar".
+Os "pulos" são o empurrão de recuperação (`applied.y=0,15`).
+
+**Causa, medida:** o teto é relativo ao chão LOGO ABAIXO da abelha —
+`applied.y=0,00289` = `(2,0 − altura) × 0,2` → altura ≈ 1,986. A
+melancia está num degrau 1 bloco mais alto que o chão por onde ela
+chega, então o fundo dela ficava ~0,014 abaixo do topo da melancia.
+Subir o teto de novo só empurraria o problema pro próximo degrau.
+
+**Correção:** com comida à vista, o teto de fome e de frio nunca fica
+abaixo da altura ABSOLUTA do alvo + `FOOD_TARGET_CLEARANCE_BLOCKS`
+(0,5) — `limitSpeedAndHeight` ganhou `minWorldY` (teto efetivo =
+max(teto, minWorldY − chão)). Sem comida à vista, sem efeito. Sono
+(quase parada) e busca F25 (só age SEM comida) não usam.
+
+- [x] `foodTargetLocation`, `foodTargetMinWorldY()`, `limitSpeedAndHeight(..., minWorldY)`.
+- [x] `./gradlew build` limpo.
+- [x] Validado em jogo, parcial (07/10/2026): pico gelado,
+      `coldSeverity=1,00`, convergiu 2,79 → 0,28 em 4s, parou (abaixo do
+      limiar de chegada 0,3) e ficou 18s sem nenhum empurrão de
+      recuperação. Antes travava a 0,85 na lateral.
+- [x] Reproduzido 3/3 só com frio (sem fome): chega e para em cima.
+- [ ] Caso faminta (`hunger=1,0`) + frio testado (07/10/2026) — **ainda
+      falha**: avistou a 6,60, chegou a 2,55 em ~17s, travou (0,00 bloco),
+      3 recuperações em 7s, perdeu a comida de vista. Leitura do log: a
+      comida estava ABAIXO dela (`applied.y` −0,11 a −0,16), mas a
+      distância caía só na velocidade horizontal (~0,17 bloco/s) — ela
+      estava apoiada numa superfície acima da melancia; o componente
+      horizontal colapsou logo antes de travar (alvo quase reto embaixo).
+      Cada recuperação a joga pra longe a velocidade cheia (0,15/tick, sem
+      fadiga) contra ~0,0095/tick de aproximação. Geometria não
+      identificável sem posição — ver F29. A correção "recuperação sobe
+      em vez de afastar" foi descartada antes de implementar: com o alvo
+      embaixo, subir afastaria ela dele.
+
+---
+
+## F29 — Log de geometria pra diagnosticar o caso faminta + frio (07/10/2026) ✅ plugin, diagnóstico
+
+Linha nova `[Geometria]` no log (1x/s, e também a cada recuperação):
+posição da abelha, bloco logo abaixo, bloco à frente na direção do
+movimento aplicado (altura dos pés e +1) e, com comida à vista, o alvo,
+`dy` (altura do alvo − altura dela), o bloco NO ponto-alvo (tem que ser
+ar pra ela conseguir chegar) e o bloco de comida embaixo. Sem efeito em
+comportamento.
+
+- [x] `ControlLoop.geometryDescription`, `./gradlew build` limpo.
+- [x] Rodado de novo (07/10/2026): a melancia estava num BURACO — topo
+      em y=105,00 (`noAlvo=AIR`, `sobAlvo=MELON`) com o terreno de neve
+      em y=106 (`abaixo=SNOW_BLOCK`). Ela andou pela neve, desceu pro
+      buraco e **chegou**: às 22:09:42 em cima da melancia (`abaixo=MELON`,
+      `dy=0,00`, 0,30 do alvo), `hunger` 1,00 → 0,00 (comeu, energia
+      recarregou). **Caso faminta + frio fechado** — F24 a F28 validados
+      em conjunto. A rodada anterior que falhou provavelmente pegou outra
+      aproximação do mesmo buraco; não reproduziu.
+
+---
+
+## F30 — Saciedade: cheia ela sai, só volta a buscar comida em 20% (07/10/2026) ✅ plugin, validado em jogo (13/10/2026)
+
+**Achado do usuário em jogo:** "quando bate 100% de energia ela ainda
+fica no alimento... ela deveria dar os 100% e sair voando novamente e
+quando bater o limiar de 20% começar a busca de alimentos". Causa no
+código: o estímulo do `taste` era só "comida no raio", independente da
+fome — cheia ou não, `appetite` saturava, ela ia até a comida e parava
+(`computeTasteVelocity` → zero na chegada), pra sempre.
+
+**Correção:** histerese de saciedade em `EnergyTracker`: enche (100%) →
+saciada; cai até `SEEK_FOOD_BELOW` (0,2) → volta a buscar. Saciada, o
+`ControlLoop` não procura comida: sem estímulo do circuito
+(`foodContact=false`), sem alvo, sem "comendo" — `appetite` decai sozinho
+e o phototaxis volta a guiar o voo. Corte no ESTÍMULO, não no
+comportamento: na literatura, fome aumenta a sensibilidade dos GRNs de
+açúcar via dopamina (Inagaki et al., 2014). Proxy de engenharia, mesmo
+status do `EnergyTracker`. Busca do F25 também respeita (saciada entre
+40% e 20% não força descida). `TasteLesionExperiment` desliga o filtro
+(`setSatietyGateSuppressedForExperiment`) — senão, cheia, ela ignoraria a
+comida nas duas condições e o experimento daria nulo falso.
+
+**Achado lateral:** o comentário de `BASE_DEPLETION_PER_TICK` dizia
+"esgota em ~1000s (~16min)"; são 1000 TICKS = ~50s (medido: 40% → 0 em
+~24s). Comentário corrigido. **Calibração (decisão do usuário,
+13/10/2026):** ciclo cheia → 20% em ~5 min parada —
+`BASE_DEPLETION_PER_TICK` = 0,8/6000 (era 0,001, ~7,5x menor) e
+`MOVEMENT_DEPLETION_PER_BLOCK` escalado junto (2x o basal por bloco,
+mesma proporção de antes). Voando em velocidade máxima, ~3 min.
+
+- [x] `EnergyTracker.SEEK_FOOD_BELOW`/`isSeekingFood()`, gate no `ControlLoop`.
+- [x] Log ganha `energy=` e `seekingFood=`.
+- [x] Gasto de energia recalibrado pra ~5 min (13/10/2026).
+- [x] `./gradlew build` limpo.
+- [x] Validado em jogo (13/10/2026), ciclo completo, `goals off`, pico
+      gelado (`coldSeverity=1,00`): começou cheia às 19:14:04 com
+      `seekingFood=false` e voou ignorando a comida; 1,00 → 0,20 em ~4min50s
+      (voando, ritmo novo); às 19:18:56 `energy=0,20` → `seekingFood=true`;
+      9s depois `food=true` (avistou); chegou em cima da melancia às
+      19:19:28 (`abaixo=MELON`), 0,13 → 1,00 em ~5s; às 19:19:33
+      `seekingFood=false`, `food=false`, `appetite` decaindo, e às 19:19:36
+      já tinha saído (`abaixo=PACKED_ICE`, lenta pelo frio). Uma recuperação
+      na aproximação (encostou na lateral a 0,86, faminta + frio a ~0,018
+      bloco/tick); reaproximou e chegou sozinha em ~13s.
+- **Achado lateral (não é bug do plugin):** antes de chegar a 0,20 ela voou
+      ~200 blocos pro leste e congelou no ar (0,00 bloco por recuperação,
+      ar em volta) — saiu do `simulation-distance=10` (~160 blocos) do
+      jogador; fora dele o servidor não tica física de entidade, então
+      `setVelocity` e empurrões de recuperação não têm efeito. Resolvido
+      trazendo com `goto`.
+
+---
+
 ## Fora de escopo (candidatos a v2+)
 
 | Item | Fase provável |

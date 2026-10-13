@@ -87,10 +87,20 @@ public final class ActivityVisualizer {
     private static final int MAX_PARTICLES_PER_CIRCUIT = 6;
     private static final double RADIUS = 0.6;
 
+    // F23 (06/10/2026, pedido do usuário) — partícula literal de ambiente
+    // (neve/calor), DIFERENTE do DUST laranja de `thermo` acima (que
+    // representa ATIVIDADE NEURAL do canal `thermal`, não a leitura crua
+    // do sensor). Isto é só cosmético, direto de `ThermalSensor.Reading`
+    // (heatNear/coldNear/coldSeverity) — mesma disciplina de não alterar a
+    // simulação, só tornar visível o que `ThermalSensor` já lê.
+    private static final int MAX_SNOW_PARTICLES = 6;
+    private static final int HEAT_PARTICLE_COUNT = 4;
+
     /** Roda na thread principal — spawnar partícula é chamada de World, não thread-safe fora dela. */
     public void render(
             Bee bee, JsonObject motor, JsonObject bristleMotor, JsonObject hygroMotor, JsonObject johnstonMotor,
-            JsonObject escapeMotor, JsonObject tasteMotor, JsonObject thermoMotor
+            JsonObject escapeMotor, JsonObject tasteMotor, JsonObject thermoMotor,
+            boolean heatNear, boolean coldNear, double coldSeverity
     ) {
         if (!bee.isValid()) {
             return;
@@ -104,6 +114,37 @@ public final class ActivityVisualizer {
         JsonObject[] byCircuit = {motor, bristleMotor, hygroMotor, johnstonMotor, escapeMotor, tasteMotor, thermoMotor};
         for (int i = 0; i < CIRCUITS.length; i++) {
             renderCircuit(world, center, byCircuit[i], CIRCUITS[i]);
+        }
+        renderEnvironment(world, center, heatNear, coldNear, coldSeverity);
+    }
+
+    /**
+     * F23 — neve quando há frio por perto (quantidade escala com
+     * {@code coldSeverity}, mínimo 1 partícula pra qualquer `coldNear`
+     * ficar visível mesmo no piso de severidade), chama quando há calor
+     * perigoso/bioma muito quente por perto. Os dois sinais são
+     * independentes no sensor (não mutuamente exclusivos por construção),
+     * mas na prática não devem coincidir no mesmo bioma.
+     */
+    private void renderEnvironment(World world, Location center, boolean heatNear, boolean coldNear, double coldSeverity) {
+        if (coldNear) {
+            int count = Math.max(1, (int) Math.round(Math.min(1.0, coldSeverity) * MAX_SNOW_PARTICLES));
+            for (int i = 0; i < count; i++) {
+                double angle = 2 * Math.PI * Math.random();
+                double dx = Math.cos(angle) * RADIUS;
+                double dz = Math.sin(angle) * RADIUS;
+                double dy = Math.random() * RADIUS;
+                world.spawnParticle(Particle.SNOWFLAKE, center.clone().add(dx, dy, dz), 1, 0, 0, 0, 0);
+            }
+        }
+        if (heatNear) {
+            for (int i = 0; i < HEAT_PARTICLE_COUNT; i++) {
+                double angle = 2 * Math.PI * Math.random();
+                double dx = Math.cos(angle) * RADIUS;
+                double dz = Math.sin(angle) * RADIUS;
+                double dy = Math.random() * RADIUS;
+                world.spawnParticle(Particle.FLAME, center.clone().add(dx, dy, dz), 1, 0, 0, 0, 0);
+            }
         }
     }
 

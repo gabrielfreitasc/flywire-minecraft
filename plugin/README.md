@@ -1130,7 +1130,158 @@ candidato natural é `ControlLoop.heading` (mudança de direção já
 comandada a cada tick), já que em *Drosophila* de verdade esse circuito
 reage a self-motion, não a um sensor de ambiente. Campo
 `path_integration_contact` reservado (sempre `false`) até essa decisão.
-Ver `docs/03-roadmap-fases.md` F19.
+
+**Correção (06/10/2026):** o "negativo" era diluição dos 47 descendentes
+incidentais, não ausência de sinal — `DNa02` (literatura: Westeinde et
+al. 2024) isolado responde limpo e POSITIVO. Mesmo assim, ainda **não**
+vira comportamento aqui — papel de DNa02 na literatura é "voltar pra um
+lugar conhecido", não "explorar à procura de algo novo" (o que motivou a
+busca por comida do F25, implementada SEM usar este circuito). Ver
+`docs/03-roadmap-fases.md` F19.
+
+## Busca ativa por comida quando com fome (F21, 06/10/2026)
+
+Pedido do usuário: "seria interessante estigarmos essa busca por comida
+quando estiver com fome". Biologia real: insetos em privação alimentar
+ampliam o esforço de forrageamento (busca mais ampla, não só espera
+passiva na mesma posição). Implementado como proxy de engenharia, mesmo
+padrão de `EnergyTracker`/`SleepState` — **não é circuito neural novo**,
+só o raio de varredura de `TasteSensor.findNearestFood` escala com
+`EnergyTracker.hungerFactor()`:
+
+```
+raio efetivo = FOOD_SEARCH_RADIUS_BLOCKS (4,0)
+             + hungerFactor() × HUNGRY_SEARCH_RADIUS_EXTRA_BLOCKS (4,0)
+```
+
+Faminta (hungerFactor=1,0), o raio dobra pra 8,0 blocos. Sem fome
+(hungerFactor=0,0), raio igual ao original — comportamento e testes
+existentes não mudam. `findNearestFood(Bee)` (sem raio) continua
+existindo pra log/`TasteLesionExperiment`, que não devem variar com fome
+(comparação de lesão precisa do mesmo raio nas duas condições). Pendente:
+calibrar em jogo se 8,0 blocos no máximo é um salto perceptível ou sutil
+demais — ver item 3 da lista de pendências (calibração em jogo).
+
+## Frio desacelera a abelha (F21, 06/10/2026)
+
+Pedido do usuário, com biologia específica: moscas são ectotérmicas — a
+temperatura corporal depende do ambiente, e com frio o metabolismo
+desacelera. Abaixo de ~18°C a locomoção já cai visivelmente; perto de
+~10-12°C o voo fica praticamente impossível, estado letárgico. Minecraft
+não tem °C, então `ThermalSensor.Reading.coldSeverity()` (0,0-1,0) mapeia
+os dois limiares reais pros dois extremos da escala de temperatura de
+bioma do próprio jogo (`COLD_ONSET_BIOME_TEMPERATURE` ≈ 18°C,
+`COLD_LETHARGIC_BIOME_TEMPERATURE` ≈ 10-12°C) — mesma ideia que já existia
+pro sim/não (`HOT_BIOME_TEMPERATURE`/`COLD_BIOME_TEMPERATURE`). Gelo/neve
+por perto também impõe um piso de severidade mesmo em bioma ameno
+(`COLD_SOURCE_NEARBY_SEVERITY_FLOOR`).
+
+Proxy de engenharia, **não é circuito neural novo** — mesmo padrão de
+`EnergyTracker`/`SleepState`. `ControlLoop.applyColdModifiers` reaproveita
+o `limitSpeedAndHeight` já usado pela fome (F11) e pelo sono (F13):
+horizontal reduzido até `ThermalSensor.COLD_LETHARGIC_SPEED_FRACTION`
+(0,1 — mais extremo que a fome, "voo praticamente impossível" é um limite
+biológico mais duro que fadiga por fome) e teto de altura descendo até
+`COLD_LETHARGIC_CEILING_BLOCKS` (1,0 bloco — subiu pra 2,0 no F27, ver
+abaixo). Empilha com fome e sono (uma
+abelha faminta E com frio fica mais lenta que só um dos dois) — fuga de
+perigo térmico (`heatAvoidDirection`), recuperação mecânica e fuga por
+medo ficam de fora, mesma exceção que fome/sono já têm. Pendente:
+calibrar os dois limiares de temperatura de bioma em jogo (biomas reais
+disponíveis no mundo de teste) — ver item 3 da lista de pendências.
+
+**Validado em jogo (06/10/2026):** teleportada pra `frozen_peaks`
+(temperatura -0,7, abaixo do limiar letárgico), `coldSeverity` saturou em
+1,00 de forma estável — razão `applied`/`vel` medida no log bateu
+exatamente com `COLD_LETHARGIC_SPEED_FRACTION` (0,10). Também confirmado
+com `goto` manual que o modificador nunca para de agir durante chuva
+(`applyColdModifiers` roda antes do `if (sleepState.isDrowsy())`, não
+depois) — só o BALÃO escondia a informação (ver próxima seção).
+
+**Achado do usuário (06/10/2026) — balão escondia o frio atrás da
+chuva.** `StatusLabel.pickMessage` checava a mensagem de abrigo
+(hygrotaxis) e retornava direto, sem nunca chegar na checagem de frio —
+mesmo com `coldSeverity` correto por baixo (confirmado no log, `vel` vs
+`applied` batendo com a fórmula). Corrigido combinando as duas mensagens
+em vez de uma esconder a outra: "Não gosta de chuva — buscando abrigo —
+sente frio" (ou "— letárgica de frio" acima do limiar 0,6). Primeira
+correção só cobria o limiar letárgico (0,6) — a maioria das medições
+reais fica em 0,30-0,39 (piso de gelo/neve por perto, não bioma extremo),
+então ainda não aparecia a maior parte do tempo; ampliado pra combinar
+também com `coldNear` (sim/não, qualquer severidade).
+
+## Presença do jogador contaminando outros circuitos (F22, 06/10/2026)
+
+Pedido do usuário: "crie um comando em que todos os circuitos não reagem
+à presença do jogador (possível ativar e desativar)". Motivação real,
+vista nos próprios logs de calibração do F21: pra observar/testar a
+abelha, o jogador precisa ficar perto dela — e três sensores tratam
+`Player` como fonte de estímulo igual a um mob de verdade, contaminando
+qualquer calibração de OUTRO circuito:
+
+- `TouchSensor.isNearSomething` — jogador perto conta como "algo tocou",
+  dispara `grooming` (mesmo problema que motivou `touchmute` no F9, mas
+  `touchmute` mascara o circuito `bristle` INTEIRO, perdendo toque real de
+  mob/parede também).
+- `LoomingSensor` (nearestThreat) — jogador conta como ameaça pro `escape`
+  (looming e direção de fuga).
+- `TasteSensor` — jogador segurando comida conta pro `taste`/`appetite`.
+
+Novo comando, mais cirúrgico que `touchmute`: `/flywirebee ignoreplayer
+<on|off>` liga um filtro (`setIgnorePlayer`) nos três sensores acima que
+exclui especificamente `Player` da varredura de entidades — mob, item e
+bloco continuam contando normal. `ControlLoop.setIgnorePlayer` repassa
+pros três (`touchSensor`/`loomingSensor`/`tasteSensor`), cada um com seu
+próprio campo `ignorePlayer` (mesmo padrão de `touchLesioned` em
+`ControlLoop`, só que vivendo no sensor em vez de mascarar a leitura
+depois). Pendente: validar em jogo que `proximity`/`grooming`/`escapeDrive`
+realmente ficam `false`/baixos com o jogador do lado e `ignoreplayer on`.
+
+## Fadiga combinada confundida com travamento (F24, 06/10/2026)
+
+Bug real, achado do usuário em jogo: faminta (`hunger=1,0`) e em frio
+extremo (`coldSeverity=1,0`) ao mesmo tempo, com melancia no chão — ela
+ia em direção à comida tão devagar (`0,35 × 0,10 = 3,5%` da velocidade
+normal, F11/F21) que nunca passava do limiar fixo do sistema
+anti-travamento, que a empurrava embora repetidamente, divergindo mais a
+cada ciclo. Corrigido: `ControlLoop.fatigueSpeedFraction()` (fome × frio
+× sono) escala o limiar na mesma proporção da fadiga real. Ver
+`docs/03-roadmap-fases.md` F24.
+
+## Busca ativa descendo quando não acha comida (F25, 06/10/2026)
+
+Pedido do usuário: quando faminta e sem comida à vista numa altura alta,
+descer pra procurar — flores/plantações ficam perto do chão.
+Investigação do `path_integration`/`DNa02` feita antes (ver F19) mostrou
+sinal limpo mas papel de literatura incompatível ("voltar pra lugar
+conhecido", não "explorar algo novo") — decisão do usuário: proxy de
+engenharia, sem usar esse circuito. `ControlLoop.applyForagingSearchModifiers`
+força o teto de altura pro valor de inanição total quando faminta E sem
+comida visível, sem mudar a direção horizontal. Ver
+`docs/03-roadmap-fases.md` F25.
+
+## Saciedade (F30, 07/10/2026)
+
+Cheia (100%) ela fica saciada e não "vê" comida — o circuito `taste` não
+é estimulado, `appetite` decai e ela sai voando. Volta a buscar quando a
+energia cai a 20% (`EnergyTracker.SEEK_FOOD_BELOW`). Antes ficava parada
+na comida pra sempre. `TasteLesionExperiment` desliga esse filtro. Ver
+`docs/03-roadmap-fases.md` F30.
+
+## Partículas de clima (F23, 06/10/2026)
+
+Pedido do usuário: partícula de neve com frio, partícula de calor em
+ambiente muito quente. `ActivityVisualizer.renderEnvironment` — **diferente**
+do DUST laranja que já existia pro circuito `thermo` (esse representa
+ATIVIDADE NEURAL do canal `thermal`, não a leitura crua do sensor). Isto é
+puramente cosmético, direto de `ThermalSensor.Reading` (`heatNear`/
+`coldNear`/`coldSeverity`), sem tocar a simulação: `Particle.SNOWFLAKE`
+quando `coldNear` (quantidade escala com `coldSeverity`, mínimo 1 pra
+qualquer frio ficar visível), `Particle.FLAME` quando `heatNear`. Liga/
+desliga junto com `/flywirebee visualize <on|off>` (mesmo toggle que já
+existia, não é comando novo). Pendente: confirmar em jogo que neve E calor
+não aparecem juntos no mesmo bioma (deveriam ser independentes na prática,
+mesmo não sendo mutuamente exclusivos por construção no sensor).
 
 ## Regra
 

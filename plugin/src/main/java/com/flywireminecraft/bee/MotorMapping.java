@@ -381,7 +381,7 @@ public final class MotorMapping {
      *     deslocamento CRU (não normalizado — {@code MotorMapping} precisa
      *     do comprimento pra saber se já chegou perto) da abelha até a
      *     fonte de comida mais próxima
-     *     ({@link TasteSensor#findNearestFood}, já com deslocamento pra
+     *     ({@link TasteSensor#findNearestFood(org.bukkit.entity.Bee)}, já com deslocamento pra
      *     ficar ACIMA do bloco/item/jogador), ou {@code null} se nenhuma
      *     fonte está no raio de busca agora. Recalculado a cada troca —
      *     é isso que faz "pousar em cima" (alvo parado) e "seguir o

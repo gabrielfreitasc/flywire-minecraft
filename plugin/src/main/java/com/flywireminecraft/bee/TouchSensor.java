@@ -63,6 +63,15 @@ public final class TouchSensor {
 
     private Location lastLocation;
     private volatile boolean contactSinceLastRead = false;
+    // F22 (06/10/2026, pedido do usuário) — pra calibrar outro circuito sem
+    // o jogador (precisa ficar perto pra observar/testar) contaminar
+    // grooming/touch_proximity. Ver ControlLoop#setIgnorePlayer.
+    private volatile boolean ignorePlayer = false;
+
+    /** Ver docstring do campo {@link #ignorePlayer}. */
+    void setIgnorePlayer(boolean ignore) {
+        this.ignorePlayer = ignore;
+    }
 
     /**
      * Chamar uma vez por tick, ANTES de aplicar a velocidade deste tick —
@@ -99,10 +108,12 @@ public final class TouchSensor {
 
     /** Sinal de nível — verdadeiro agora, não "desde a última leitura". */
     public boolean isNearSomething(Bee bee) {
+        boolean ignorePlayerNow = ignorePlayer;
         return bee.getWorld()
                 .getNearbyEntities(bee.getLocation(), PROXIMITY_RADIUS, PROXIMITY_RADIUS, PROXIMITY_RADIUS)
                 .stream()
                 .anyMatch(e -> e != bee
-                        && (e instanceof Monster || e instanceof Animals || e instanceof NPC || e instanceof Player));
+                        && (e instanceof Monster || e instanceof Animals || e instanceof NPC
+                                || (e instanceof Player && !ignorePlayerNow)));
     }
 }

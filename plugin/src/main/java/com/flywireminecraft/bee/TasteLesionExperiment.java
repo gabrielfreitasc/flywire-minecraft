@@ -107,6 +107,8 @@ public final class TasteLesionExperiment {
         // Mesma técnica de HygroLesionExperiment — evita que touch_proximity
         // (jogador/mob perto da comida) mascare o efeito do taste via grooming.
         controlLoop.setBristleSuppressedForExperiment(true);
+        // F30 — saciada, ela ignoraria a comida nas duas condições (nulo falso).
+        controlLoop.setSatietyGateSuppressedForExperiment(true);
         notify.sendMessage("Experimento de lesão de paladar iniciado: " + trials + " trials de "
                 + secondsPerTrial + "s. Confirme que há comida real a até 4 blocos da origem.");
         plugin.getLogger().info("[TasteLesionExperiment] início — " + trials + " trials x " + secondsPerTrial
@@ -123,6 +125,7 @@ public final class TasteLesionExperiment {
             plugin.getLogger().warning("[TasteLesionExperiment] abelha sumiu — abortando experimento");
             controlLoop.setTasteLesioned(false);
             controlLoop.setBristleSuppressedForExperiment(false);
+            controlLoop.setSatietyGateSuppressedForExperiment(false);
             notify.sendMessage("Abelha sumiu — experimento abortado.");
             return;
         }
@@ -150,6 +153,7 @@ public final class TasteLesionExperiment {
                     plugin.getLogger().warning("[TasteLesionExperiment] abelha sumiu durante o trial — abortando");
                     controlLoop.setTasteLesioned(false);
                     controlLoop.setBristleSuppressedForExperiment(false);
+                    controlLoop.setSatietyGateSuppressedForExperiment(false);
                     notify.sendMessage("Abelha sumiu durante o experimento — abortado.");
                     cancel();
                     return;
@@ -178,6 +182,7 @@ public final class TasteLesionExperiment {
     private void finish(List<TrialResult> results, CommandSender notify) {
         controlLoop.setTasteLesioned(false);
         controlLoop.setBristleSuppressedForExperiment(false);
+        controlLoop.setSatietyGateSuppressedForExperiment(false);
 
         File dir = plugin.getDataFolder();
         if (!dir.exists() && !dir.mkdirs()) {
