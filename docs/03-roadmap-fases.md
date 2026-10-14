@@ -136,7 +136,7 @@ trabalho da F4).
 
 **Extra além do checklist original:** mecanismo de spawn/identificação da
 abelha controlada (`/flywirebee give` + `FlywireBeeMarker`, ver
-`plugin/README.md`) — testado em servidor real, spawna e marca corretamente
+`plugin/HISTORICO.md`) — testado em servidor real, spawna e marca corretamente
 (nome visível + brilho). IA nativa continua ligada de propósito até a F4
 aplicar controle de verdade. Isso não estava no checklist da F3, mas é
 pré-requisito natural para F4 (precisa dar pra identificar qual abelha
@@ -150,7 +150,7 @@ abelha real, servidor rodando: `setVelocity()` a cada tick com IA **desligada** 
 (96%, perda normal por resistência do ar). **Conclusão: NÃO desligar a IA nativa** —
 sobrescrever velocidade a cada tick (20Hz) domina a decisão da IA nativa no mesmo tick,
 sem precisar desativar nada. O plano original ("desabilitar IA antes de aplicar") estava
-errado na direção oposta. Ver `plugin/README.md` para a tabela completa.
+errado na direção oposta. Ver `plugin/HISTORICO.md` para a tabela completa.
 
 ---
 
@@ -252,7 +252,7 @@ partículas vermelhas sumirem, como esperado. `stimulate DNg 5.0` deixou a abelh
 mais **lenta**, não mais rápida — achado real, não bug: DNg (agrupamento por
 prefixo) é 15 de 16 neurônios (94%) do grupo **inibitório** da topologia de sinal
 (RN-09), então estimulá-lo reduz `phototaxis` em vez de aumentar. Ver
-`plugin/README.md` para o detalhe completo. Também confirmado: a IA nativa
+`plugin/HISTORICO.md` para o detalhe completo. Também confirmado: a IA nativa
 "vazou" uma vez (abelha parou pra polinizar flor) — esperado, ruído de fundo
 simétrico entre condições, não invalida nada (ver discussão sobre IA nativa
 mais acima).
@@ -640,7 +640,7 @@ direção própria.
 Também implementado, pedido separado do usuário: painel `LiveHud`
 ("Flywire Bee Live", sidebar do Bukkit) mostrando `phototaxis`,
 `yaw_steering` e `active_dn` ao vivo — confirmado visualmente, aparece no
-canto superior direito como esperado. Ver `plugin/README.md`.
+canto superior direito como esperado. Ver `plugin/HISTORICO.md`.
 
 ---
 
@@ -1039,7 +1039,7 @@ falhou 3 vezes por diluição (RN-09/F1, F4 primeiro experimento, RN-08/F6).
       voo livre. `touch_proximity` confirmado pelo usuário (longe=false,
       aproximar sem encostar=true). Limiares (`CONTACT_RATIO_THRESHOLD=0.5`,
       `PROXIMITY_RADIUS=3.0`) seguem sem calibração fina, mas o mecanismo
-      funciona. Ver `plugin/README.md`, `docs/02-arquitetura.md`.
+      funciona. Ver `plugin/HISTORICO.md`, `docs/02-arquitetura.md`.
 - [x] **Simulador integrado (20/09/2026).** `SimulationServer` ganhou um
       segundo `Engine` opcional (`bristle_connectome`, default `None` —
       compatível com quem só usa o ocelar, 26/26 testes passam).
@@ -2788,7 +2788,7 @@ raio efetivo = FOOD_SEARCH_RADIUS_BLOCKS (4,0)
 
 Faminta, o raio dobra (8,0 blocos). `findNearestFood(Bee)` sem raio
 continua existindo pra log e `TasteLesionExperiment` — uma comparação de
-lesão não pode variar o raio por condição. Ver `plugin/README.md`.
+lesão não pode variar o raio por condição. Ver `plugin/HISTORICO.md`.
 
 **B4 — frio desacelera.** Pedido do usuário, com biologia específica:
 moscas são ectotérmicas — abaixo de ~18°C a locomoção já cai

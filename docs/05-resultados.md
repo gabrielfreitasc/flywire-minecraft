@@ -173,7 +173,7 @@ não de teoria:
   `control start` + `validateyaw` + `sim/tools/steering_validation_analysis.py`.
   Dedução geométrica (`steering_left` → esquerda da própria abelha)
   confirmada visualmente em servidor real, depois de corrigir um bug à parte
-  (corpo visual não acompanhava a velocidade real — ver `plugin/README.md`).
+  (corpo visual não acompanhava a velocidade real — ver `plugin/HISTORICO.md`).
 
 ## O que NÃO está provado (não afirmar isso)
 
@@ -204,8 +204,8 @@ não de teoria:
 | ~~DT-2~~ | ✅ Fechada (14/10/2026, AD-29): regra original validada (90/96 tipos independentes certos, nenhum invertido); `known_nt` de literatura agora vence a predição — 1.245 neurônios corrigidos no cérebro inteiro. Custo: canal `thermal` com menos margem; repetir `thermolesion` em jogo | `docs/04-regras-de-negocio.md` (RN-01), `sim/tools/validate_sign_rule.py` |
 | DT-3 | Override de histamina (RN-02) — sem ground truth direto pra ocelo; achado 17/09/2026 dá apoio indireto (R7/R8 do olho composto confirmados histaminérgicos), continua sendo analogia biológica nossa, não dado do ocelo em si | `docs/04-regras-de-negocio.md` |
 | RN-08 parcial | 29 de 47 tipos de descendente sem função publicada localizável (27 têm cluster de conectividade, evidência mais fraca) | `docs/04-regras-de-negocio.md` |
-| N pequeno | Experimentos de lesão e dia/noite validados com N=20; mais trials fortaleceriam a conclusão | `plugin/README.md` |
-| Ruído de IA nativa | **Não é só ruído simétrico — pode mascarar OU inflar efeito, dependendo do caso.** Dia/noite: mascarava (nulo com IA ligada, p=0,00184 sem — F6). Lesão: era o oposto — repetida com `goals off` (F6, 17/09/2026), o efeito ficou MENOR (4,4% vs. 12% da F4), não maior; a F4 tinha um outlier específico inflando a diferença. Ruído de IA nativa não tem direção previsível — sempre medir de novo, não assumir. | `plugin/README.md`, `docs/03-roadmap-fases.md` F6 |
+| N pequeno | Experimentos de lesão e dia/noite validados com N=20; mais trials fortaleceriam a conclusão | `plugin/HISTORICO.md` |
+| Ruído de IA nativa | **Não é só ruído simétrico — pode mascarar OU inflar efeito, dependendo do caso.** Dia/noite: mascarava (nulo com IA ligada, p=0,00184 sem — F6). Lesão: era o oposto — repetida com `goals off` (F6, 17/09/2026), o efeito ficou MENOR (4,4% vs. 12% da F4), não maior; a F4 tinha um outlier específico inflando a diferença. Ruído de IA nativa não tem direção previsível — sempre medir de novo, não assumir. | `plugin/HISTORICO.md`, `docs/03-roadmap-fases.md` F6 |
 | Mecanismo da curva de luz não explicado | Resposta à luz tem pico em 0,25, não é monotônica (Kruskal-Wallis p=0,00003) — confirmado que existe, não confirmado por quê | `docs/03-roadmap-fases.md` F6 |
 | `yaw_steering` cobre só 4/47 tipos, constante de rotação não calibrada | Sentido esquerda/direita confirmado (estatística + visual, 19/09/2026), mas `MAX_YAW_RADIANS_PER_TICK` é provisória e não cobre os outros 43 tipos de descendente | `docs/04-regras-de-negocio.md` RN-08 |
 | Efeito de rede recorrente ao estimular `steering_left`/`steering_right` | Reduz velocidade de avanço bastante (`right` quase metade), mesmo sem alimentar `phototaxis` diretamente — não investigado | `docs/04-regras-de-negocio.md` RN-08 |

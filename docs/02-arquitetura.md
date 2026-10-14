@@ -158,7 +158,7 @@ NOVOS, sinais de natureza diferente:**
   teste controlado (abelha presa num cubículo 4×4) deu disparo quase
   contínuo por 2+ minutos; teleportada pra área aberta, 81s seguidos sem
   nenhum disparo. Limiar (`CONTACT_RATIO_THRESHOLD = 0.5`) segue sem
-  calibração fina, mas o mecanismo funciona. Ver `plugin/README.md`.
+  calibração fina, mas o mecanismo funciona. Ver `plugin/HISTORICO.md`.
 - `touch_proximity` — **nível** (verdadeiro enquanto algo estiver perto,
   não só no instante em que chegou): mob, jogador ou item dentro de um raio
   fixo. **✅ Validado** (usuário confirmou: longe = false, aproximar sem

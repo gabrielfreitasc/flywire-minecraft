@@ -294,7 +294,8 @@ flywire-minecraft/
 | [`docs/04-regras-de-negocio.md`](docs/04-regras-de-negocio.md) | RN-01 a RN-09: as regras científicas do domínio |
 | [`docs/05-resultados.md`](docs/05-resultados.md) | O que está validado, o que não está, dívida técnica |
 | [`docs/adr/README.md`](docs/adr/README.md) | Decisões de arquitetura e de modelagem |
-| [`plugin/README.md`](plugin/README.md) | Plugin: sensores, comandos, achados de encarnação |
+| [`plugin/README.md`](plugin/README.md) | Plugin: funcionamento, sensores, prioridade de decisão, comandos, experimentos |
+| [`plugin/HISTORICO.md`](plugin/HISTORICO.md) | Diário do plugin F3–F30: decisões, bugs em servidor real, medições |
 | [`mc-server/README.md`](mc-server/README.md) | Servidor de desenvolvimento |
 | [`data/raw/README.md`](data/raw/README.md) | Proveniência e checagens dos dados de origem |
 

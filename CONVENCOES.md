@@ -17,7 +17,7 @@ Minecraft. Subcircuito ocelar: 625 neurônios, 2.981 conexões.
 | Qualquer coisa | `docs/04-regras-de-negocio.md` |
 | `ingest.py`, `graph.py` | `docs/01-camada-de-dados.md` |
 | `engine.py`, `server.py` | `docs/02-arquitetura.md` (seção do relógio) |
-| Plugin Java | `docs/02-arquitetura.md` (contratos) + `plugin/README.md` (estado atual, achados de F4) |
+| Plugin Java | `docs/02-arquitetura.md` (contratos) + `plugin/README.md` (estado atual) + `plugin/HISTORICO.md` (achados de F4 em diante) |
 | `motor.py`, `MotorMapping.java` | RN-08 e RN-09 em `docs/04-regras-de-negocio.md` — agregar descendentes sem separar por sinal cancela o efeito |
 
 ## Regras duras
@@ -54,7 +54,7 @@ Minecraft. Subcircuito ocelar: 625 neurônios, 2.981 conexões.
   `setVelocity()` a cada tick com IA desligada produziu deslocamento ZERO em 5s reais.
   O certo é o oposto do que parece intuitivo: manter a IA **ligada** e sobrescrever a
   velocidade a cada tick — isso domina a decisão nativa sem precisar desligar nada. Ver
-  `plugin/README.md`, seção "Risco investigado".
+  `plugin/HISTORICO.md`, seção "Risco investigado".
 - **Somar/tirar média de canais com fontes diferentes dilui ou cancela o efeito que
   você quer medir — já aconteceu 3 vezes.** (1) RN-09/F1: agregar os 92 descendentes
   cancela sinal de luz (29 excitatório, 63 inibitório, direções opostas). (2) F4,
@@ -77,7 +77,7 @@ Minecraft. Subcircuito ocelar: 625 neurônios, 2.981 conexões.
   canal sensível a dia/noite; `dorsal_light` é sensível a teto/céu aberto (indoor vs.
   outdoor), não a hora do dia. Não trocar um pelo outro esperando pegar dia/noite — usar
   `dorsal_light` só como filtro de "a abelha está mesmo ao ar livre?" antes de comparar
-  dia vs. noite via `light`. Ver F6 em `docs/03-roadmap-fases.md` e `plugin/README.md`.
+  dia vs. noite via `light`. Ver F6 em `docs/03-roadmap-fases.md` e `plugin/HISTORICO.md`.
 - **Nunca comparar rodadas de experimento feitas em origens diferentes.** Medido (F6,
   16/09/2026): duas rodadas na MESMA condição (abelha cega), a 70 blocos uma da outra,
   diferiram 9 blocos de trajetória (p&lt;0,001) — só terreno. Isso é maior que o efeito

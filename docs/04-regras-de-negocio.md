@@ -695,7 +695,7 @@ constante `MAX_YAW_RADIANS_PER_TICK` é provisória, não calibrada contra
 nada, e o canal só cobre 4 dos 47 tipos de descendente. É a primeira peça de
 RN-08 completa (direção), não a peça inteira.
 
-Ver `plugin/README.md`.
+Ver `plugin/HISTORICO.md`.
 
 **Atualização — RN-08 equivalente pro subcircuito `bristle` (F7/AD-17,
 20/09/2026), primeira curadoria de comportamento fora do ocelar.**
