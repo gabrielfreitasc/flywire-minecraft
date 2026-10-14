@@ -200,7 +200,7 @@ não de teoria:
 
 | Item | Descrição | Onde tratado |
 |---|---|---|
-| DT-1 | Dados vêm de espelho GitHub, não da fonte primária (parcialmente fechado, AD-11) | `docs/01-camada-de-dados.md` |
+| ~~DT-1~~ | ✅ Fechada (13/10/2026): espelho idêntico ao primário do Zenodo aresta por aresta; anotação idêntica ao commit `17fc5772` do repositório oficial dos autores | `docs/01-camada-de-dados.md`, `sim/tools/verify_primary.py` |
 | DT-2 | Regra de sinal (RN-01) — validação parcial 17/09/2026: 13/168 tipos com ground truth independente (drosophila_neurotransmitters), 12 confirmam, 1 diverge (DNp27, sem impacto — RN-01a) | `docs/04-regras-de-negocio.md` |
 | DT-3 | Override de histamina (RN-02) — sem ground truth direto pra ocelo; achado 17/09/2026 dá apoio indireto (R7/R8 do olho composto confirmados histaminérgicos), continua sendo analogia biológica nossa, não dado do ocelo em si | `docs/04-regras-de-negocio.md` |
 | RN-08 parcial | 29 de 47 tipos de descendente sem função publicada localizável (27 têm cluster de conectividade, evidência mais fraca) | `docs/04-regras-de-negocio.md` |

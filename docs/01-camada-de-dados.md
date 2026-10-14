@@ -37,7 +37,9 @@ fonte primária sem depender de terceiros.
 
 **(a) e (b) feitos em 17/09/2026** — ver "Anatomia real" mais abaixo (AD-11).
 
-**Dívida técnica assumida:** dependemos de um espelho para os dados e de Shiu et al. para a
+**DT-1 fechada (13/10/2026):** **Fechada em 13/10/2026** (`sim/tools/verify_primary.py`): MD5 dos 5 arquivos primários do Zenodo OK; o espelho `Connectivity_783.parquet` é idêntico ao primário `proofread_connections_783.feather` aresta por aresta (15.091.983 pares, 0 só num lado, 0 peso divergente, 54.492.922 sinapses); a anotação é byte a byte idêntica ao commit `17fc5772` (04/05/2026) do repositório oficial dos autores, `flyconnectome/flywire_annotations` (Schlegel et al. 2024) — não é espelho de terceiros.
+
+**Dívida técnica assumida (histórico):** dependemos de um espelho para os dados e de Shiu et al. para a
 regra de sinal. A validação numérica cobre integridade, não proveniência. Quando a Zenodo
 voltar, baixar só `proofread_connections_783.feather` (852 MB) ou usar o portal do Codex
 com login Google — ambos mais leves que o dump completo.
@@ -127,7 +129,7 @@ código que tente buscar da Zenodo — vai falhar.
 
 | Item | Antes | Agora |
 |---|---|---|
-| DT-1 proveniência | aberta | fechável por `sim/tools/verify_primary.py` |
+| DT-1 proveniência | aberta | ✅ **fechada** (13/10/2026) por `sim/tools/verify_primary.py` |
 | Validação | 2 totais agregados | **aresta por aresta** contra o primário |
 | Quebra por neurópilo | indisponível | **extraída** (17/09/2026) — `sim/tools/extract_anatomy.py` |
 | Coordenadas por sinapse | indisponível | **extraída** (17/09/2026, centroide por neurônio) — idem |

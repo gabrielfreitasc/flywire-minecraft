@@ -4,8 +4,14 @@ Deposite aqui, **sem renomear**:
 
 | Arquivo | Tamanho esperado | Origem |
 |---|---|---|
-| `Connectivity_783.parquet` | ~97 MB | `philshiu/Drosophila_brain_model` (espelho do Zenodo `10.5281/zenodo.10676866`) |
-| `Supplemental_file1_neuron_annotations.tsv` | ~31 MB | `flyconnectome/flywire_annotations` |
+| `Connectivity_783.parquet` | ~97 MB | `philshiu/Drosophila_brain_model` (espelho do Zenodo `10.5281/zenodo.10676866` — **conferido idêntico aresta por aresta**, ver abaixo) |
+| `Supplemental_file1_neuron_annotations.tsv` | ~31 MB | `flyconnectome/flywire_annotations` (repositório oficial dos autores, Schlegel et al. 2024), **versão do commit `17fc5772`** (04/05/2026) |
+
+**Proveniência conferida (DT-1, 13/10/2026):** `python sim/tools/verify_primary.py` confere o
+MD5 dos arquivos primários do Zenodo, compara o espelho com o primário aresta por aresta e
+confere o hash da anotação contra a versão fixada acima. Versões mais novas da anotação
+existem (29/09/2026: Tastekin et al. 2026) — trocar de versão é decisão de dado (re-rodar
+o ingest e os experimentos), não atualização silenciosa.
 
 ## Regra: esta pasta é imutável
 

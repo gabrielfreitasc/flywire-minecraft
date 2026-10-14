@@ -2,6 +2,12 @@
 Verifica os arquivos primários da Zenodo (10.5281/zenodo.10676866) e confronta
 o espelho GitHub aresta por aresta. Fecha a DT-1 e a DT-2 parcialmente.
 
+Também confere a anotação (`Supplemental_file1_neuron_annotations.tsv`) contra
+a versão fixada do repositório oficial dos autores (Schlegel et al. 2024,
+`flyconnectome/flywire_annotations`) pelo hash de blob do git — offline, sem
+rede. Rodado em 13/10/2026: MD5 dos 5 primários OK, 15.091.983 pares idênticos
+(0 só num lado, 0 peso divergente), anotação idêntica ao commit `17fc5772`.
+
 Uso:  python3 sim/tools/verify_primary.py [--skip-md5]
 
 RESTRIÇÃO: a VM tem ~3,8 GB de RAM. Nada aqui carrega arquivo inteiro —
@@ -27,6 +33,16 @@ EXPECTED_MD5 = {
 # Dorkenwald et al. 2024
 EXPECTED_TOTAL_SYNAPSES = 54_492_922
 
+# Hash de blob do git (`git hash-object --no-filters`) da anotação, no commit
+# 17fc5772 (04/05/2026, "minor fixes for a few annotations") de
+# github.com/flyconnectome/flywire_annotations, caminho
+# supplemental_files/Supplemental_file1_neuron_annotations.tsv. Versões
+# posteriores existem (29/09/2026: anotações de Tastekin et al. 2026) — trocar
+# de versão é decisão de dado (re-rodar o ingest), não correção deste número.
+ANNOTATION_FILE = "Supplemental_file1_neuron_annotations.tsv"
+ANNOTATION_GIT_BLOB = "afea3e15a5671f5da0b9f7dd2e932d328c3b57a0"
+ANNOTATION_COMMIT = "17fc5772"
+
 
 def md5(path: Path, chunk: int = 8 << 20) -> str:
     h = hashlib.md5()
@@ -48,6 +64,28 @@ def check_md5() -> None:
         print(f"  [{mark}] {name}")
         if got != expected:
             print(f"      esperado {expected}\n      obtido   {got}")
+
+
+def git_blob_sha1(path: Path, chunk: int = 8 << 20) -> str:
+    """Mesmo hash que `git hash-object --no-filters` (sha1 de "blob <tam>\0" + conteúdo)."""
+    h = hashlib.sha1(f"blob {path.stat().st_size}\0".encode())
+    with path.open("rb") as fh:
+        while block := fh.read(chunk):
+            h.update(block)
+    return h.hexdigest()
+
+
+def check_annotation() -> None:
+    print("\n=== ANOTAÇÃO (flyconnectome/flywire_annotations) ===")
+    p = RAW / ANNOTATION_FILE
+    if not p.exists():
+        print(f"  [ausente] {ANNOTATION_FILE}")
+        return
+    got = git_blob_sha1(p)
+    if got == ANNOTATION_GIT_BLOB:
+        print(f"  [OK] {ANNOTATION_FILE} idêntico ao commit {ANNOTATION_COMMIT} do repositório oficial")
+    else:
+        print(f"  [*** DIVERGE ***] {ANNOTATION_FILE}\n      esperado {ANNOTATION_GIT_BLOB}\n      obtido   {got}")
 
 
 def schema_of(path: Path):
@@ -125,4 +163,5 @@ if __name__ == "__main__":
         sys.exit(f"data/raw não encontrado em {RAW}")
     if "--skip-md5" not in sys.argv:
         check_md5()
+    check_annotation()
     compare_edges()
