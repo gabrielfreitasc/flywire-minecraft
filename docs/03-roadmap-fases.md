@@ -2050,8 +2050,16 @@ do `EnergyTracker`. O que É circuito real são os **gatilhos de despertar**.
       inalterados.
 - [x] **Teste em jogo (27/09/2026)** — confirmado pelo usuário em servidor
       real: sonolência noturna e despertar por som/medo/dano funcionando.
-- [ ] Constantes PROVISÓRIAS, sem calibração fina em jogo (velocidade/teto
-      de sonolência, janela de calma, limiar de despertar).
+- [x] Constantes (velocidade 12%/teto 1,0 bloco de sonolência, noite
+      13000–23000, calma de 200 ticks pra voltar a dormir, limiar de
+      despertar 0,5) — **validadas pela observação do usuário em jogo**
+      (13/10/2026): "todos batem de acordo com o que fui observando durante
+      o processo". Sem calibração estatística, mesmo status de engenharia do
+      resto do `SleepState`. Ponto em aberto, não observado como problema:
+      o teto de 1,0 bloco está abaixo dos ~2 blocos que o F27 mostrou
+      necessários pra transpor um degrau — a 12% da velocidade ela quase
+      não se desloca, então não apareceu; se aparecer (sonolenta presa
+      contra degrau), subir pra 2,0 como no frio.
 
 ---
 
