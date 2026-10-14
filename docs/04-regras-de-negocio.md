@@ -31,6 +31,90 @@ resultado por outro motivo). Cobertura pequena (13/168, ~8%) — não valida RN-
 como um todo, mas é a primeira checagem independente real desde que a regra foi
 adotada. Reproduzível cruzando `nodes.parquet::cell_type` contra `gt_data.csv`.
 
+### Transmissor de literatura vence a predição (AD-29, 14/10/2026) — fecha a DT-2
+
+**Achado.** A anotação oficial (`Supplemental_file1_neuron_annotations.tsv`,
+Schlegel et al. 2024) tem, além de `top_nt` (predição de Eckstein et al.), a
+coluna `known_nt`: o transmissor CONFIRMADO em literatura para o tipo. A regra
+usava só a predição. No cérebro inteiro, **69.975 neurônios** têm `known_nt`
+com transmissor mapeável pela tabela acima; em **1.245** o sinal final do
+modelo (predição + overrides) discordava. Entre eles, **21 neurônios locais do
+lobo antenal colinérgicos** (`lLN1_bc`×7, `lLN2T_b`×4, `lLN2T_c`×4,
+`lLN2X03`×6; Shang et al. 2007) que a AD-18 forçava a −1 por analogia com a
+família lLN1/lLN2 GABAérgica.
+
+**Regra.** Ordem de precedência, montada num lugar só (`graph.final_sign`,
+usado por `load`, `topology` e pelas ferramentas — antes eram três cópias):
+
+1. predição `top_nt` (RN-01);
+2. overrides por analogia: RN-02 (fotorreceptores), AD-18/19/21 (RN-01a);
+3. **`known_nt` de literatura (AD-29), por último**.
+
+Parser (`graph.known_nt_sign`): o texto é livre (`"acetylcholine; sNPF"`,
+`"glutamate, gaba; glutamate"`). Conta só ACh/DA/OA (+1) e GABA/Glu (−1);
+ignora `-negative`, peptídeos, óxido nítrico, serotonina e tiramina.
+**Sem override** (fica o sinal do modelo) quando não há transmissor rápido
+mapeável, quando há sinais opostos (co-transmissão ACh + GABA) ou quando
+aparece histamina/glicina (`config.KNOWN_NT_AMBIGUOUS` — inibitórios rápidos
+fora da tabela). `ingest` passa a carregar `known_nt` nos nós; `graph.load`
+falha com mensagem clara se a coluna faltar (subcircuito extraído antes da
+AD-29 → re-extrair).
+
+**Validação** (`sim/tools/validate_sign_rule.py`, ground truth
+`data/raw/gt_data.csv`, tipos separados entre independentes e da época do
+treino do classificador por `202405-starting_gt_data.csv`). Tipos dos 10
+subcircuitos do simulador, sinal certo:
+
+| Tipos | Antes da AD-29 | Depois |
+|---|---|---|
+| Independentes do treino | 90/96, 0 invertidos | 95/96, 0 invertidos |
+| Da época do treino | 509/526, 9 invertidos | 523/526, 1 invertido |
+
+Parte da melhora é **circular**: `known_nt` e `gt_data.csv` vêm em parte da
+mesma literatura. O número que vale como validação da REGRA original é o da
+linha "antes" nos independentes (90/96, nenhum invertido). Sobram 4 tipos
+divergentes nos circuitos (`FB1F`, `FB5L`, `PFGs` com empate/sinal 0 e
+`LHAV2m1` invertido, todos sem `known_nt` por neurônio) — não estendidos por
+tipo, ficam registrados.
+
+**Impacto por circuito** (re-extraídos em 14/10/2026: nós e arestas
+idênticos, só a coluna nova):
+
+| Circuito | Neurônios com sinal mudado | Efeito na calibração (RN-09) |
+|---|---|---|
+| main | 1 (`DNp27`, era mudo) | inibitório −3,03 → −3,07, p=0,0026; nada muda |
+| hygro | 27 | exc 139,9 → 116,4; inh 29,0 → 31,4; ambos p≈0 |
+| thermo | 30 | ver abaixo |
+| olfactory | 28 | exc 294,7 → 278,2; p≈0 |
+| johnston | 2 | exc 433,9 → 418,4; p≈0 |
+| taste | 1 | idêntico |
+| aggression | 1 | idêntico |
+| path_integration | 107 (79 mudos ganham sinal) | exc 90,2 → 98,9; inh 62,3 → 63,1 |
+| bristle, escape | 0 | — |
+
+**Custo real: margem dos canais com limiar no plugin.** Canal medido com o
+decoder do servidor, 6 sementes, 400 passos:
+
+| Canal (limiar) | Repouso antes → depois | Estimulado antes → depois |
+|---|---|---|
+| `thermal` (0,45) | 0,19 (máx. 0,40, 0% acima) → 0,29 (p95 0,50, ~9% dos ticks acima) | 0,61–0,63 (~100% acima) → 0,52–0,53 (~84% acima) |
+| `hygrotaxis` (0,8) | −0,10 → 0,39 (0,6% acima) | 0,98 → 0,91 (98,8% acima) |
+| `startle` (0,5), `appetite` (0,7) | sem mudança relevante | sem mudança relevante |
+
+Mecanismo: os 21 locais do lobo antenal deixaram de frear a rede e a
+atividade de repouso subiu. No `thermo` as faixas de repouso e estímulo
+agora se sobrepõem — nenhum limiar separa, e janela mais longa (150/300 ms)
+também não, porque a variação é entre sementes. **Consequência no jogo
+limitada:** a fuga térmica exige fonte perigosa detectada pelo sensor E
+canal acima do limiar (`ControlLoop`), então sem calor por perto nada muda.
+Perto de lava/fogo a fuga fica um pouco intermitente; o HUD pode marcar
+"térmico ativo" sozinho; no `thermolesion` a abelha lesionada passaria do
+limiar em ~9% dos ticks, reduzindo o contraste. **Decisão do usuário
+(14/10/2026): aceitar a correção sem ajustar plugin nem simulação**
+(sinal escolhido pela literatura, não pelo comportamento que produz).
+Pendente: repetir `thermolesion` em jogo para medir se o efeito confirmado
+na F14 se mantém.
+
 ### RN-01a · Serotonina não está coberta ⚠️ em aberto
 
 Serotonina é **neuromodulador**, não neurotransmissor rápido — não tem sinal óbvio.
@@ -61,6 +145,11 @@ juntos 358/373 (96%):
 |---|---|---|---|---|
 | ORN (neurônio receptor olfativo) | 318 | `olfactory` | 0,48 | **Colinérgico** — estabelecido (Yasuyama & Salvaterra 1999; Barbara et al. 2005), não é achado novo nem disputado |
 | Neurônio local do lobo antenal (lLN1/lLN2) | 40 | `ALLN` | 0,36 | **GABAérgico** — Schlegel et al. 2021 (eLife), transmissor atribuído por hemilinhagem via imuno-histoquímica, fonte INDEPENDENTE do classificador de Eckstein et al. |
+
+> **Corrigido pela AD-29 (14/10/2026):** 21 desses 40 (`lLN1_bc`, `lLN2T_b/c`,
+> `lLN2X03`) têm `known_nt = acetylcholine` na anotação oficial (Shang et al.
+> 2007) — a analogia de família errou neles. O override de literatura vence e
+> eles ficam +1. Ver "Transmissor de literatura vence a predição" em RN-01.
 
 Mesmo padrão de artefato já registrado em RN-02 (histamina fora das 6 classes
 do classificador) e no achado do `DNp27` acima (classificador erra numa
@@ -835,7 +924,7 @@ plugin primeiro).
 
 | Regra | Módulo | Teste | Risco se errada |
 |---|---|---|---|
-| RN-01 | `graph.py` | `test_sign_assignment` | Alto |
+| RN-01 | `graph.py` (`final_sign`) | `test_sign_assignment`, `test_known_nt_sign_parsing`, `test_known_nt_override_precedence`, `test_known_nt_override_requires_column`; `tools/validate_sign_rule.py` | Alto |
 | RN-01a | `graph.py` | — | Nulo na v1, **alto** no subcircuito `hygro` (F7, reaberta — 373 neurônios, tratamento pendente) |
 | RN-02 | `graph.py` | `test_photoreceptor_override` | **Crítico** |
 | RN-03 | `ingest.py` | `test_threshold` | Médio |

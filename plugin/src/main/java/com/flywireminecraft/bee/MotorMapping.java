@@ -603,6 +603,12 @@ public final class MotorMapping {
      * pelos TRNs de aquecimento quanto pelos de frio (mín. 0,55). 0,45 fica
      * acima do pior repouso e abaixo do pior estimulado.
      *
+     * <p><b>AD-29 (14/10/2026):</b> com o transmissor de literatura
+     * ({@code known_nt}), repouso 0,29 (p95 0,50, ~9% dos ticks acima de
+     * 0,45) e estimulado 0,52–0,53 (~84% acima) — sem limiar que separe. Só
+     * afeta comportamento perto de fonte perigosa (a fuga exige também o
+     * sensor, ver {@code ControlLoop}). Mantido, ver RN-01 "Custo real".
+     *
      * <p><b>Limite honesto:</b> o canal NÃO distingue calor de frio — os dois
      * tipos de TRN excitam o mesmo grupo de saída com a mesma força. Quem
      * distingue é o sensor ({@code ThermalSensor}: qual das duas sementes foi

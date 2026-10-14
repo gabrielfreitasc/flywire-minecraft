@@ -292,6 +292,17 @@ Minecraft. Subcircuito ocelar: 625 neurônios, 2.981 conexões.
   no-op. Em teste/experimento longo, ficar perto dela ou trazê-la com
   `goto`; recuperações seguidas com 0,00 bloco e ar em volta = checar a
   distância do jogador antes de procurar bug.
+- **A anotação traz o transmissor de LITERATURA (`known_nt`), não só a predição
+  (`top_nt`) — e validar contra dado de treino infla o acerto.** Achado real
+  (DT-2/AD-29, 13–14/10/2026): a regra de sinal usou só `top_nt` desde a F0;
+  `known_nt` corrigiu 1.245 neurônios, incluindo 21 locais do lobo antenal que
+  um override nosso por analogia (AD-18) tinha deixado inibitórios. Antes de
+  inventar override por analogia, olhar `known_nt`. E ao validar uma predição
+  contra ground truth, separar o que o classificador viu no treino
+  (`202405-starting_gt_data.csv`): concordar com dado de treino não prova nada.
+  Corrigir sinal pode MUDAR a margem de canais já calibrados (o `thermal`
+  perdeu a separação) — re-medir canal e limiar depois de qualquer mudança de
+  sinal, não só o p-valor da calibração.
 
 ## Papéis no projeto
 

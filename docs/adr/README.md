@@ -33,6 +33,7 @@ Decisões com consequência arquitetural. Uma ADR nunca é editada depois de ace
 | AD-26 | Circuito `olfactory` (F17, feromônio): `ingest.expand(exclude=...)`/`ingest.build(exclude_cell_classes=...)` — segunda barreira de BFS, mesmo mecanismo de `descending` (RN-04), por outro motivo: excluir uma via funcional inteira (`Kenyon_Cell`, corpo cogumelo/memória) confirmada por medição (não presumida) como irrelevante pros descendentes alcançados — corta 1.806 nós sem perder nenhum dos 74 descendentes. Semente = 429 ORNs de feromônio (`cell_sub_class=="pheromone"`); escala própria `OLFACTORY_MOTOR_RATE_SCALE=60` | 2026-09-30 | Aceita |
 | AD-27 | Circuito `aggression` (F18, corte/agressividade): semente = 10 neurônios `pC1a-e` (literatura: Schretter et al. 2020, Deutsch et al. 2020), fora de `super_class=="sensory"` — mesmo mecanismo `sensory_cell_types` do `escape`/AD-20. Confirmado por medição que NÃO é extensão do `olfactory` (zero overlap entre os descendentes de feromônio e os `pC1`, semente própria). 1 salto já basta (384 nós, 25 descendentes) — o mais raso de todos os circuitos; escala própria `AGGRESSION_MOTOR_RATE_SCALE=60`, grupo inibitório previsto vazio (achado real) | 2026-09-30 | Aceita |
 | AD-28 | Circuito `path_integration` (F19, integração de trajetórias): semente = 422 neurônios `PFNp/m/a/d` (literatura: Westeinde et al. 2024; Lu & Behbahani et al. 2022 — "P-FN integra direção+velocidade ao longo do tempo", definição literal de path integration), fora de `super_class=="sensory"`. Achado real: sinal líquido (exc−inh) é NEGATIVO sob estímulo, ao contrário de todos os canais anteriores — `tanh` absorve isso sem problema, só documentado. Escala própria `PATH_INTEGRATION_MOTOR_RATE_SCALE=60`. Diferente de `olfactory`/`aggression`, o estímulo real não seria um evento de mundo e sim self-motion da própria abelha (`ControlLoop.heading`) | 2026-10-01 | Aceita |
+| AD-29 | RN-01 — transmissor CONFIRMADO em literatura (coluna `known_nt` da anotação oficial, Schlegel et al. 2024) vence a predição `top_nt` e os overrides por analogia (RN-02, AD-18/19/21); aplicado por último. Achado da DT-2: 1.245 de 69.975 neurônios com `known_nt` mapeável tinham sinal diferente no modelo, incluindo 21 locais do lobo antenal colinérgicos (`lLN1_bc`, `lLN2T_b/c`, `lLN2X03`; Shang et al. 2007) que a AD-18 forçava a −1 (corrige a AD-18 nesses 21, sem supersedê-la). Co-transmissão de sinais opostos, histamina e glicina → sem override. Cadeia de sinal centralizada em `graph.final_sign` (antes copiada em 3 lugares). Ingest passa a carregar `known_nt` nos nós | 2026-10-14 | Aceita |
 
 AD-01 a AD-05 estão detalhadas em [`../01-camada-de-dados.md`](../01-camada-de-dados.md).
 AD-07 a AD-10 e AD-17 estão detalhadas em [`../02-arquitetura.md`](../02-arquitetura.md).
@@ -48,6 +49,8 @@ AD-26 está detalhada em F17 e nas docstrings de `sim/tools/build_f17_circuit.py
 e `sim/src/flywire_sim/ingest.py::expand`. AD-27 está detalhada em F18 e na
 docstring de `sim/tools/build_f18_circuit.py`. AD-28 está detalhada em F19 e
 na docstring de `sim/tools/build_f19_circuit.py`.
+AD-29 está detalhada em [`../04-regras-de-negocio.md`](../04-regras-de-negocio.md) RN-01
+(seção "Transmissor de literatura") e nas docstrings de `graph.py::known_nt_sign`/`final_sign`.
 
 ## Formato para novas ADRs
 

@@ -251,3 +251,50 @@ def test_refractory():
     assert len(spike_times_ms) >= 2, "corrente forte deveria produzir vários disparos"
     gaps = np.diff(spike_times_ms)
     assert (gaps >= C.REFRACTORY_MS).all()
+
+
+def test_known_nt_sign_parsing():
+    """AD-29 — leitura do `known_nt` (texto livre da anotação oficial): só
+    transmissor rápido mapeado pela RN-01 conta; "-negative", peptídeo, NO,
+    serotonina e tiramina são ignorados; sinais opostos, histamina ou glicina
+    tornam ambíguo (None = sem override)."""
+    cases = {
+        "acetylcholine": 1,
+        "glutamate, gaba; glutamate": -1,
+        "octopamine; octopamine, acetylcholine-negative, gaba-negative": 1,
+        "tyramine, serotonin, glutamate, Dh44": -1,
+        "SIFamide; acetylcholine-negative; glutamate": -1,
+        "acetylcholine, nitric oxide, dopamine": 1,
+        "acetylcholine, gaba": None,  # co-transmissão de sinais opostos
+        "histamine; acetylcholine, histamine": None,  # histamina fica com RN-02
+        "acetylcholine, glycine": None,
+        "gaba-negative": None,
+        "": None,
+        None: None,
+    }
+    for text, expected in cases.items():
+        assert graph.known_nt_sign(text) == expected, text
+
+
+def test_known_nt_override_precedence():
+    """AD-29 CRÍTICO — literatura vence a predição E os overrides por
+    analogia: neurônio local do lobo antenal rotulado "serotonin" (AD-18
+    forçaria -1) com known_nt colinérgico vira +1; fotorreceptor ocelar
+    (RN-02) com known_nt histamina continua -1; sem known_nt, nada muda."""
+    synthetic = pd.DataFrame(
+        {
+            "top_nt": ["serotonin", "serotonin", "gaba", "acetylcholine"],
+            "super_class": ["", "sensory", "", ""],
+            "cell_class": ["ALLN", "", "", ""],
+            "cell_sub_class": ["", "ocellar", "", ""],
+            "known_nt": ["acetylcholine", "histamine", "", "glutamate"],
+        }
+    )
+    np.testing.assert_array_equal(graph.final_sign(synthetic), [1, -1, -1, -1])
+
+
+def test_known_nt_override_requires_column():
+    """AD-29 — subcircuito extraído antes da AD-29 (sem `known_nt`) falha alto,
+    não silencioso: o sinal sairia sem a correção de literatura."""
+    with pytest.raises(ValueError, match="known_nt"):
+        graph.apply_known_nt_overrides(pd.DataFrame({"top_nt": ["gaba"]}), np.array([-1], dtype=np.int8))

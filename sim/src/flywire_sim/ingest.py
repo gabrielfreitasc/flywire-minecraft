@@ -177,7 +177,7 @@ def build(
 
     nodes = ann[ann.root_id.isin(keep)][
         ["root_id", "super_class", "cell_class", "cell_sub_class", "cell_type",
-         "side", "top_nt", "top_nt_conf", "nerve"]
+         "side", "top_nt", "top_nt_conf", "known_nt", "nerve"]
     ].copy()
     nodes["is_seed"] = nodes.root_id.isin(seed)
     nodes["role"] = "interneuron"

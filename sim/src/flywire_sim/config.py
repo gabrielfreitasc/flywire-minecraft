@@ -36,6 +36,11 @@ SEED_PATTERN = "ocell"     # casa em super_class/cell_class/cell_sub_class/super
 # ------------------------------------------------------------ RN-01 / RN-02
 EXCITATORY_NT = ("acetylcholine", "dopamine", "octopamine")
 INHIBITORY_NT = ("gaba", "glutamate")  # glutamato é INIBITÓRIO em Drosophila (GluCl)
+# AD-29 — transmissores rápidos inibitórios que RN-01 NÃO mapeia (histamina:
+# fotorreceptores, RN-02; glicina: rara em Drosophila). Se aparecem no
+# `known_nt` de um neurônio, o transmissor de literatura é ambíguo pra regra e
+# o override por `known_nt` não age — o sinal do modelo fica como está.
+KNOWN_NT_AMBIGUOUS = ("histamine", "glycine")
 
 # Fotorreceptores ocelares são histaminérgicos (inibitórios). O classificador de
 # Eckstein et al. não tem histamina entre suas 6 classes e os rotula como serotonina.
@@ -92,6 +97,10 @@ TASTE_MOTOR_RATE_SCALE = 60.0
 # baseline 33,0 Hz (p95=41,3) — com `MOTOR_RATE_SCALE` genérico (30) o tanh
 # de baseline já é 0,79 (satura). Estimulado: 105 Hz. Escala 60: baseline
 # tanh média=0,498 (p95=0,597), estimulado média=0,941 (p05=0,924).
+# AD-29 (14/10/2026): com `known_nt`, baseline 65,3 Hz; escala 60 dá tanh
+# baseline 0,786 vs. estimulado 0,950. Canal `thermal` real (exc − inh):
+# repouso 0,29, estimulado 0,52–0,53 — faixas se sobrepõem, nenhuma escala
+# separa (ver RN-01, "Custo real"). Mantido de propósito, decisão do usuário.
 THERMO_MOTOR_RATE_SCALE = 60.0
 
 # F17 — escala PRÓPRIA do canal `pheromone` (grupo excitatório de 43

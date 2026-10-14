@@ -201,7 +201,7 @@ não de teoria:
 | Item | Descrição | Onde tratado |
 |---|---|---|
 | ~~DT-1~~ | ✅ Fechada (13/10/2026): espelho idêntico ao primário do Zenodo aresta por aresta; anotação idêntica ao commit `17fc5772` do repositório oficial dos autores | `docs/01-camada-de-dados.md`, `sim/tools/verify_primary.py` |
-| DT-2 | Regra de sinal (RN-01) — validação parcial 17/09/2026: 13/168 tipos com ground truth independente (drosophila_neurotransmitters), 12 confirmam, 1 diverge (DNp27, sem impacto — RN-01a) | `docs/04-regras-de-negocio.md` |
+| ~~DT-2~~ | ✅ Fechada (14/10/2026, AD-29): regra original validada (90/96 tipos independentes certos, nenhum invertido); `known_nt` de literatura agora vence a predição — 1.245 neurônios corrigidos no cérebro inteiro. Custo: canal `thermal` com menos margem; repetir `thermolesion` em jogo | `docs/04-regras-de-negocio.md` (RN-01), `sim/tools/validate_sign_rule.py` |
 | DT-3 | Override de histamina (RN-02) — sem ground truth direto pra ocelo; achado 17/09/2026 dá apoio indireto (R7/R8 do olho composto confirmados histaminérgicos), continua sendo analogia biológica nossa, não dado do ocelo em si | `docs/04-regras-de-negocio.md` |
 | RN-08 parcial | 29 de 47 tipos de descendente sem função publicada localizável (27 têm cluster de conectividade, evidência mais fraca) | `docs/04-regras-de-negocio.md` |
 | N pequeno | Experimentos de lesão e dia/noite validados com N=20; mais trials fortaleceriam a conclusão | `plugin/README.md` |
