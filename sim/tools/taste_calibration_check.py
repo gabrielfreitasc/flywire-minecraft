@@ -1,20 +1,4 @@
-"""
-Versão do critério de saída da F1 (RN-09) para o subcircuito `taste` (F10,
-candidato a paladar apetitivo): estimular a semente de GRNs de açúcar/água
-tem efeito estatisticamente mensurável sobre a atividade dos descendentes,
-comparado a não estimular.
-
-Pré-requisito resolvido antes de rodar isto: RN-01a/AD-21 (override dos
-27/129 neurônios "serotonin" da semente que eram artefato de classificador
-— ver docs/04-regras-de-negocio.md).
-
-Mesmo desenho de `hygro_calibration_check.py`/`bristle_calibration_check.py`:
-comparação pareada (mesma semente de ruído em baseline e estimulado, N
-sementes), separando por topologia de sinal prevista
-(`topology.group_outputs_by_predicted_sign`) — sem curadoria por
-identidade celular disponível pros 14 descendentes (diferente do `escape`,
-que tem DNp01/DNp02 documentados na literatura; aqui não há fonte
-identificando quais DNs são especificamente ligadas a alimentação).
+"""RN-09 no circuito taste (F10, paladar): estimular a semente muda os descendentes? Mede também a escala do canal.
 
 Uso:  python tools/taste_calibration_check.py   (a partir de sim/, venv ativo)
 """
@@ -35,8 +19,7 @@ OUT_DIR = C.PROCESSED / "taste"
 
 
 def paired_trial(cc: graph.Connectome, seed: int, output_nids: np.ndarray) -> tuple[int, int]:
-    """Roda baseline e estimulado com o mesmo seed. Retorna (base, stim) —
-    contagem de disparos de `output_nids` em STEPS passos."""
+    """Roda baseline e estimulado com o mesmo seed."""
     eng_base = Engine(cc, seed=seed)
     base = 0
     for _ in range(STEPS):

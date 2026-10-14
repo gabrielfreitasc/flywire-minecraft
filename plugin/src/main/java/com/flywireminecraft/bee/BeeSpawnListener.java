@@ -10,19 +10,8 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.ItemStack;
 
-/**
- * Spawna e marca a abelha do conectoma quando o jogador usa o {@link SpawnItem}.
- *
- * <p>v1 é uma simulação = uma abelha (ver docs/00-visao-geral.md): se já
- * existe uma abelha marcada no mundo, nega o spawn em vez de criar uma
- * segunda que o loop de controle da F4 não saberia distinguir.
- *
- * <p>IA nativa continua LIGADA por enquanto — só é desligada quando o
- * controle motor for de fato aplicado (F4); desligar antes disso deixaria a
- * abelha parada sem motivo até lá. Ver plugin/README.md.
- */
+/** Spawna e marca a abelha do conectoma quando o jogador usa o SpawnItem. */
 public final class BeeSpawnListener implements Listener {
-
     private final SpawnItem spawnItem;
     private final FlywireBeeMarker marker;
 

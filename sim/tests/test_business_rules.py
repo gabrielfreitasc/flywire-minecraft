@@ -1,8 +1,4 @@
-"""
-Testes das regras de negócio. Ver docs/04-regras-de-negocio.md.
-
-Os marcados como CRÍTICO protegem correção científica, não só código.
-"""
+"""Testes das regras de negócio."""
 from __future__ import annotations
 
 import numpy as np
@@ -41,8 +37,6 @@ def test_sign_assignment():
 
 
 def test_photoreceptor_override():
-    """RN-02 CRÍTICO — fotorreceptores ocelares devem ter sinal -1,
-    apesar de virem rotulados como 'serotonin' no dado."""
     synthetic = pd.DataFrame(
         {
             "top_nt": ["serotonin", "acetylcholine", "serotonin"],
@@ -65,10 +59,6 @@ def test_photoreceptor_override_real_data(real_nodes):
 
 
 def test_serotonin_artifact_override():
-    """RN-01a/AD-18 — ORNs (cell_class="olfactory") viram +1 apesar do
-    rótulo "serotonin"; neurônios locais do lobo antenal (cell_class="ALLN")
-    viram -1; o resto rotulado "serotonin" (ex.: CSD) fica em 0, sem fonte
-    independente pra resolver."""
     synthetic = pd.DataFrame(
         {
             "top_nt": ["serotonin", "serotonin", "serotonin", "acetylcholine"],
@@ -80,10 +70,6 @@ def test_serotonin_artifact_override():
 
 
 def test_serotonin_artifact_override_hygro():
-    """RN-01a/AD-18 — no subcircuito hygro real: 318 ORNs -> +1, 40
-    neurônios locais (lLN1/lLN2) -> -1, restante (15, inclui CSD) fica em 0.
-    Números medidos e documentados em RN-01a — se mudarem, a extração do
-    hygro mudou e a doc precisa ser revisada, não só este teste."""
     hygro_nodes = pd.read_parquet(C.PROCESSED / "hygro" / "nodes.parquet")
     sign = graph.apply_serotonin_artifact_overrides(hygro_nodes, graph.assign_sign(hygro_nodes))
 
@@ -100,9 +86,6 @@ def test_serotonin_artifact_override_hygro():
 
 
 def test_johnston_artifact_override():
-    """RN-01a/AD-19 — neurônios do órgão de Johnston (cell_sub_class em
-    wind_gravity/auditory) rotulados "serotonin" viram +1 (colinérgico,
-    Kitamoto et al. 1995); outros tipos rotulados "serotonin" ficam em 0."""
     synthetic = pd.DataFrame(
         {
             "top_nt": ["serotonin", "serotonin", "serotonin", "acetylcholine"],
@@ -114,10 +97,6 @@ def test_johnston_artifact_override():
 
 
 def test_johnston_artifact_override_real_data():
-    """RN-01a/AD-19 — no subcircuito johnston real: 77 neurônios da semente
-    (wind_gravity/auditory) rotulados "serotonin" viram +1. Número medido e
-    documentado em RN-01a — se mudar, a extração do johnston mudou e a doc
-    precisa ser revisada, não só este teste."""
     johnston_nodes = pd.read_parquet(C.PROCESSED / "johnston" / "nodes.parquet")
     sign = graph.apply_johnston_artifact_overrides(johnston_nodes, graph.assign_sign(johnston_nodes))
 
@@ -130,9 +109,6 @@ def test_johnston_artifact_override_real_data():
 
 
 def test_gustatory_artifact_override():
-    """RN-01a/AD-21 — GRNs de açúcar/água (cell_sub_class == "sugar/water")
-    rotuladas "serotonin" viram +1 (colinérgico); outros tipos rotulados
-    "serotonin" ficam em 0."""
     synthetic = pd.DataFrame(
         {
             "top_nt": ["serotonin", "serotonin", "acetylcholine"],
@@ -144,10 +120,6 @@ def test_gustatory_artifact_override():
 
 
 def test_gustatory_artifact_override_real_data():
-    """RN-01a/AD-21 — no subcircuito taste real: 27 neurônios da semente
-    (sugar/water) rotulados "serotonin" viram +1. Número medido e
-    documentado em RN-01a — se mudar, a extração do taste mudou e a doc
-    precisa ser revisada, não só este teste."""
     taste_nodes = pd.read_parquet(C.PROCESSED / "taste" / "nodes.parquet")
     sign = graph.apply_gustatory_artifact_overrides(taste_nodes, graph.assign_sign(taste_nodes))
 
@@ -160,11 +132,6 @@ def test_gustatory_artifact_override_real_data():
 
 
 def test_sensory_cell_types_override_role():
-    """F9/AD-20 — `ingest.build(sensory_cell_types=...)` marca role="sensory"
-    pra tipos celulares fora de `super_class == "sensory"` (caso do `escape`:
-    semente em LC4/LPLC2, `super_class == "visual_projection"`). Sem isso
-    `Connectome.sensory` fica vazio e o Engine não tem onde injetar
-    estímulo — ver docstring de `ingest.build`."""
     ann = pd.DataFrame(
         {
             "root_id": [1, 2, 3, 4],
@@ -179,9 +146,6 @@ def test_sensory_cell_types_override_role():
             "nerve": ["", "", "", ""],
         }
     )
-    edges = pd.DataFrame({"pre": [1, 2], "post": [3, 4], "syn": [10, 10], "sign_source": ["", ""]})
-
-    sub = edges[edges.pre.isin({1, 2, 3, 4}) & edges.post.isin({1, 2, 3, 4})]
     nodes = ann.copy()
     nodes["is_seed"] = True
     nodes["role"] = "interneuron"
@@ -196,11 +160,6 @@ def test_sensory_cell_types_override_role():
 
 
 def test_escape_circuit_real_data_roles():
-    """F9/AD-20 — no subcircuito escape real: LC4+LPLC2 (314) viram
-    role="sensory" via sensory_cell_types, DNp01/DNp02 (+ outras DNs
-    alcançadas em 1 salto) viram role="output". Números medidos e
-    documentados em `tools/build_f9_circuit.py` — se mudar, a extração
-    mudou e a doc precisa ser revisada, não só este teste."""
     escape_nodes = pd.read_parquet(C.PROCESSED / "escape" / "nodes.parquet")
     sensory = escape_nodes[escape_nodes.role == "sensory"]
     assert len(sensory) == 314
@@ -220,8 +179,6 @@ def test_motor_boundary(monkeypatch):
     """RN-04 — nenhum neurônio foi alcançado ATRAVÉS de um descendente."""
     monkeypatch.setattr(C, "HOPS", 2)
     edges = pd.DataFrame({"pre": [1, 2, 3], "post": [2, 3, 4]})
-    # 1 -> 2 -> 3 -> 4, com 2 marcado como descendente: a expansão deve
-    # parar em 2 e nunca alcançar 3 ou 4, mesmo com HOPS=2.
     keep = ingest.expand(edges, seed={1}, descending={2})
     assert keep == {1, 2}
 
@@ -254,10 +211,6 @@ def test_refractory():
 
 
 def test_known_nt_sign_parsing():
-    """AD-29 — leitura do `known_nt` (texto livre da anotação oficial): só
-    transmissor rápido mapeado pela RN-01 conta; "-negative", peptídeo, NO,
-    serotonina e tiramina são ignorados; sinais opostos, histamina ou glicina
-    tornam ambíguo (None = sem override)."""
     cases = {
         "acetylcholine": 1,
         "glutamate, gaba; glutamate": -1,
@@ -265,8 +218,8 @@ def test_known_nt_sign_parsing():
         "tyramine, serotonin, glutamate, Dh44": -1,
         "SIFamide; acetylcholine-negative; glutamate": -1,
         "acetylcholine, nitric oxide, dopamine": 1,
-        "acetylcholine, gaba": None,  # co-transmissão de sinais opostos
-        "histamine; acetylcholine, histamine": None,  # histamina fica com RN-02
+        "acetylcholine, gaba": None,
+        "histamine; acetylcholine, histamine": None,
         "acetylcholine, glycine": None,
         "gaba-negative": None,
         "": None,
@@ -277,10 +230,6 @@ def test_known_nt_sign_parsing():
 
 
 def test_known_nt_override_precedence():
-    """AD-29 CRÍTICO — literatura vence a predição E os overrides por
-    analogia: neurônio local do lobo antenal rotulado "serotonin" (AD-18
-    forçaria -1) com known_nt colinérgico vira +1; fotorreceptor ocelar
-    (RN-02) com known_nt histamina continua -1; sem known_nt, nada muda."""
     synthetic = pd.DataFrame(
         {
             "top_nt": ["serotonin", "serotonin", "gaba", "acetylcholine"],
@@ -294,7 +243,5 @@ def test_known_nt_override_precedence():
 
 
 def test_known_nt_override_requires_column():
-    """AD-29 — subcircuito extraído antes da AD-29 (sem `known_nt`) falha alto,
-    não silencioso: o sinal sairia sem a correção de literatura."""
     with pytest.raises(ValueError, match="known_nt"):
         graph.apply_known_nt_overrides(pd.DataFrame({"top_nt": ["gaba"]}), np.array([-1], dtype=np.int8))

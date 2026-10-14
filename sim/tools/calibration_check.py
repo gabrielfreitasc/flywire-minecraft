@@ -1,20 +1,6 @@
-"""
-Valida RN-09: estimular os fotorreceptores tem efeito estatisticamente
-mensurável sobre a atividade dos descendentes, comparado a não estimular.
+"""RN-09 no circuito ocelar (main): estimular os fotorreceptores muda os descendentes?
 
-Comparação pareada — mesma semente de ruído em baseline e estimulado, para
-que a diferença observada só possa vir do estímulo, não de sorte no ruído.
-Os descendentes são separados em dois grupos pela topologia de sinal
-(tools/signal_topology.py), porque somar todos juntos cancela o efeito
-(ver docs/04-regras-de-negocio.md, RN-09).
-
-Reproduz os números citados na RN-09 (bias=0,045 · noise=0,05 · gain=0,01 ·
-amp=2,0 · N=30 sementes): grupo inibitório p≈0,003, grupo excitatório p≈0,25.
-Usa os valores atuais de config.py — se os parâmetros de RN-09 mudarem lá, os
-números daqui mudam junto (é o comportamento esperado: sempre reflete o que
-está de fato configurado, não um valor congelado).
-
-Uso:  python tools/calibration_check.py   (a partir de sim/, com o venv ativo)
+Uso:  python tools/calibration_check.py   (a partir de sim/, venv ativo)
 """
 from __future__ import annotations
 
@@ -37,8 +23,7 @@ N_TRIALS = 30
 
 
 def paired_trial(cc: graph.Connectome, seed: int, output_nids: np.ndarray) -> tuple[int, int]:
-    """Roda baseline e estimulado com o mesmo seed. Retorna (base, stim) —
-    contagem de disparos de `output_nids` em STEPS passos."""
+    """Roda baseline e estimulado com o mesmo seed."""
     eng_base = Engine(cc, seed=seed)
     base = 0
     for _ in range(STEPS):

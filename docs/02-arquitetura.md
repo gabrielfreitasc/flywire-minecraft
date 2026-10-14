@@ -101,8 +101,38 @@ vê intenção motora. Se o mob mudar, só L4 muda.
 {"t_ms": 12450, "light": 0.94, "dorsal_light": 0.61, "damage": false,
  "touch_contact": false, "touch_proximity": false, "raining": false,
  "alarm_explosion": false, "alarm_hostile_mob": false, "sound_music": false,
- "looming_threat": false, "food_contact": false}
+ "looming_threat": false, "food_contact": false,
+ "thermo_heat": false, "thermo_cold": false,
+ "pheromone_contact": false, "aggression_contact": false,
+ "path_integration_contact": false}
 ```
+
+| Campo | Circuito | Estímulo |
+|---|---|---|
+| `light` | main (ocelar) | fotorreceptores, `light × SENSOR_LIGHT_GAIN` |
+| `damage`, `touch_proximity` (OU) | bristle | `SENSOR_TOUCH_AMPLITUDE` |
+| `raining` | hygro | `SENSOR_RAIN_AMPLITUDE` |
+| `alarm_explosion`, `alarm_hostile_mob`, `sound_music` (OU) | johnston | `SENSOR_ALARM_AMPLITUDE` |
+| `looming_threat`, `damage` (OU) | escape | `SENSOR_LOOMING_AMPLITUDE` |
+| `food_contact` | taste | `SENSOR_TASTE_AMPLITUDE` |
+| `thermo_heat` / `thermo_cold` | thermo | cada um só a sua semente (`cell_sub_class`) |
+| `pheromone_contact`, `aggression_contact`, `path_integration_contact` | olfactory, aggression, path_integration | sem sensor no plugin; sempre `false` |
+
+Resposta (cada bloco `<circuito>_motor` só aparece se o servidor carregou o circuito):
+
+```json
+{"t_ms": 12450, "motor": {"phototaxis": 0.4, ...}, "active_dn": 14,
+ "bristle_motor": {"grooming": 0.1}, "bristle_active_dn": 3,
+ "hygro_motor": {"hygrotaxis": 0.2}, "johnston_motor": {"startle": 0.0},
+ "escape_motor": {"escape_drive": 0.0}, "taste_motor": {"appetite": 0.3},
+ "thermo_motor": {"thermal": 0.2}, "olfactory_motor": {"pheromone": 0.1},
+ "aggression_motor": {"aggression": 0.3},
+ "path_integration_motor": {"path_integration": 0.0}}
+```
+
+Canais que viraram comportamento em `MotorMapping.java`: `grooming`, `hygrotaxis`,
+`escape_drive`, `appetite`, `thermal`; `startle` só acorda do sono. `pheromone`,
+`aggression` e `path_integration` são telemetria.
 Dois campos opcionais, adicionados na F5 (omitidos no exemplo acima por
 serem raros — a maioria das mensagens não os inclui):
 

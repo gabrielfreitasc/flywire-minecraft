@@ -1,7 +1,4 @@
-"""
-L0 → L1 — lê data/raw/, valida contra o artigo, extrai o subcircuito ocelar.
-
-Escreve data/processed/{nodes,edges}.parquet + manifest.json.
+"""L0 → L1 — lê data/raw/, valida contra o artigo, extrai o subcircuito ocelar.
 
 Uso:  python -m flywire_sim.ingest
 """
@@ -17,7 +14,7 @@ from . import config as C
 
 
 class SourceValidationError(RuntimeError):
-    """Os dados de origem não batem com o artigo. Não contornar — ver RN e README."""
+    """Os dados de origem não batem com o artigo."""
 
 
 def _sha256(path: Path, chunk: int = 1 << 20) -> str:
@@ -29,6 +26,7 @@ def _sha256(path: Path, chunk: int = 1 << 20) -> str:
 
 
 def load_annotations() -> pd.DataFrame:
+    """Lê a anotação oficial e confere o total de linhas com o artigo."""
     ann = pd.read_csv(C.ANNOTATIONS_FILE, sep="\t", dtype=str).fillna("")
     if len(ann) != C.EXPECTED_ANNOTATION_ROWS:
         raise SourceValidationError(
@@ -39,6 +37,7 @@ def load_annotations() -> pd.DataFrame:
 
 
 def load_connectivity() -> pd.DataFrame:
+    """Lê a conectividade e confere o total de sinapses com o artigo."""
     edges = pd.read_parquet(C.CONNECTIVITY_FILE)
     edges = edges.rename(
         columns={
@@ -65,10 +64,7 @@ def load_connectivity() -> pd.DataFrame:
 
 
 def select_seed(ann: pd.DataFrame, pattern: str | None = None) -> set[int]:
-    """Semente = tudo cujo rótulo casa com `pattern` (RN-04 define a fronteira,
-    não a semente). `pattern` default é o circuito ocelar (AD-06); outros
-    circuitos (AD-17) passam seu próprio padrão — mesma mecânica, semente
-    diferente."""
+    """Semente = tudo cujo rótulo casa com `pattern` (RN-04 define a fronteira, não a semente)."""
     pattern = C.SEED_PATTERN if pattern is None else pattern
     cols = ["super_class", "cell_class", "cell_sub_class", "supertype", "cell_type"]
     hit = ann[cols].apply(
@@ -84,19 +80,7 @@ def expand(
     hops: int | None = None,
     exclude: set[int] | None = None,
 ) -> set[int]:
-    """BFS a jusante. Não atravessa neurônios descendentes — RN-04.
-
-    `exclude` (F17/AD-24, `olfactory`) — segunda barreira, mesmo mecanismo
-    de `descending`: um conjunto de nós que NUNCA entra em `keep` nem vira
-    ponto de partida pro próximo salto, mas por um motivo diferente de
-    RN-04 (ali é "não é papel deste circuito decidir o que sai por um
-    descendente"; aqui é "esse nó pertence a outra via funcional, agregá-lo
-    dilui/explode o circuito sem ajudar a alcançar descendente nenhum" —
-    medido caso a caso, não presumido: `tools/build_f17_circuit.py`
-    confirmou que excluir `Kenyon_Cell` da semente de feromônio corta 1.806
-    nós SEM perder nenhum dos 74 descendentes alcançados em 2 saltos — a
-    via de memória/aprendizado não é por onde esse sinal chega no
-    comportamento, pelo menos não neste subcircuito)."""
+    """BFS a jusante."""
     hops = C.HOPS if hops is None else hops
     exclude = set() if exclude is None else exclude
     keep, frontier = set(seed), set(seed)
@@ -117,45 +101,13 @@ def build(
     sensory_only_seed: bool = False,
     exclude_cell_classes: set[str] | None = None,
 ) -> dict:
-    """Constrói um subcircuito e grava nodes/edges/manifest em `out_dir`
-    (default: `data/processed/`, o circuito ocelar da v1 — AD-06). Outros
-    circuitos (AD-17, F7) passam `out_dir` próprio para não colidir com o
-    ocelar; nunca compartilham arquivo.
-
-    `sensory_cell_types` (F9/AD-20, `escape`) — role="sensory" por padrão é
-    `super_class == "sensory"` (fotorreceptores, hygrosensory, órgão de
-    Johnston: todos primeiro estágio sensorial "cru"). O circuito `escape`
-    tem semente em LC4/LPLC2, `super_class == "visual_projection"` — já
-    alguns sinapses adiante do olho composto na ontologia do FlyWire, mas
-    ainda assim o primeiro estágio DESTE subcircuito extraído (nenhum nó
-    `super_class == "sensory"` aparece no grafo de 1 hop a partir deles) e
-    o ponto onde o estímulo de ameaça/looming é injetado — por isso passam
-    aqui, não porque a ontologia mudou. Sem isso, `Connectome.sensory` fica
-    vazio e `Engine.stimulate()` não tem onde injetar corrente (ver
-    `server.py`). `None` (default) preserva o comportamento de todos os
-    outros circuitos.
-
-    `sensory_only_seed` (F12/AD-23, `thermo`) — só a SEMENTE conta como
-    `role="sensory"`; neurônios `super_class == "sensory"` alcançados por
-    salto (outras modalidades) viram interneurônios. Necessário quando 1
-    salto não basta pra ter saídas (2 descendentes só) e 2 saltos arrastam
-    milhares de sensoriais NÃO relacionados (1.561 no `thermo`) que seriam
-    estimulados junto e tirariam a especificidade do circuito. `False`
-    (default) preserva todos os outros circuitos.
-
-    `exclude_cell_classes` (F17/AD-24, `olfactory`) — nomes de
-    `cell_class` que nunca entram no subcircuito, mesmo mecanismo de
-    barreira que `descending` já usa (RN-04), por outro motivo: excluir
-    uma via funcional INTEIRA que se confirmou (medido, não presumido —
-    ver `tools/build_f17_circuit.py`) não contribuir pra nenhum
-    descendente alcançado, só inflar o tamanho. `None` (default) preserva
-    todos os outros circuitos."""
+    """Extrai um subcircuito (semente + saltos até os descendentes) e grava nodes/edges/manifest."""
     out_dir = C.PROCESSED if out_dir is None else out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
     ann = load_annotations()
     edges = load_connectivity()
-    edges = edges[edges.syn >= C.SYN_THRESHOLD]  # RN-03
+    edges = edges[edges.syn >= C.SYN_THRESHOLD]
 
     seed = select_seed(ann, pattern)
     descending = set(ann.loc[ann.super_class == "descending", "root_id"])
@@ -164,12 +116,6 @@ def build(
         if exclude_cell_classes else None
     )
     keep = expand(edges, seed, descending, hops, exclude=exclude)
-    # F13 — 8 neurônios de todo o conectoma aparecem em `connectivity` sem
-    # linha em `annotations` (sem super_class/neurotransmissor: sinal
-    # impossível de atribuir, RN-01). Subcircuitos pequenos nunca os
-    # alcançaram; o do sono (2+ saltos a partir do complexo central) sim.
-    # Sai do subcircuito E registra no manifest — não afeta os totais
-    # validados contra o artigo (feitos sobre a conectividade inteira, antes).
     unannotated = keep - set(ann.root_id)
     keep -= unannotated
 
@@ -186,9 +132,8 @@ def build(
         nodes.loc[nodes.cell_type.isin(sensory_cell_types), "role"] = "sensory"
     if sensory_only_seed:
         nodes.loc[(nodes.role == "sensory") & ~nodes.is_seed, "role"] = "interneuron"
-    nodes.loc[nodes.super_class == "descending", "role"] = "output"  # RN-04
+    nodes.loc[nodes.super_class == "descending", "role"] = "output"
 
-    # RN-05 — nid determinístico por root_id ordenado
     nodes = nodes.sort_values("root_id").reset_index(drop=True)
     nodes.insert(0, "nid", nodes.index.astype("int32"))
 

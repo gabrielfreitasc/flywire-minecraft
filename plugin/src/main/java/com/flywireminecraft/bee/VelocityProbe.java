@@ -10,23 +10,10 @@ import org.bukkit.util.Vector;
 import java.util.Locale;
 import java.util.logging.Logger;
 
-/**
- * Spikes técnicos isolados para responder: dá pra mover a abelha por código,
- * e de que jeito? Nenhum depende da ponte nem do vetor motor de verdade — só
- * testam mecanismos de movimento diferentes por alguns segundos, logando
- * posição. Isola "dá pra mover por código" de "o vetor motor está certo"
- * (dois riscos bem diferentes — ver docs/03-roadmap-fases.md, risco alto
- * sinalizado desde a F2).
- *
- * <p>Resultado do primeiro spike (setVelocity + IA desligada): deslocamento
- * ZERO em 5s reais, apesar de reaplicar velocidade a cada tick. Hipótese:
- * `setAI(false)` em mob voador trava movimento também, não só decisão — daí
- * os outros modos aqui.
- */
+/** Spikes técnicos isolados para responder: dá pra mover a abelha por código, e de que jeito? */
 public final class VelocityProbe {
-
-    private static final int DURATION_TICKS = 100; // 5s a 20 ticks/s
-    private static final int LOG_EVERY_TICKS = 20;  // 1x por segundo
+    private static final int DURATION_TICKS = 100;
+    private static final int LOG_EVERY_TICKS = 20;
 
     private final Plugin plugin;
     private final Logger logger;
@@ -62,43 +49,12 @@ public final class VelocityProbe {
     /** Modo 4: teleporte incremental — garantido funcionar, sem física/colisão. */
     public void runTeleport(Bee bee) {
         runLoop(bee, "teleport", (b, tick) -> {
-            Location next = b.getLocation().add(0.3, 0.0, 0.0); // mesma taxa dos outros modos, p/ comparar
+            Location next = b.getLocation().add(0.3, 0.0, 0.0);
             b.teleport(next);
         }, () -> {
         });
     }
 
-    /**
-     * Modo 5 — hipótese do usuário (16/09/2026): a "confusão" no experimento
-     * dia/noite (F6, resultado nulo) seria a IA nativa competindo pelo
-     * controle, não falta de efeito do circuito. {@code setAI(false)} já foi
-     * testado e descartado (modo 1 — congela a física inteira, não só a
-     * decisão). Alternativa nunca testada: Mob Goal API do Paper
-     * ({@link MobGoals#removeGoal}), que remove objetivos específicos sem
-     * tocar em {@code setAI}/física. Remove só os que competem com
-     * movimento/velocidade — {@code BEE_WANDER} (vagar aleatório),
-     * {@code BEE_GO_TO_KNOWN_FLOWER}/{@code BEE_POLLINATE} (o "vazamento" já
-     * visto na F5, abelha parou pra polinizar), {@code BEE_GO_TO_HIVE}/
-     * {@code BEE_LOCATE_HIVE}/{@code BEE_ENTER_HIVE} (candidato mais forte
-     * pro confundidor dia/noite — vanilla bee tenta voltar pra colmeia à
-     * noite). Mantém {@code BEE_ATTACK}/{@code BEE_BECOME_ANGRY}/
-     * {@code BEE_HURT_BY_OTHER}/{@code BEE_GROW_CROP} — não competem com
-     * locomoção no nosso cenário.
-     *
-     * <p>**Não restaura os goals ao final** (diferente do modo 1, que
-     * restaura {@code setAI}) — a API do Paper não expõe uma forma pública
-     * de re-registrar a implementação vanilla original a partir do
-     * {@code GoalKey}, só de adicionar um {@link com.destroystokyo.paper.entity.ai.Goal}
-     * customizado. Pra essa abelha específica voltar a ter os goals padrão,
-     * seria preciso {@code /flywirebee kill} + {@code give} (spawna uma
-     * abelha nova, com goals default).
-     *
-     * <p>**✅ Testado em servidor real, 17/09/2026: 28,84 de 30 blocos
-     * esperados em 5s (96%, igual ao modo 2 com IA ligada) — a física não
-     * trava.** Confirma que a API funciona; não confirma ainda que esses
-     * goals específicos explicam o nulo do dia/noite (ver `ControlLoop`,
-     * `CompetingGoals`, `docs/03-roadmap-fases.md` F6).
-     */
     public void runVelocityNoCompetingGoals(Bee bee) {
         CompetingGoals.disable(bee);
         runLoop(bee, "velocity-no-competing-goals",

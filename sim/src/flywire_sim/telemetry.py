@@ -1,33 +1,6 @@
-"""
-Telemetria em DuckDB.
-
-Esquema:
-
-  runs(run_id, started_at, manifest_sha, config_json)
-  spikes(run_id, t_ms, nid)                    -- append-only, em lote
-  stimuli(run_id, t_ms, nid, amplitude)        -- só quando o estímulo MUDA
-  motor_frames(run_id, t_ms, channel, value)
-
-Um arquivo por circuito (13/10/2026): o ocelar (`main`) grava em
-`runs.duckdb`, cada outro circuito em `runs_<circuito>.duckdb` (ver
-`db_path_for`). Cada circuito tem seu próprio espaço de `nid` (AD-17) e
-roda em processo próprio (F16) — DuckDB não aceita vários processos
-escrevendo no mesmo arquivo, e arquivo separado evita uma coluna `circuit`
-no esquema.
-
-DuckDB lê data/processed/nodes.parquet nativamente, então dá para cruzar
-spikes com cell_type sem ETL — ver `top_cell_types()` abaixo, que é a
-consulta de exemplo exigida pelo critério de saída da F2.
+"""Telemetria em DuckDB.
 
 Uso:
-
-    with Recorder() as rec:
-        for _ in range(10_000):
-            frame = engine.step()
-            rec.log_spikes(frame.t_ms, frame.spikes)
-        run_id = rec.run_id
-
-    top_cell_types(run_id).head()
 """
 from __future__ import annotations
 
@@ -72,8 +45,7 @@ CREATE TABLE IF NOT EXISTS motor_frames (
 
 
 def db_path_for(circuit: str, base: Path = C.DUCKDB_FILE) -> Path:
-    """Arquivo DuckDB de um circuito: `main` usa `base` como está; os outros,
-    `<base>_<circuito><sufixo>` na mesma pasta (`runs_taste.duckdb`...)."""
+    """Arquivo DuckDB de telemetria de um circuito (um arquivo por circuito)."""
     if circuit == "main":
         return base
     return base.with_name(f"{base.stem}_{circuit}{base.suffix}")
@@ -85,16 +57,11 @@ def processed_dir_for(circuit: str) -> Path:
 
 
 def _as_posix(path: Path) -> str:
-    """Caminho seguro para embutir em SQL (read_parquet), inclusive no Windows."""
     return str(path).replace("\\", "/")
 
 
 class Recorder:
-    """Grava um run de simulação em DuckDB. Uma instância por run.
-
-    Bufferiza em memória e grava em lote (RN-06: nunca deve travar o passo do
-    engine esperando I/O de disco a cada milissegundo).
-    """
+    """Grava um run de simulação em DuckDB."""
 
     def __init__(
         self,
@@ -119,16 +86,8 @@ class Recorder:
             [self.run_id, datetime.now(UTC), manifest_sha, config_json],
         )
 
-        # Cada item é (t_ms, array de nids/valores) — concatenados em bloco no
-        # flush. Um run de 10s pode gerar ~1M disparos: um append() Python por
-        # disparo (ou um executemany linha a linha no DuckDB) é ordens de
-        # magnitude mais lento que inserção colunar em lote.
         self._spike_chunks: list[tuple[int, NDArray[np.int64]]] = []
         self._spike_buffered = 0
-        # Estímulo no mesmo formato colunar dos disparos (13/10/2026): uma
-        # tupla Python por nid custava 1,47 ms/passo com o ocelar (273 nids
-        # estimulados a cada tick) — mais que o dt de 1 ms, o simulador
-        # gravando rodava ~2,5x mais lento que o tempo real.
         self._stim_chunks: list[tuple[int, NDArray[np.integer], float]] = []
         self._stim_buffered = 0
         self._last_stim: tuple[NDArray[np.integer], float] | None = None
@@ -144,12 +103,6 @@ class Recorder:
             self._flush_spikes()
 
     def log_stimulus(self, t_ms: int, nids: NDArray[np.integer], amplitude: float) -> None:
-        """Grava o estímulo só quando ele MUDA (nids ou amplitude) — cada
-        linha é "a partir de t_ms, estes nids com esta amplitude". Gravar todo
-        tick dava ~200 mil linhas/s em jogo real (13/10/2026), quase todas
-        repetidas. Chamar também com amplitude 0/sem nids (estímulo
-        desligado): não grava nada, mas faz o próximo "ligado" ser gravado
-        mesmo se igual ao anterior."""
         if len(nids) == 0 or not amplitude:
             self._last_stim = None
             return
@@ -200,10 +153,6 @@ class Recorder:
             self._motor_buf.clear()
 
     def _append_numeric(self, table: str, df: pd.DataFrame) -> None:
-        """Insere `df` (só colunas numéricas) em `table`, com `run_id` como
-        parâmetro SQL em vez de coluna. Uma coluna de string repetida em
-        50k linhas custava mais que o resto do flush inteiro na conversão
-        pandas → DuckDB (medido 13/10/2026)."""
         cols = ", ".join(df.columns)
         self.con.register("_flush_buf", df)
         try:
@@ -236,25 +185,7 @@ def top_cell_types(
     stimulus_nid: int | None = None,
     processed_dir: Path = C.PROCESSED,
 ) -> pd.DataFrame:
-    """Consulta de exemplo da F2: quais tipos celulares mais dispararam num run.
-
-    `processed_dir` tem que ser o do circuito que gravou `db_path` — `nid`
-    de um circuito não vale no `nodes.parquet` de outro (ver
-    `processed_dir_for`).
-
-    Com `stimulus_nid`, restringe aos disparos a partir do instante em que
-    aquele nid foi estimulado (junta com `stimuli`) — responde "sob estímulo
-    X" sem script ad-hoc, só SQL. Assume estímulo mantido (sem evento de
-    "fim") até o fim do run gravado — suficiente para o demo da F2; um
-    estímulo pulsado/repetido exigiria janelas por par de eventos on/off,
-    revisitar quando a ponte (F3) permitir isso.
-
-    Descarta `cell_type` vazio: os 273 fotorreceptores ocelares não têm
-    `cell_type` atribuído na fonte (dado, não bug — ver
-    `docs/01-camada-de-dados.md`). Sem esse filtro, estimular o sensorial e
-    perguntar "quais tipos mais dispararam" responde trivialmente "os que eu
-    acabei de estimular", que é ele mesmo, sem revelar nada sobre o circuito.
-    """
+    """Consulta de exemplo da F2: quais tipos celulares mais dispararam num run."""
     con = duckdb.connect(str(db_path))
     try:
         nodes_path = _as_posix(processed_dir / "nodes.parquet")

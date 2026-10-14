@@ -1,24 +1,4 @@
-"""
-Versão do critério de saída da F1 (RN-09) para o subcircuito `escape`
-(F9, candidato a circuito de fuga por looming): estimular a semente
-(LC4/LPLC2) tem efeito estatisticamente mensurável sobre a atividade de
-DNp01 (Giant Fiber) + DNp02 (via paralela), comparado a não estimular.
-
-Diferente de `bristle_calibration_check.py`/`hygro_calibration_check.py`/
-`johnston_calibration_check.py`: não usa `topology.group_outputs_by_predicted_sign`
-(BFS por sinal de caminho a partir da camada sensorial). Aqui o grupo de
-saída é curado por IDENTIDADE de tipo celular (DNp01+DNp02, os dois únicos
-dos 31 descendentes alcançados em 1 salto que a literatura (Ache et al.
-2019; von Reyn et al. 2017) liga diretamente a looming) — mesma disciplina
-de "não agregar sem checar identidade" documentada em CLAUDE.md
-("Armadilhas conhecidas"). Um único grupo, sem separação excitatório/
-inibitório: os dois tipos recebem só entrada colinérgica direta de
-LC4/LPLC2 (ver `tools/build_f9_circuit.py`), não há via inibitória
-concorrente conhecida dentro deste subcircuito extraído.
-
-Usa os valores ATUAIS de `config.py` (bias/noise/gain calibrados pro
-ocelar, 625 neurônios) — este script existe justamente pra checar se isso
-já basta pros 768 neurônios do escape ou se precisa de varredura própria.
+"""RN-09 no circuito escape (F9, looming): estimular a semente muda os descendentes? Mede também a escala do canal.
 
 Uso:  python tools/escape_calibration_check.py   (a partir de sim/, venv ativo)
 """
@@ -40,8 +20,7 @@ ESCAPE_DN_TYPES = ("DNp01", "DNp02")
 
 
 def paired_trial(cc: graph.Connectome, seed: int, output_nids: np.ndarray) -> tuple[int, int]:
-    """Roda baseline e estimulado com o mesmo seed. Retorna (base, stim) —
-    contagem de disparos de `output_nids` em STEPS passos."""
+    """Roda baseline e estimulado com o mesmo seed."""
     eng_base = Engine(cc, seed=seed)
     base = 0
     for _ in range(STEPS):

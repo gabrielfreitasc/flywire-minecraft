@@ -14,107 +14,12 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.logging.Level;
 
-/**
- * L6 — encarnação. Comandos ({@code /flywirebee ...}):
- *
- * <ul>
- *   <li>{@code give} / {@code kill} — spawna/marca ou remove a abelha do
- *       conectoma (ver {@link FlywireBeeMarker}, {@link SpawnItem});</li>
- *   <li>{@code spike <modo>} — spikes técnicos isolados de movimento
- *       (ver {@link VelocityProbe});</li>
- *   <li>{@code control start|stop} — liga/desliga o loop de controle real,
- *       sensor→ponte→motor→velocidade a 20 Hz (ver {@link ControlLoop});</li>
- *   <li>{@code lesion [trials] [segundos] [x y z]} — experimento de lesão,
- *       critério de saída da F4 (ver {@link LesionExperiment});</li>
- *   <li>{@code touchlesion [trials] [segundos] [x y z]} — experimento de
- *       lesão do subcircuito `bristle` (toque), F7/AD-17 (ver
- *       {@link TouchLesionExperiment}). Escolher x/y/z perto de um
- *       obstáculo ou do jogador — toque é orientado a evento, sem estímulo
- *       real nos dois grupos o experimento não testa nada;</li>
- *   <li>{@code hygrolesion [trials] [segundos] [x y z]} — experimento de
- *       lesão do subcircuito `hygro` (chuva), F7/AD-17 (ver
- *       {@link HygroLesionExperiment}). Precisa estar chovendo de verdade
- *       (`/weather rain`) — ambiente como a luz, mas sem chuva real não há
- *       estímulo em nenhum dos dois grupos;</li>
- *   <li>{@code escapelesion [trials] [segundos] [x y z]} — experimento de
- *       lesão do subcircuito `escape` (fuga), F14 (ver
- *       {@link EscapeLesionExperiment}). Estímulo SCRIPTED (dano real
- *       aplicado pelo próprio experimento) — não precisa de ameaça externa,
- *       mas segundosPorTrial >= 4 (a fuga dura ~2,5s);</li>
- *   <li>{@code loominglesion [trials] [segundos] [x y z]} — lesão do
- *       `escape` com LOOMING como estímulo, F9 (ver
- *       {@link LoomingLesionExperiment}): o experimento faz um mob real
- *       avançar até a abelha; origem em ar aberto, sem obstáculo do lado
- *       -X (pra onde ela foge), segundosPorTrial >= 4;</li>
- *   <li>{@code tastelesion [trials] [segundos] [x y z]} — experimento de
- *       lesão do subcircuito `taste` (paladar), F14 (ver
- *       {@link TasteLesionExperiment}). Escolher x/y/z a até 4 blocos de
- *       comida real (bloco ou item largado) — orientado a objeto;</li>
- *   <li>{@code thermolesion [trials] [segundos] [x y z]} — experimento de
- *       lesão do subcircuito `thermo` (calor/frio), F14 (ver
- *       {@link ThermoLesionExperiment}). Escolher x/y/z perto de
- *       lava/fogo/magma — só a fuga de calor PERIGOSO tem efeito de
- *       movimento (frio/bioma só mudam o balão);</li>
- *   <li>{@code johnstonlesion [trials] [segundos] [x y z]} — experimento de
- *       lesão do subcircuito `johnston` (som/vento), F14 (ver
- *       {@link JohnstonLesionExperiment}). Desenho diferente: força noite,
- *       espera ela ficar sonolenta, liga uma jukebox real no meio do
- *       trial — `startle` só tem efeito indireto (acordar do sono, F13).
- *       x/y/z precisa ficar a até 6 blocos de uma jukebox já colocada;</li>
- *   <li>{@code daynight [trials] [segundos]} — experimento dia/noite, F6
- *       (ver {@link DayNightExperiment}). Exige abelha ao ar livre —
- *       {@code light} (não {@code dorsal_light}) é quem varia com a hora do
- *       mundo, ver {@code CONVENCOES.md};</li>
- *   <li>{@code doseresponse [trials] [segundos]} — dose-resposta de luz, F6
- *       (ver {@link LightDoseResponseExperiment}): 4 níveis (0/0,25/0,5/1,0)
- *       sorteados via {@link ControlLoop#setForcedLight}, não hora do mundo;</li>
- *   <li>{@code visualize <on|off>} — partículas de atividade por grupo,
- *       critério de saída da F5 (ver {@link ActivityVisualizer});</li>
- *   <li>{@code touchmute <on|off>} — F9, achado do usuário (25/09/2026):
- *       toggle MANUAL (diferente de {@code touchlesion}, o experimento
- *       automatizado) pra mascarar toque/proximidade durante teste manual
- *       de outros sensores — sem isso, `grooming` domina o movimento toda
- *       vez que o jogador está perto observando (ver {@link ControlLoop#setTouchLesioned});</li>
- *   <li>{@code mute <grupo>} / {@code unmute <grupo|all>} — ferramenta de
- *       lesão por comando da F5: silencia de verdade a saída sináptica do
- *       grupo no simulador (diferente do mecanismo de {@code lesion}, que só
- *       zera o sensor de luz — ver {@code server.py});</li>
- *   <li>{@code stimulate <grupo> <amplitude>} / {@code stimulate stop} —
- *       estimulação dirigida da F5: injeta corrente extra num grupo, soma
- *       com o estímulo de luz (não substitui).</li>
- *   <li>{@code goals off} — F6, hipótese do usuário pro nulo do dia/noite:
- *       remove objetivos de IA nativa que competem com locomoção (vagar,
- *       flor, colmeia) via Mob Goal API do Paper, sem tocar em {@code setAI}
- *       (ver {@link CompetingGoals}). Sem volta pela API pública.</li>
- *   <li>{@code goto <x> <y> <z>} — F6, achado 17/09/2026: a abelha sai
- *       andando/voando pela IA nativa entre o spawn e o comando de
- *       experimento rodar, então a origem medida nunca batia com o ponto
- *       pretendido (era o motivo real da rodada dia/noite a 38/70 blocos do
- *       alvo). {@code /tp} do jogador NÃO move a abelha — este comando
- *       teleporta a abelha marcada direto, sem depender de onde ela derivou
- *       até. Rodar logo depois de {@code goals off} (que já para a maior
- *       parte do vagar) pra minimizar a janela de deriva.</li>
- *   <li>{@code validateyaw [trials] [segundos] [amplitude] [x y z]} — F6/AD-16,
- *       valida o sentido do canal {@code yaw_steering} (ver
- *       {@link SteeringValidationExperiment} e {@link MotorMapping}):
- *       estimula {@code steering_left}/{@code steering_right} e mede ângulo
- *       de giro líquido, não distância.</li>
- * </ul>
- *
- * <p>Regra dura (ver plugin/README.md e CONVENCOES.md): o plugin NUNCA altera
- * a simulação para "fazer o comportamento aparecer". Se nada emerge, o
- * problema é da hipótese ou do modelo, não do mob.
- */
+/** L6 — encarnação. */
 public final class FlywireBeePlugin extends JavaPlugin {
-
-    /** Nomes válidos tanto para {@code mute}/{@code unmute} quanto para {@code stimulate}. */
     private static final List<String> VALID_GROUPS = List.of(
             "sensory", "DNp", "DNpe", "DNg", "DNge", "DNb", "DNbe", "DNa", "DNae",
-            // RN-08/AD-14+AD-15 — categorias de comportamento publicado (Namiki et al.
-            // 2018 + BANC connectome). Ver docs/04-regras-de-negocio.md.
             "fast_locomotion", "broad_locomotion", "wing_abdomen_movements", "steering",
             "escape_takeoff", "landing", "flight", "walking", "ocellar", "neuromodulatory",
-            // RN-08/AD-16 — par bilateral dos tipos steering (F6), pra validar yaw_steering.
             "steering_left", "steering_right"
     );
 
@@ -144,8 +49,6 @@ public final class FlywireBeePlugin extends JavaPlugin {
 
         DamageTracker damageTracker = new DamageTracker();
         getServer().getPluginManager().registerEvents(damageTracker, this);
-        // F8 — sensor de "alarme" (explosão/mob hostil) pro subcircuito
-        // johnston (vento/som), ver AlarmSensor.
         AlarmSensor alarmSensor = new AlarmSensor(marker);
         getServer().getPluginManager().registerEvents(alarmSensor, this);
         controlLoop = new ControlLoop(this, marker, damageTracker, alarmSensor, host, port);
@@ -278,15 +181,6 @@ public final class FlywireBeePlugin extends JavaPlugin {
         new LesionExperiment(this, controlLoop).run(bee.get(), trials, secondsPerTrial, origin, player);
     }
 
-    /**
-     * F7/AD-17 — mesmo desenho de {@link #handleLesion}, mas mascarando
-     * damage/touch_contact/touch_proximity em vez de light. Diferente da
-     * luz (ambiente, qualquer origem serve), toque é orientado a evento —
-     * ver docstring de {@link TouchLesionExperiment}: passar x/y/z perto de
-     * um obstáculo ou do jogador é importante pra ter estímulo real pra
-     * medir, senão as duas condições ficam iguais por falta de toque nos
-     * dois grupos.
-     */
     private void handleTouchLesion(Player player, String[] args) {
         Optional<Bee> bee = player.getWorld().getEntitiesByClass(Bee.class).stream()
                 .filter(marker::isMarked)
@@ -318,14 +212,6 @@ public final class FlywireBeePlugin extends JavaPlugin {
         new TouchLesionExperiment(this, controlLoop).run(bee.get(), trials, secondsPerTrial, origin, player);
     }
 
-    /**
-     * F7/AD-17 — mesmo desenho de {@link #handleLesion}, mascarando
-     * {@code raining} em vez de light. Diferente do toque, chuva é ambiente
-     * como a luz (qualquer origem serve) — mas só testa alguma coisa se
-     * estiver chovendo de verdade no mundo (`/weather rain` antes), senão os
-     * dois grupos ficam sem estímulo. Ver docstring de
-     * {@link HygroLesionExperiment}.
-     */
     private void handleHygroLesion(Player player, String[] args) {
         Optional<Bee> bee = player.getWorld().getEntitiesByClass(Bee.class).stream()
                 .filter(marker::isMarked)
@@ -357,14 +243,6 @@ public final class FlywireBeePlugin extends JavaPlugin {
         new HygroLesionExperiment(this, controlLoop).run(bee.get(), trials, secondsPerTrial, origin, player);
     }
 
-    /**
-     * F14 (27/09/2026) — mesmo desenho de {@link #handleLesion}, mascarando
-     * {@code looming_threat}/{@code damage}. Diferente do toque/chuva, o
-     * estímulo é SCRIPTED (o próprio experimento aplica dano real na
-     * abelha) — não precisa de obstáculo ou ameaça externa por perto, mas
-     * NÃO cabe num trial curto demais (a fuga dura ~2,5s). Ver docstring de
-     * {@link EscapeLesionExperiment}.
-     */
     private void handleEscapeLesion(Player player, String[] args) {
         Optional<Bee> bee = player.getWorld().getEntitiesByClass(Bee.class).stream()
                 .filter(marker::isMarked)
@@ -427,12 +305,6 @@ public final class FlywireBeePlugin extends JavaPlugin {
         new LoomingLesionExperiment(this, controlLoop).run(bee.get(), trials, secondsPerTrial, origin, player);
     }
 
-    /**
-     * F14 (27/09/2026) — mesmo desenho de {@link #handleTouchLesion},
-     * mascarando {@code food_contact}. Orientado a objeto: x/y/z precisa
-     * ficar a até 4 blocos de comida real (bloco ou item largado). Ver
-     * docstring de {@link TasteLesionExperiment}.
-     */
     private void handleTasteLesion(Player player, String[] args) {
         Optional<Bee> bee = player.getWorld().getEntitiesByClass(Bee.class).stream()
                 .filter(marker::isMarked)
@@ -464,13 +336,6 @@ public final class FlywireBeePlugin extends JavaPlugin {
         new TasteLesionExperiment(this, controlLoop).run(bee.get(), trials, secondsPerTrial, origin, player);
     }
 
-    /**
-     * F14 (27/09/2026) — mesmo desenho de {@link #handleHygroLesion},
-     * mascarando {@code thermo_heat}/{@code thermo_cold}. Ambiente: x/y/z
-     * precisa ficar perto de lava/fogo/magma (fonte PERIGOSA — frio e calor
-     * de bioma não têm efeito de movimento pra medir, ver docstring de
-     * {@link ThermoLesionExperiment}).
-     */
     private void handleThermoLesion(Player player, String[] args) {
         Optional<Bee> bee = player.getWorld().getEntitiesByClass(Bee.class).stream()
                 .filter(marker::isMarked)
@@ -502,16 +367,6 @@ public final class FlywireBeePlugin extends JavaPlugin {
         new ThermoLesionExperiment(this, controlLoop).run(bee.get(), trials, secondsPerTrial, origin, player);
     }
 
-    /**
-     * F14 (29/09/2026) — desenho diferente dos outros: `startle` só tem
-     * efeito REAL indireto (acordar do sono noturno, F13), então o
-     * experimento força noite, espera ela ficar sonolenta, liga uma
-     * jukebox real via código no meio do trial e mede se ela desperta
-     * (normal) ou continua sonolenta (mascarado). x/y/z precisa ficar a até
-     * 6 blocos de uma jukebox real já colocada (com ou sem disco — o
-     * experimento insere um se precisar). Ver docstring de
-     * {@link JohnstonLesionExperiment}.
-     */
     private void handleJohnstonLesion(Player player, String[] args) {
         Optional<Bee> bee = player.getWorld().getEntitiesByClass(Bee.class).stream()
                 .filter(marker::isMarked)
@@ -562,9 +417,6 @@ public final class FlywireBeePlugin extends JavaPlugin {
             if (args.length >= 3) {
                 secondsPerTrial = Integer.parseInt(args[2]);
             }
-            // Restante depois de trials/segundos: nada | "blind" | "x y z" | "x y z blind".
-            // Determinístico pela contagem — sem isso, "posição x depois de blind" seria
-            // ambíguo com "blind depois de x".
             int remaining = args.length - 3;
             if (remaining == 1 && args[3].equalsIgnoreCase("blind")) {
                 blind = true;
@@ -650,7 +502,6 @@ public final class FlywireBeePlugin extends JavaPlugin {
                 origin, player);
     }
 
-    /** {@code x y z} a partir de {@code args[startIndex]} — mesmo mundo do jogador. */
     private Location parseXyz(Player player, String[] args, int startIndex) {
         double x = Double.parseDouble(args[startIndex]);
         double y = Double.parseDouble(args[startIndex + 1]);
@@ -668,19 +519,6 @@ public final class FlywireBeePlugin extends JavaPlugin {
         player.sendMessage("Visualização de atividade " + (on ? "ligada" : "desligada") + ".");
     }
 
-    /**
-     * F9 — achado do usuário (25/09/2026): testando a abelha numa área
-     * reclusa, {@code grooming} dominava o movimento o tempo todo e
-     * impedia testar QUALQUER outro sensor manualmente — {@code
-     * touch_proximity} fica permanentemente verdadeiro com o jogador perto
-     * observando (não é um estímulo ambiental real, é artefato do próprio
-     * teste). O mecanismo pra mascarar toque já existia
-     * ({@link ControlLoop#setTouchLesioned}, usado por
-     * {@link TouchLesionExperiment}), só não tinha um toggle manual simples
-     * — {@code touchlesion} é o experimento automatizado de várias
-     * rodadas, não serve pra "deixa eu testar outra coisa agora". Mesmo
-     * mecanismo de {@link #handleVisualize}: liga/desliga, não experimento.
-     */
     private void handleTouchMute(Player player, String[] args) {
         if (args.length < 2 || (!args[1].equalsIgnoreCase("on") && !args[1].equalsIgnoreCase("off"))) {
             player.sendMessage("Uso: /flywirebee touchmute <on|off>");
@@ -692,17 +530,6 @@ public final class FlywireBeePlugin extends JavaPlugin {
                 + "sempre false na ponte, grooming não deveria mais dominar)" : "voltou ao normal") + ".");
     }
 
-    /**
-     * F22 (06/10/2026, pedido do usuário) — "todos os circuitos não
-     * reagem à presença do jogador". Mesma raiz do problema de
-     * {@link #handleTouchMute} (F9: jogador perto pra observar/testar
-     * conta como estímulo real), mas mais cirúrgico — {@code touchmute}
-     * mascara o circuito `bristle` INTEIRO (perde toque real de mob/parede
-     * também); isto só exclui o JOGADOR especificamente, nos três sensores
-     * que de fato o tratam como fonte ({@link ControlLoop#setIgnorePlayer}:
-     * touch/proximidade, looming/ameaça-fuga, taste/comida-na-mão). Mob,
-     * item e bloco continuam contando normal nos três.
-     */
     private void handleIgnorePlayer(Player player, String[] args) {
         if (args.length < 2 || (!args[1].equalsIgnoreCase("on") && !args[1].equalsIgnoreCase("off"))) {
             player.sendMessage("Uso: /flywirebee ignoreplayer <on|off>");

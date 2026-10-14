@@ -5,10 +5,7 @@ plugins {
 group = "com.flywireminecraft"
 version = "0.1.0"
 
-// Sem toolchain fixo: exigiria JDK 21 instalado à parte (ou download automático
-// via resolver de toolchain). O JDK disponível (23) compila para release 21 via
-// `options.release` abaixo, que é o que realmente importa para compatibilidade
-// com o servidor Paper — não qual JDK roda o Gradle.
+// Sem toolchain fixo: qualquer JDK ≥ 21 compila para release 21 (`options.release`), que é o que o Paper exige.
 
 repositories {
     mavenCentral()

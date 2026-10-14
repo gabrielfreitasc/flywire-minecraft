@@ -1,23 +1,4 @@
-"""
-Versão do critério de saída da F1 (RN-09) para o subcircuito `johnston`
-(F8, candidato a sensor de vento/som): estimular a semente do órgão de
-Johnston tem efeito estatisticamente mensurável sobre a atividade dos
-descendentes, comparado a não estimular.
-
-Pré-requisito resolvido antes de rodar isto: RN-01a/AD-19 (override dos 77
-neurônios "serotonin" da semente que eram artefato de classificador — ver
-docs/04-regras-de-negocio.md).
-
-Mesmo desenho de `bristle_calibration_check.py`/`hygro_calibration_check.py`:
-comparação pareada (mesma semente de ruído em baseline e estimulado, N
-sementes), separando por topologia de sinal prevista
-(`topology.group_outputs_by_predicted_sign`) — aqui 135/136 descendentes
-com caminho excitatório e só 1 inibitório (ainda mais lopsided que o
-bristle, 109/110), baixo risco de cancelamento por agregação, mas
-reportado separado mesmo assim, mesma disciplina de RN-09. Usa os valores
-ATUAIS de `config.py` (bias/noise/gain calibrados pro ocelar, 625
-neurônios) — este script existe justamente pra checar se isso já basta
-pros 1.740 neurônios do johnston ou se precisa de uma varredura própria.
+"""RN-09 no circuito johnston (F8, vento/som): estimular a semente muda os descendentes? Mede também a escala do canal.
 
 Uso:  python tools/johnston_calibration_check.py   (a partir de sim/, venv ativo)
 """
@@ -38,8 +19,7 @@ OUT_DIR = C.PROCESSED / "johnston"
 
 
 def paired_trial(cc: graph.Connectome, seed: int, output_nids: np.ndarray) -> tuple[int, int]:
-    """Roda baseline e estimulado com o mesmo seed. Retorna (base, stim) —
-    contagem de disparos de `output_nids` em STEPS passos."""
+    """Roda baseline e estimulado com o mesmo seed."""
     eng_base = Engine(cc, seed=seed)
     base = 0
     for _ in range(STEPS):

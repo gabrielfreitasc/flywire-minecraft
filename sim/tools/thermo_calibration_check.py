@@ -1,9 +1,4 @@
-"""
-RN-09 pro subcircuito `thermo` (F12, calor/frio): estimular os TRNs de
-aquecimento (`heating`, 7) e de frio (`cold`, 9) — separados e juntos — tem
-efeito mensurável sobre os descendentes, comparado a não estimular. Também
-mede a distribuição de baseline/estimulado em Hz dos grupos de saída, pra
-escolher escala de normalização ANTES de fixar limiar (lição do F9/F10).
+"""RN-09 no circuito thermo (F12, calor/frio): estimular a semente muda os descendentes? Mede também a escala do canal.
 
 Uso:  python tools/thermo_calibration_check.py   (a partir de sim/, venv ativo)
 """
@@ -45,7 +40,6 @@ def main() -> None:
             _t, p = stats.ttest_1samp(diffs, 0)
             print(f"{label:8s} {gname}: diff média={diffs.mean():8.2f} desvio={diffs.std():6.2f} p={p:.5f}")
 
-    # distribuição de taxa (Hz) do grupo excitatório, baseline vs estimulado (ambos)
     seeds = np.concatenate([heating, cold])
     window_s = C.MOTOR_WINDOW_MS / 1000.0
     def rates(amp):

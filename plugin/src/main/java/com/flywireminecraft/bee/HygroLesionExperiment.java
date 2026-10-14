@@ -17,44 +17,8 @@ import java.util.Locale;
 import java.util.Random;
 import java.util.logging.Level;
 
-/**
- * F7/AD-17 — experimento de lesão pro subcircuito `hygro` (chuva), mesmo
- * desenho estatístico e mesmo formato de CSV do {@link TouchLesionExperiment}
- * (que validou o `bristle`, p=0,0025) e do {@link LesionExperiment} original
- * da F4 (ocelar, p=0,0014) — reaproveita {@code sim/tools/lesion_analysis.py}
- * sem mudar nada nele, só apontando pro arquivo novo.
- *
- * <p>Diferente do toque (orientado a evento, precisa de obstáculo por perto),
- * chuva é ambiente como a luz — qualquer origem serve, DESDE que esteja
- * chovendo de verdade no mundo no momento do trial (`/weather rain` antes de
- * rodar, ou aguardar o ciclo natural). Sem chuva real acontecendo, nem a
- * condição normal nem a mascarada têm estímulo — o experimento mediria
- * ruído, não sinal (mesma armadilha do toque, motivo diferente).
- *
- * <p>N trials sorteados aleatoriamente entre chuva normal e mascarada (não
- * alternância estrita, mesma razão da F4). Cada trial: teleporta a abelha de
- * volta à origem, zera velocidade, roda por N segundos medindo comprimento
- * de trajetória. Direção esperada — mesma do toque: se `hygrotaxis` faz a
- * abelha buscar abrigo (decisão do usuário, 21/09/2026, ver
- * `MotorMapping.isSeekingShelterActive`), o grupo NORMAL deveria ter
- * `path_length`/`avg_speed` MENORES (ela mergulha pro chão e para), o
- * MASCARADO maiores (nunca para, sempre voando via `phototaxis`) — mesmo
- * sentido do `bristle`, apesar do mergulho ser mais rápido que o pouso do
- * grooming (é um evento breve no início do trial, não muda a direção do
- * efeito ao longo de um trial de vários segundos).
- *
- * <p><b>Confundidor real encontrado na primeira rodada (22/09/2026):</b>
- * origem perto de árvore/construção (necessária pra `ShelterSensor` achar
- * abrigo) também aciona `touch_proximity` do `bristle` (raio de 3 blocos)
- * — log confirmou `grooming` saturado (~0,998) o experimento inteiro, e
- * `MotorMapping` checa `grooming` ANTES de `hygrotaxis`, mascarando a
- * busca de abrigo o tempo todo. Corrigido suprimindo o efeito do `bristle`
- * na velocidade durante todo o experimento
- * ({@link ControlLoop#setBristleSuppressedForExperiment}) — o circuito
- * continua rodando de verdade, só não comanda mais o movimento aqui.
- */
+/** Lesão do circuito hygro (F7): sorteia normal/lesionada por trial; CSV para lesion_analysis.py. */
 public final class HygroLesionExperiment {
-
     private static final Random RNG = new Random();
     private static final int TICKS_PER_SECOND = 20;
 
@@ -66,12 +30,6 @@ public final class HygroLesionExperiment {
         this.controlLoop = controlLoop;
     }
 
-    /**
-     * @param forcedOrigin se não-nulo, a abelha é teleportada pra cá ANTES do
-     *     primeiro trial, no mesmo instante de execução do comando (mesma
-     *     lição da F6 sobre deriva de IA nativa entre comandos — ver
-     *     {@link LesionExperiment}). Se nulo, usa a posição atual da abelha.
-     */
     public void run(Bee bee, int trials, int secondsPerTrial, Location forcedOrigin, CommandSender notify) {
         if (!controlLoop.isRunning()) {
             notify.sendMessage("Loop de controle precisa estar rodando primeiro: /flywirebee control start");
@@ -87,9 +45,6 @@ public final class HygroLesionExperiment {
         }
         Location origin = bee.getLocation().clone();
         List<TrialResult> results = new ArrayList<>();
-        // F7/AD-17 — ver docstring da classe: suprime o efeito do bristle na
-        // velocidade pelo experimento inteiro, evita que grooming (acionado
-        // por estar perto da árvore que dá abrigo) mascare a busca do hygro.
         controlLoop.setBristleSuppressedForExperiment(true);
         notify.sendMessage("Experimento de lesão de chuva iniciado: " + trials + " trials de "
                 + secondsPerTrial + "s.");
@@ -165,9 +120,6 @@ public final class HygroLesionExperiment {
         try (PrintWriter out = new PrintWriter(new FileWriter(file))) {
             out.println("trial,lesioned,path_length,avg_speed");
             for (TrialResult r : results) {
-                // Locale.ROOT — nunca o locale padrão da JVM (pt_BR usa vírgula
-                // decimal, que colide com a vírgula do CSV e corrompe o arquivo
-                // silenciosamente).
                 out.printf(Locale.ROOT, "%d,%s,%.4f,%.4f%n",
                         r.trial(), r.lesioned(), r.pathLength(), r.avgSpeed());
             }

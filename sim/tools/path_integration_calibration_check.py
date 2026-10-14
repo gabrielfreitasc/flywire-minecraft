@@ -1,19 +1,4 @@
-"""
-RN-09 pro subcircuito `path_integration` (F19, integração de
-trajetórias): estimular a semente de 422 neurônios PFN (p/m/a/d) tem
-efeito estatisticamente mensurável sobre os 49 descendentes, comparado a
-não estimular. Também mede a distribuição de baseline/estimulado em Hz
-(exc-inh), pra escolher escala de normalização ANTES de fixar limiar
-(lição do F9/F10/F12/F17/F18) — mesmo desenho de
-`aggression_calibration_check.py`.
-
-Sem curadoria por identidade celular disponível pros 49 descendentes
-(diferente do `escape`, que tem DNp01/DNp02 documentados na literatura) —
-comparação pareada, separando por topologia de sinal prevista
-(`topology.group_outputs_by_predicted_sign`). Achado real: o sinal líquido
-sob estímulo é NEGATIVO (inibitório domina mais que excitatório),
-diferente de todos os canais anteriores — não é erro, só muda o sinal do
-diff esperado.
+"""RN-09 no circuito path_integration (F19): estimular a semente muda os descendentes? Mede também a escala do canal.
 
 Uso:  python tools/path_integration_calibration_check.py   (a partir de sim/, venv ativo)
 """

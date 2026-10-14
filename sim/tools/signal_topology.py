@@ -1,12 +1,6 @@
-"""
-Análise interativa/exploratória da topologia de sinal — imprime a contagem de
-descendentes excitatórios/inibitórios por salto a partir dos fotorreceptores.
+"""Conta descendentes excitatórios/inibitórios por salto a partir dos fotorreceptores (RN-09).
 
-A lógica reusável (BFS de sinal, agrupamento por sinal previsto) mora em
-`flywire_sim.topology` — usada em runtime por `motor.py` desde a F4. Este
-script é só o relatório de texto para inspeção manual (F1/RN-09).
-
-Uso:  python tools/signal_topology.py   (a partir de sim/, com o venv ativo)
+Uso:  python tools/signal_topology.py   (a partir de sim/, venv ativo)
 """
 from __future__ import annotations
 
@@ -16,7 +10,6 @@ from flywire_sim import config as C
 from flywire_sim import graph
 from flywire_sim.topology import build_adjacency, group_outputs_by_predicted_sign, signed_bfs
 
-# Reexportado para compatibilidade com scripts existentes (tools/calibration_check.py).
 __all__ = ["build_adjacency", "group_outputs_by_predicted_sign", "main", "signed_bfs"]
 
 

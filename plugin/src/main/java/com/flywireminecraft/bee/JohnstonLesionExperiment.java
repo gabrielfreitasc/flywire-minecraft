@@ -22,55 +22,10 @@ import java.util.Locale;
 import java.util.Random;
 import java.util.logging.Level;
 
-/**
- * F14 (29/09/2026) — experimento de lesão pro subcircuito `johnston`
- * (vento/som), mesmo desenho estatístico/CSV dos anteriores — reaproveita
- * {@code sim/tools/lesion_analysis.py} sem mudar nada nele.
- *
- * <p><b>Desenho bem diferente dos outros</b> — decisão do usuário
- * (29/09/2026, via {@code AskUserQuestion}, entre 2 opções): `startle` hoje
- * é só telemetria, sem efeito de movimento próprio; o único efeito REAL é
- * INDIRETO — acordar a abelha do sono noturno (F13, ver
- * {@code ControlLoop.loudSound}). O experimento testa ISSO, não um
- * "sobressalto" que não existe ainda.
- *
- * <p>Cada trial tem DUAS fases:
- * <ol>
- *   <li><b>Assentamento</b> — teleporta pra origem, jukebox mutada, espera
- *       ela ficar sonolenta de verdade ({@link ControlLoop#isDrowsy}) antes
- *       de medir qualquer coisa. <b>Sempre com {@code johnstonLesioned=true}
- *       aqui, mesmo em trials "normais" (achado real, corrigido antes da
- *       1ª execução completa):</b> som/mob hostil real por perto durante a
- *       espera só derrubava o contador de calma nos trials NÃO mascarados —
- *       os lesionados ficavam "imunes" à mesma perturbação e assentavam
- *       rápido, virando timeout sistemático só nos normais. A condição real
- *       só passa a valer quando a medição começa. Timeout de segurança
- *       ({@link #SETTLE_TIMEOUT_TICKS}) — se mesmo assim não ficar sonolenta
- *       a tempo (não é noite, ou dano/ameaça real por perto), ENCERRA o
- *       experimento salvando os trials já concluídos (não descarta).</li>
- *   <li><b>Medição</b> — liga a jukebox (som REAL, script via
- *       {@code Jukebox#startPlaying()} — não precisa o jogador gerenciar
- *       disco a cada trial) e mede `path_length` só a partir daqui, pelos N
- *       segundos do trial. Normal: som real chega no circuito, `startle`
- *       cruza o limiar, ela desperta (velocidade/altura normais voltam) —
- *       `path_length` MAIOR. Lesionado: som mascarado antes do circuito,
- *       `startle` não cruza, ela continua sonolenta (12% de velocidade,
- *       teto de 1 bloco) — `path_length` MENOR. Mesmo sentido de
- *       escape/thermo (estímulo real acelera, mascarado deixa mais lenta).</li>
- * </ol>
- *
- * <p><b>Pré-requisitos, ambos verificados/forçados no início (não por
- * trial):</b> precisa ser noite ({@code World#setTime} forçado uma vez, se
- * ainda não for — efeito colateral real no relógio do mundo, avisado no
- * chat) e precisa ter uma jukebox real dentro do raio do sensor
- * ({@link AlarmSensor#MUSIC_RADIUS_BLOCKS}) da origem — colocada pelo
- * jogador antes de rodar o comando.
- */
+/** Lesão do circuito johnston (F14): mede o despertar por som com e sem o circuito. */
 public final class JohnstonLesionExperiment {
-
     private static final Random RNG = new Random();
     private static final int TICKS_PER_SECOND = 20;
-    /** Ticks de assentamento antes de desistir do trial (bem acima de SleepState.CALM_TICKS_TO_RESLEEP). */
     private static final int SETTLE_TIMEOUT_TICKS = 400;
 
     private final Plugin plugin;
@@ -81,11 +36,6 @@ public final class JohnstonLesionExperiment {
         this.controlLoop = controlLoop;
     }
 
-    /**
-     * @param forcedOrigin se não-nulo, a abelha é teleportada pra cá ANTES do
-     *     primeiro trial, no mesmo instante de execução do comando (mesma
-     *     lição da F6 sobre deriva de IA nativa entre comandos).
-     */
     public void run(Bee bee, int trials, int secondsPerTrial, Location forcedOrigin, CommandSender notify) {
         if (!controlLoop.isRunning()) {
             notify.sendMessage("Loop de controle precisa estar rodando primeiro: /flywirebee control start");
@@ -139,23 +89,12 @@ public final class JohnstonLesionExperiment {
         bee.teleport(origin);
         bee.setVelocity(new Vector(0, 0, 0));
         stopJukebox(jukeboxBlock);
-        // F15 (29/09/2026, achado real, bug corrigido antes da 1ª execução
-        // completa) — SEMPRE mascarado durante o assentamento, não só nos
-        // trials lesionados. Sem isso, qualquer som/mob hostil REAL por
-        // perto durante a espera derrubava o contador de calma SÓ nos
-        // trials normais (não mascarados) — os lesionados ficavam "imunes"
-        // à mesma perturbação (mascarada) e assentavam rápido, enquanto os
-        // normais nunca conseguiam (viraram timeout sistematicamente).
-        // A condição real (`lesioned`) só passa a valer quando a medição
-        // começa, ver measureTrial — os dois grupos entram sonolentos em
-        // condições simétricas, só a fase de MEDIÇÃO difere.
         controlLoop.setJohnstonLesioned(true);
 
         plugin.getLogger().info(String.format(
                 "[JohnstonLesionExperiment] trial %d/%d — lesionado=%s (fase: assentamento)",
                 trialIndex + 1, totalTrials, lesioned));
 
-        // Fase 1 — assentamento: espera ela ficar sonolenta de verdade antes de medir.
         new BukkitRunnable() {
             int tick = 0;
 
@@ -172,7 +111,6 @@ public final class JohnstonLesionExperiment {
                     plugin.getLogger().info(String.format(
                             "[JohnstonLesionExperiment] trial %d/%d — sonolenta após %d ticks, iniciando medição",
                             trialIndex + 1, totalTrials, tick));
-                    // F15 — só agora a condição REAL do trial passa a valer (ver comentário acima).
                     controlLoop.setJohnstonLesioned(lesioned);
                     startPlaying(jukeboxBlock);
                     measureTrial(bee, origin, jukeboxBlock, trialIndex, totalTrials, durationTicks, lesioned,
@@ -187,8 +125,6 @@ public final class JohnstonLesionExperiment {
                     notify.sendMessage("Ela não ficou sonolenta a tempo neste trial — encerrando o experimento "
                             + "com os " + results.size() + " trials já concluídos (confirme que é noite e não "
                             + "há dano/ameaça real por perto).");
-                    // F15 — timeout não é "abelha sumiu": salva o que já foi medido em vez de
-                    // descartar (diferente de finishAbort, usado só pra falha catastrófica de verdade).
                     finish(results, jukeboxBlock, notify);
                     cancel();
                 }
@@ -247,9 +183,6 @@ public final class JohnstonLesionExperiment {
         try (PrintWriter out = new PrintWriter(new FileWriter(file))) {
             out.println("trial,lesioned,path_length,avg_speed");
             for (TrialResult r : results) {
-                // Locale.ROOT — nunca o locale padrão da JVM (pt_BR usa vírgula
-                // decimal, que colide com a vírgula do CSV e corrompe o arquivo
-                // silenciosamente).
                 out.printf(Locale.ROOT, "%d,%s,%.4f,%.4f%n",
                         r.trial(), r.lesioned(), r.pathLength(), r.avgSpeed());
             }
@@ -264,7 +197,6 @@ public final class JohnstonLesionExperiment {
                 + "sim/tools/lesion_analysis.py <caminho do johnston_lesion_experiment.csv>");
     }
 
-    /** Varredura de bloco, mesmo raio que {@link AlarmSensor#isMusicNearby} usaria pra detectar esta jukebox. */
     private Block findJukebox(Location origin) {
         World world = origin.getWorld();
         if (world == null) {
@@ -287,7 +219,6 @@ public final class JohnstonLesionExperiment {
         return null;
     }
 
-    /** Liga a jukebox de verdade (som real, script) — insere disco se estiver vazia. */
     private void startPlaying(Block jukeboxBlock) {
         if (jukeboxBlock.getState() instanceof Jukebox jukebox) {
             if (jukebox.getRecord() == null || jukebox.getRecord().getType() == Material.AIR) {

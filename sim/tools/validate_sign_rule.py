@@ -1,32 +1,6 @@
-"""
-DT-2 — valida a regra de sinal (`graph.final_sign`: RN-01 + overrides + AD-29)
-contra ground truth de literatura, com separação de independência.
-
-Ground truth: `gt_data.csv` de flyconnectome/drosophila_neurotransmitters
-(commit a9417412) — uma linha por tipo celular x estudo, com o(s)
-transmissor(es) identificado(s) por imuno/FISH/etc. (1 = usa, -1 = não usa,
-0 = sem dado).
-
-**Independência.** O classificador que gera `top_nt` (Eckstein & Bates 2024)
-foi TREINADO com parte desses dados. Concordar com dado de treino infla o
-acerto — então cada tipo é marcado:
-  - `treino`: o tipo já estava em `202405-starting_gt_data.csv` (o ground truth
-    da época do treino, mesmo repositório) → só checagem de consistência;
-  - `independente`: o tipo só entrou depois → validação de verdade.
-
-**O que se compara é o SINAL, não o transmissor:** errar GABA por glutamato
-não muda nada no modelo (os dois são -1); errar ACh por GABA inverte a
-conexão. Sinal predito = sinal final do modelo (`graph.final_sign`, o mesmo
-de `graph.load`), maioria entre os neurônios do tipo. Sinal de
-referência = transmissores com valor 1, mapeados pela MESMA tabela da RN-01
-(ACh/DA/OA → +1, GABA/Glu → -1, outros → sem sinal); transmissores de sinais
-opostos no mesmo tipo (co-transmissão) ou estudos discordantes → `conflito`.
-
-Casamento de nome: `cell_type` da anotação FlyWire, e `hemibrain_type` como
-segunda chance. Tipos do cordão ventral/larva no gt simplesmente não casam.
+"""DT-2/AD-29: valida o sinal final contra o ground truth de literatura, separando dado de treino.
 
 Uso:  python sim/tools/validate_sign_rule.py [--list]
-       --list  imprime cada divergência (tipo, sinal predito, transmissor de referência, fonte)
 """
 from __future__ import annotations
 
@@ -48,8 +22,7 @@ NT_COLUMNS = [
     "acetylcholine", "glutamate", "gaba", "glycine", "dopamine",
     "serotonin", "octopamine", "tyramine", "histamine", "nitric_oxide",
 ]
-# Os 10 subcircuitos que o simulador carrega (server.main) — `sleep` foi
-# extraído e descartado (F13), fica de fora.
+# F13
 CIRCUITS = ["main", "bristle", "hygro", "johnston", "escape", "taste", "thermo",
             "olfactory", "aggression", "path_integration"]
 
@@ -80,7 +53,7 @@ def reference_signs(gt: pd.DataFrame) -> pd.DataFrame:
                     else:
                         signs.add(s)
         if not nts:
-            continue  # só evidência negativa (-1) — não dá sinal de referência
+            continue
         if len(signs) > 1:
             ref = "conflito"
         elif signs:

@@ -1,24 +1,6 @@
-"""
-Investiga o mecanismo por trás da dose-resposta de luz medida no Minecraft
-(F6, `docs/03-roadmap-fases.md`): `phototaxis` (= tanh(taxa_excitatória −
-taxa_inibitória)) não é monotônico em luz — tem pico em light=0,25, cai em
-light=0,5/1,0, e cai mais ainda em light=0.
+"""Investiga por que a resposta à luz não é monotônica (F6): phototaxis em função da intensidade.
 
-Hipótese candidata registrada (não testada até aqui): as duas vias de sinal
-da topologia (RN-09 — 29 descendentes com caminho excitatório/desinibição de
-2 saltos, 63 com caminho inibitório direto) podem ter curvas de resposta à
-INTENSIDADE de luz diferentes uma da outra, não só ao sinal (já sabíamos que
-respondem em direções opostas — RN-09). Se uma via saturar ou virar antes da
-outra, a diferença (`phototaxis`) pode ficar não-monotônica mesmo que cada
-via sozinha tenha uma curva mais simples.
-
-Roda sem Minecraft, mesma filosofia de `calibration_check.py` (que validou
-RN-09) — mede a taxa de disparo de cada grupo SEPARADO (não só a diferença)
-para os mesmos 4 níveis de luz testados no dose-resposta real
-(`LightDoseResponseExperiment.java`), convertendo light->amplitude do jeito
-que `server.py` faz de verdade (`light * SENSOR_LIGHT_GAIN`).
-
-Uso:  python tools/light_curve_check.py   (a partir de sim/, com o venv ativo)
+Uso:  python tools/light_curve_check.py   (a partir de sim/, venv ativo)
 """
 from __future__ import annotations
 
@@ -31,9 +13,8 @@ from flywire_sim.engine import Engine
 from flywire_sim.topology import group_outputs_by_predicted_sign
 
 LEVELS = (0.0, 0.25, 0.5, 1.0)
-STEPS = 200  # 200ms por trial — curto o bastante pra rodar 30 sementes x 4 níveis rápido,
-             # longo o bastante pra taxa não ser dominada por quantização de poucos disparos
-N_TRIALS = 30  # mesmo N de calibration_check.py (RN-09)
+STEPS = 200
+N_TRIALS = 30  # RN-09
 
 
 def rate_hz(count: int, n_neurons: int) -> float:
@@ -46,8 +27,6 @@ def rate_hz(count: int, n_neurons: int) -> float:
 def run_level(cc: graph.Connectome, excitatory: np.ndarray, inhibitory: np.ndarray,
               light: float, seed: int) -> tuple[float, float]:
     eng = Engine(cc, seed=seed)
-    # Mesma conversão que server.py::_sim_loop faz de verdade a cada tick —
-    # sempre chama stimulate(), mesmo com amplitude 0 (light=0.0).
     eng.stimulate(cc.sensory, light * C.SENSOR_LIGHT_GAIN)
     exc_count = 0
     inh_count = 0

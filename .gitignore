@@ -36,4 +36,7 @@ mc-server/*
 
 # IDE e ferramentas locais — configuração de máquina, não do projeto
 .idea/
-.claude/scheduled_tasks.lock
+# Instruções e estado de assistentes de IA (Claude Code etc.) — locais, não do projeto
+.claude/
+CLAUDE.md
+AGENTS.md

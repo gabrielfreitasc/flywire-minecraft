@@ -17,34 +17,8 @@ import java.util.Locale;
 import java.util.Random;
 import java.util.logging.Level;
 
-/**
- * F7/AD-17 — experimento de lesão pro subcircuito `bristle` (toque), mesmo
- * desenho estatístico e mesmo formato de CSV do {@link LesionExperiment} da
- * F4 (que validou o circuito ocelar, p=0,0014) — reaproveita
- * {@code sim/tools/lesion_analysis.py} sem mudar nada nele, só apontando
- * pro arquivo novo.
- *
- * <p>Diferença de desenho em relação ao da luz: `light` é ambiente e varia
- * continuamente com a posição, então qualquer origem serve. Toque é
- * orientado a EVENTO — se o trial rodar no meio do ar aberto, sem nada
- * perto pra tocar ou esbarrar, nem a condição normal nem a mascarada vão
- * ter estímulo real, e o experimento não testa nada (mede ruído). Por isso
- * a origem default deste experimento (ver {@code handleTouchLesion} em
- * {@link FlywireBeePlugin}) deveria ficar perto de um obstáculo ou do
- * jogador — quem roda o comando escolhe isso passando x/y/z.
- *
- * <p>N trials sorteados aleatoriamente entre toque normal e mascarado
- * (não alternância estrita, mesma razão do experimento da F4 — não
- * confundir condição com deriva ao longo do experimento). Cada trial:
- * teleporta a abelha de volta à origem, zera velocidade, roda por N
- * segundos medindo comprimento de trajetória. Métrica: se o toque real faz
- * ela pousar/ficar parada (grooming) e o mascarado não, `path_length`/
- * `avg_speed` devem ser MENORES no grupo normal — direção oposta da F4
- * (lá, lesionado tinha rastro MENOR; aqui, mascarado deveria ter rastro
- * MAIOR, porque sem toque ela nunca para).
- */
+/** Lesão do circuito bristle (F7): sorteia normal/lesionada por trial; CSV para lesion_analysis.py. */
 public final class TouchLesionExperiment {
-
     private static final Random RNG = new Random();
     private static final int TICKS_PER_SECOND = 20;
 
@@ -56,12 +30,6 @@ public final class TouchLesionExperiment {
         this.controlLoop = controlLoop;
     }
 
-    /**
-     * @param forcedOrigin se não-nulo, a abelha é teleportada pra cá ANTES do
-     *     primeiro trial, no mesmo instante de execução do comando (mesma
-     *     lição da F6 sobre deriva de IA nativa entre comandos — ver
-     *     {@link LesionExperiment}). Se nulo, usa a posição atual da abelha.
-     */
     public void run(Bee bee, int trials, int secondsPerTrial, Location forcedOrigin, CommandSender notify) {
         if (!controlLoop.isRunning()) {
             notify.sendMessage("Loop de controle precisa estar rodando primeiro: /flywirebee control start");
@@ -144,9 +112,6 @@ public final class TouchLesionExperiment {
         try (PrintWriter out = new PrintWriter(new FileWriter(file))) {
             out.println("trial,lesioned,path_length,avg_speed");
             for (TrialResult r : results) {
-                // Locale.ROOT — nunca o locale padrão da JVM (pt_BR usa vírgula
-                // decimal, que colide com a vírgula do CSV e corrompe o arquivo
-                // silenciosamente).
                 out.printf(Locale.ROOT, "%d,%s,%.4f,%.4f%n",
                         r.trial(), r.lesioned(), r.pathLength(), r.avgSpeed());
             }

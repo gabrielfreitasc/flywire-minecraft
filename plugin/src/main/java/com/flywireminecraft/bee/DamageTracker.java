@@ -5,16 +5,8 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageEvent;
 
-/**
- * Sinal de dano para o campo "damage" do protocolo (ver docs/02-arquitetura.md).
- *
- * <p>v1 = uma abelha (docs/00-visao-geral.md): uma flag simples basta, não
- * precisa rastrear por entidade. É consumida (lida e resetada) a cada troca
- * com a ponte — sinal de borda, não de nível: "houve dano desde a última
- * leitura", não "está tomando dano agora".
- */
+/** Sinal de dano para o campo "damage" do protocolo (ver docs/02-arquitetura.md). */
 public final class DamageTracker implements Listener {
-
     private volatile boolean damagedRecently = false;
 
     @EventHandler

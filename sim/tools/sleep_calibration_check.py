@@ -1,9 +1,4 @@
-"""
-RN-09 pro subcircuito `sleep` (F13, sonolência noturna): estimular as 31
-sementes (ER5 + dFB FB6A/H/I/Z) tem efeito mensurável sobre os descendentes,
-comparado a não estimular? Também mede a distribuição de (taxa exc - taxa inh)
-em Hz, baseline vs estimulado, pra escolher escala ANTES de fixar limiar
-(lição do F9/F10/F12) — mesma quantidade que o decoder usa.
+"""RN-09 no circuito sleep (F13; resultado negativo, AD-24): estimular a semente muda os descendentes? Mede também a escala do canal.
 
 Uso:  python tools/sleep_calibration_check.py   (a partir de sim/, venv ativo)
 """

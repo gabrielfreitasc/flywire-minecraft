@@ -1,15 +1,4 @@
-"""
-Cliente de teste que finge ser o plugin Minecraft — critério de saída da F3.
-
-Injeta sensores a `--rate` Hz por `--duration` s numa SimulationServer (em
-processo, sem precisar do Docker/plugin real) e verifica:
-
-  - nenhuma linha enviada fica sem resposta (sem perda de frame)
-  - `motor._history` (estado que mais cresceria num bug) não escapa da janela
-
-RSS do processo só é medido em SO Unix (`resource`, indisponível no Windows).
-O ambiente de produção é Linux/Docker (AD-09) — a checagem real de memória
-roda lá; aqui documentamos a limitação.
+"""Cliente de teste que finge ser o plugin Minecraft — critério de saída da F3.
 
 Uso:  python tools/fake_minecraft_client.py [--duration 60] [--rate 20]
 """
@@ -26,14 +15,14 @@ from flywire_sim.server import SimulationServer
 
 try:
     import resource
-except ImportError:  # Windows
+except ImportError:
     resource = None
 
 
 def run(duration_s: float, rate_hz: float, host: str = "127.0.0.1") -> None:
     cc = graph.load()
     with SimulationServer(cc, host=host, port=0) as srv:
-        time.sleep(0.2)  # dá tempo da thread de simulação estabilizar
+        time.sleep(0.2)
 
         sock = socket.create_connection((host, srv.port), timeout=5.0)
         sock_file = sock.makefile("rwb")

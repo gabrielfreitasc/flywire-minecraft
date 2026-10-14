@@ -1,12 +1,4 @@
-"""
-Testes de `bristle_motor.py` — curadoria de comportamento (BANC) pro
-subcircuito `bristle` (F7/AD-17). Mesmo padrão de
-`test_motor_telemetry.py::test_published_behavior_groups_are_real_types` /
-`test_connectivity_cluster_groups_are_real_types`, dicionário diferente.
-
-Assume `data/processed/bristle/` já extraído (`python tools/build_f7_circuits.py`),
-mesma convenção de `test_business_rules.py` pro circuito ocelar.
-"""
+"""Testes de `bristle_motor.py` — curadoria de comportamento (BANC) pro subcircuito `bristle` (F7/AD-17)."""
 from __future__ import annotations
 
 import pytest
@@ -28,23 +20,18 @@ def bristle_connectome() -> graph.Connectome:
 
 
 def test_published_behavior_groups_are_real_types(bristle_connectome):
-    """Os 6 tipos com `cell_function` publicado (BANC) existem de fato no
-    subcircuito bristle, todos grooming (achado, não hipótese)."""
     groups = group_by_published_behavior(bristle_connectome)
     assert set(groups) == {"grooming"}
     total = sum(len(nids) for nids in groups.values())
-    assert total == 9  # 6 tipos, 9 neurônios (alguns tipos têm >1 neurônio) — conferido contra o dado
-    assert total < len(bristle_connectome.output)  # cobertura parcial, não fabricar o resto
+    assert total == 9
+    assert total < len(bristle_connectome.output)
 
 
 def test_connectivity_cluster_groups_are_real_types(bristle_connectome):
-    """Os 52 tipos com cluster de conectividade BANC (sem comportamento
-    medido) existem de fato no subcircuito bristle."""
     groups = group_by_connectivity_cluster(bristle_connectome)
     total = sum(len(nids) for nids in groups.values())
-    assert total == 97  # 52 tipos, 97 neurônios — conferido contra o dado
+    assert total == 97
     assert total < len(bristle_connectome.output)
-    # sem sobreposição com o que já tem comportamento medido
     published_nids = {
         nid for nids in group_by_published_behavior(bristle_connectome).values() for nid in nids
     }
@@ -53,8 +40,6 @@ def test_connectivity_cluster_groups_are_real_types(bristle_connectome):
 
 
 def test_coverage_accounts_for_all_60_types(bristle_connectome):
-    """behavior + cluster + sem-dado cobre exatamente os 60 tipos do bristle
-    — nenhum tipo perdido ou contado duas vezes na curadoria."""
     out_types = set(bristle_connectome.nodes.loc[bristle_connectome.output].cell_type)
     curated = set(BRISTLE_PUBLISHED_DN_BEHAVIOR) | set(BRISTLE_CONNECTIVITY_CLUSTER)
     assert curated.isdisjoint(BRISTLE_NO_DATA)

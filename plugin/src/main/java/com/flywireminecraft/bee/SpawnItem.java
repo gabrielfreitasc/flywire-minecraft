@@ -11,18 +11,8 @@ import org.bukkit.plugin.Plugin;
 
 import java.util.List;
 
-/**
- * Item que, ao ser usado, spawna e marca a abelha do conectoma
- * (ver {@link FlywireBeeMarker}, {@link BeeSpawnListener}).
- *
- * <p>Não reaproveita o Bee Spawn Egg vanilla de propósito: a mecânica nativa
- * de spawn egg spawnaria uma abelha comum por conta própria antes do nosso
- * código rodar, e teríamos que cancelar/desfazer isso. Honeycomb aqui é só o
- * ícone — sem comportamento especial de clique no vanilla, então todo o
- * spawn é feito manualmente por {@link BeeSpawnListener}.
- */
+/** Item que, ao ser usado, spawna e marca a abelha do conectoma (ver FlywireBeeMarker, BeeSpawnListener). */
 public final class SpawnItem {
-
     private static final String KEY = "spawn_item";
 
     private final NamespacedKey key;

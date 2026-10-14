@@ -7,72 +7,18 @@ import org.bukkit.Particle;
 import org.bukkit.World;
 import org.bukkit.entity.Bee;
 
-/**
- * L5 → visualização — uma cor POR CIRCUITO (não por canal), partículas ao
- * redor da abelha. Quantidade de partículas é proporcional à maior |valor|
- * entre os canais de referência daquele circuito: mais partículas = mais
- * atividade agora.
- *
- * <p><b>Redesenhado (21/09/2026, pedido do usuário) — de "1 cor por canal"
- * pra "1 cor por circuito".</b> A versão anterior dava 1 cor pra cada um dos
- * 8 grupos provisórios por prefixo de `cell_type` do ocelar (RN-08, telemetria
- * sem curadoria) + `phototaxis` + `locomotion_drive` — 10 cores só do ocelar,
- * poluído visualmente e ficaria pior a cada canal novo. Trocado por uma
- * composição fixa, **escalável**: cada circuito (`CircuitVisual`) declara sua
- * cor e a LISTA de canais que representam ele — a maioria só tem um (o canal
- * validado ou candidato a validado), não uma cor por canal bruto. Adicionar
- * um circuito novo (F7+) é uma linha nova em {@link #CIRCUITS}, não uma
- * palheta nova.
- *
- * <p>Canais de referência por circuito, e por quê:
- * <ul>
- *   <li>{@code ocelar} — {@code phototaxis} (validado por lesão, F4,
- *       p=0,0014) e {@code yaw_steering} (canal de direção, RN-08/AD-16, em
- *       validação). Os 8 grupos por prefixo (telemetria bruta, sem curadoria)
- *       ficaram de fora — são ruído visual, não sinal com significado.</li>
- *   <li>{@code bristle} — {@code grooming} (único canal com comportamento
- *       publicado, RN-08 equivalente, e o único que já controla a abelha de
- *       verdade). {@code conn_*} (cluster de conectividade, evidência mais
- *       fraca) fica de fora pelo mesmo motivo dos grupos do ocelar.</li>
- *   <li>{@code hygro} — {@code hygrotaxis} (único canal que existe, telemetria
- *       ainda sem lesão validando, ver `hygro_motor.py`).</li>
- *   <li>{@code johnston} — {@code startle} (F8, vento/som; único canal que
- *       existe, telemetria ainda sem lesão validando, ver
- *       `johnston_motor.py`).</li>
- *   <li>{@code escape} — {@code escape_drive} (F9/AD-20, fuga por looming;
- *       único canal que existe, curado por identidade celular
- *       (DNp01+DNp02), telemetria ainda sem lesão validando, ver
- *       `escape_motor.py`).</li>
- *   <li>{@code taste} — {@code appetite} (F10, paladar apetitivo; único
- *       canal que existe, telemetria ainda sem lesão validando, ver
- *       `taste_motor.py`).</li>
- * </ul>
- *
- * <p><b>Nota importante:</b> pegar o MAIOR |valor| entre os canais de um
- * circuito (não somar) é só pra decidir QUANTAS partículas mostrar — uma
- * escolha visual, não um sinal novo. Não recalibra nem realimenta
- * `MotorMapping.java`; a mesma armadilha de "somar canais de fontes
- * diferentes dilui o efeito" (RN-08/RN-09, `CONVENCOES.md`) é sobre o vetor
- * motor que MOVE a abelha, não sobre quantas partículas aparecem na tela.
- */
+/** L5 → visualização — uma cor POR CIRCUITO (não por canal), partículas ao redor da abelha. */
 public final class ActivityVisualizer {
-
     private record CircuitVisual(Color color, String... channels) {
     }
 
-    // Ordem = ordem de desenho. Cor de cada circuito reaproveitada da versão
-    // anterior (já eram as cores de destaque de phototaxis/grooming/
-    // hygrotaxis) — só a composição mudou, não a paleta em si.
-    // Cores por circuito, pacote-visíveis: LiveHud reaproveita as MESMAS
-    // cores nos indicadores ○/● do painel (pedido do usuário, 26/09/2026),
-    // sem duplicar RGB.
-    static final Color COLOR_OCELAR = Color.fromRGB(255, 230, 0);    // amarelo (luz)
-    static final Color COLOR_BRISTLE = Color.fromRGB(139, 90, 43);   // marrom (toque/limpeza)
-    static final Color COLOR_HYGRO = Color.fromRGB(0, 128, 128);     // azul-petróleo (chuva)
-    static final Color COLOR_JOHNSTON = Color.fromRGB(220, 0, 0);    // vermelho (alarme/som)
-    static final Color COLOR_ESCAPE = Color.fromRGB(148, 0, 211);    // violeta (medo/fuga)
-    static final Color COLOR_TASTE = Color.fromRGB(255, 105, 180);   // rosa (paladar/doce)
-    static final Color COLOR_THERMO = Color.fromRGB(255, 140, 0);    // laranja (temperatura)
+    static final Color COLOR_OCELAR = Color.fromRGB(255, 230, 0);
+    static final Color COLOR_BRISTLE = Color.fromRGB(139, 90, 43);
+    static final Color COLOR_HYGRO = Color.fromRGB(0, 128, 128);
+    static final Color COLOR_JOHNSTON = Color.fromRGB(220, 0, 0);
+    static final Color COLOR_ESCAPE = Color.fromRGB(148, 0, 211);
+    static final Color COLOR_TASTE = Color.fromRGB(255, 105, 180);
+    static final Color COLOR_THERMO = Color.fromRGB(255, 140, 0);
 
     private static final CircuitVisual[] CIRCUITS = {
             new CircuitVisual(COLOR_OCELAR, "phototaxis", "yaw_steering"),
@@ -87,12 +33,7 @@ public final class ActivityVisualizer {
     private static final int MAX_PARTICLES_PER_CIRCUIT = 6;
     private static final double RADIUS = 0.6;
 
-    // F23 (06/10/2026, pedido do usuário) — partícula literal de ambiente
-    // (neve/calor), DIFERENTE do DUST laranja de `thermo` acima (que
-    // representa ATIVIDADE NEURAL do canal `thermal`, não a leitura crua
-    // do sensor). Isto é só cosmético, direto de `ThermalSensor.Reading`
-    // (heatNear/coldNear/coldSeverity) — mesma disciplina de não alterar a
-    // simulação, só tornar visível o que `ThermalSensor` já lê.
+    // F23
     private static final int MAX_SNOW_PARTICLES = 6;
     private static final int HEAT_PARTICLE_COUNT = 4;
 
@@ -118,14 +59,6 @@ public final class ActivityVisualizer {
         renderEnvironment(world, center, heatNear, coldNear, coldSeverity);
     }
 
-    /**
-     * F23 — neve quando há frio por perto (quantidade escala com
-     * {@code coldSeverity}, mínimo 1 partícula pra qualquer `coldNear`
-     * ficar visível mesmo no piso de severidade), chama quando há calor
-     * perigoso/bioma muito quente por perto. Os dois sinais são
-     * independentes no sensor (não mutuamente exclusivos por construção),
-     * mas na prática não devem coincidir no mesmo bioma.
-     */
     private void renderEnvironment(World world, Location center, boolean heatNear, boolean coldNear, double coldSeverity) {
         if (coldNear) {
             int count = Math.max(1, (int) Math.round(Math.min(1.0, coldSeverity) * MAX_SNOW_PARTICLES));

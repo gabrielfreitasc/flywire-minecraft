@@ -1,63 +1,4 @@
-"""
-Curadoria de comportamento por tipo de descendente pro subcircuito `bristle`
-(F7/AD-17, candidato a sensor de toque) — equivalente de RN-08 (AD-14/AD-15),
-fonte diferente, aplicada aos 60 tipos de descendente do `bristle` (não os
-47 do ocelar; ver `motor.py` pra esses).
-
-**Fonte:** BANC connectome (Bates, Phelps, Kim, Yang et al. 2026, Nature, DOI
-10.1038/s41586-026-10735-w), tabela `banc_neck_functional_classes.csv`
-(materialização v888), obtida de
-https://github.com/htem/BANC-project/blob/main/data/banc_annotations/v888/
-— mesmo produto de dado que gerou a Supplementary Data 6/9 usada em RN-08/
-AD-15, só que lida direto do repositório público do projeto (o script que a
-gera, `R/figures/panels_an_dn_umap.R`, grava o resultado ali) em vez do zip
-do Harvard Dataverse, que o proxy deste ambiente bloqueia (mesma restrição
-de egresso já documentada pra Zenodo, AD-11).
-
-**Namiki/Cande et al. 2018 (eLife 34275) checado primeiro, sem achado.** Os
-tipos legíveis na Figura 6 do paper (DNa01/02/05/07, DNb01, DNd02/03,
-DNg07/08/10/12/13/25, DNp01/02/09/10/26/29) não batem com nenhum dos 60 tipos
-do `bristle` — a numeração é da era pré-conectoma completo (driver lines
-acessíveis por genética, um subconjunto pequeno). O PDF suplementar de 50 MB
-(análise por linha split-GAL4) foi baixado e confirmado — de novo — não
-confiável de interpretar (quase todo gráfico de rastreamento bruto por
-imagem, não tabela), mesmo problema já registrado em RN-08 pro ocelar. Não
-repetir a tentativa sem um formato novo de fonte.
-
-**Coluna `cell_function` (literatura revisada pelos autores do BANC, mesmo
-nível de evidência de Namiki 2018 + Supplementary Data 9):** cruzando os 60
-tipos do `bristle`, **6 batem, todos `grooming`**: `DNg12_e`, `DNge011`,
-`DNge012`, `DNge025`, `DNge028`, `DNge078`. Achado biologicamente coerente,
-não coincidência de rótulo — cerdas mecanossensoriais de contato (a própria
-semente do `bristle`, ver `docs/01-camada-de-dados.md`) disparando reflexo
-de limpeza é via clássica documentada em *Drosophila* (contexto geral, não
-citação por neurônio individual — a tabela do BANC não expõe referência por
-linha): Hampel et al. 2015/2017 (circuito de limpeza antenal),
-Seeds et al. 2014 (hierarquia de supressão de grooming sequencial). Fonte
-do rótulo em si continua sendo só o BANC.
-
-**Coluna `manual_cluster` (cluster de conectividade PCA-UMAP, evidência mais
-fraca, mesmo nível de RN-08/AD-15 `CONNECTIVITY_CLUSTER_BANC`):** 52 dos 60
-tipos têm cluster (`DN_01`...`DN_17`). **Sem nome descritivo disponível** —
-diferente do que a curadoria do ocelar conseguiu pra alguns clusters
-(`head_orienting`, `flight_power`, etc.), o código público do BANC-project
-não expõe uma legenda id→nome pra estes códigos numéricos desta
-materialização (checado em `R/figures/panels_an_dn_umap.R`, sem tabela de
-tradução). **Não inventar nome** — exposto com o código bruto
-(`BRISTLE_CONNECTIVITY_CLUSTER`), mesma disciplina de RN-08 contra fabricar
-semântica.
-
-**2 tipos sem dado nenhum:** `DNge008`, `DNge021` — nem comportamento nem
-cluster no BANC. Registrado, não escondido.
-
-**O que isto NÃO faz:** não há decodificador de motor rodando pro `bristle`
-ainda — RN-09 (ver `docs/04-regras-de-negocio.md`) validou que o circuito
-RESPONDE ao estímulo, mas nenhum vetor motor com significado foi calculado.
-Isto é só a curadoria (pesquisa), reaproveitando a mecânica genérica de
-`motor.py::group_by_published_behavior`/`group_by_connectivity_cluster`
-(generalizadas nesta sessão pra aceitar um dicionário por circuito). Ver
-`docs/03-roadmap-fases.md` F7.
-"""
+"""L4 do circuito bristle: descendentes de toque curados por literatura e por BANC (RN-08)."""
 from __future__ import annotations
 
 from collections import deque
@@ -70,13 +11,7 @@ from .graph import Connectome
 from .motor import group_by_connectivity_cluster as _group_by_connectivity_cluster
 from .motor import group_by_published_behavior as _group_by_published_behavior
 
-# Namiki/Cande et al. 2018 (eLife 34275) — checado, ZERO tipos do bristle
-# batem (ver docstring do módulo). Registrado aqui como valor conferido, não
-# omissão: não há dicionário Namiki pro bristle porque não há dado, não
-# porque não foi procurado.
-
-# BANC (Bates, Phelps, Kim, Yang et al. 2026), Supplementary Data 9
-# equivalente (`cell_function`, banc_neck_functional_classes.csv v888).
+# Bates, Phelps, Kim, Yang et al. 2026
 BRISTLE_PUBLISHED_DN_BEHAVIOR: dict[str, str] = {
     "DNg12_e": "grooming",
     "DNge011": "grooming",
@@ -86,8 +21,6 @@ BRISTLE_PUBLISHED_DN_BEHAVIOR: dict[str, str] = {
     "DNge078": "grooming",
 }
 
-# BANC, Supplementary Data 6 equivalente (`manual_cluster`) — código bruto,
-# sem nome descritivo disponível na fonte (ver docstring do módulo).
 BRISTLE_CONNECTIVITY_CLUSTER: dict[str, str] = {
     "DNae007": "DN_10",
     "DNde006": "DN_11",
@@ -143,42 +76,21 @@ BRISTLE_CONNECTIVITY_CLUSTER: dict[str, str] = {
     "DNpe002": "DN_09",
 }
 
-# Sem dado nenhum no BANC (nem comportamento, nem cluster) — documentado,
-# não usado em nada, aqui só pra quem for conferir cobertura não precisar
-# recalcular.
 BRISTLE_NO_DATA = ("DNge008", "DNge021")
 
 
 def group_by_published_behavior(connectome: Connectome) -> dict[str, NDArray[np.int64]]:
-    """Wrapper de `motor.group_by_published_behavior` com o dicionário do
-    `bristle`. Ver docstring do módulo."""
+    """Wrapper de `motor.group_by_published_behavior` com o dicionário do `bristle`."""
     return _group_by_published_behavior(connectome, BRISTLE_PUBLISHED_DN_BEHAVIOR)
 
 
 def group_by_connectivity_cluster(connectome: Connectome) -> dict[str, NDArray[np.int64]]:
-    """Wrapper de `motor.group_by_connectivity_cluster` com o dicionário do
-    `bristle`. Ver docstring do módulo."""
+    """Wrapper de `motor.group_by_connectivity_cluster` com o dicionário do `bristle`."""
     return _group_by_connectivity_cluster(connectome, BRISTLE_CONNECTIVITY_CLUSTER)
 
 
 class BristleMotorDecoder:
-    """L4 equivalente pro subcircuito `bristle` (F7/AD-17) — só os canais
-    reais (curadoria acima: `grooming` + clusters de conectividade
-    `conn_*`). **Não** é `motor.MotorDecoder` com o `Connectome` trocado:
-    `MotorDecoder` chama `topology.group_outputs_by_predicted_sign` sem
-    `out_dir`, que leria `edges.parquet` do circuito OCELAR mesmo estando
-    calculando sobre nids do `bristle` — os dois circuitos têm espaços de
-    `nid` independentes (cada um numerado 0..N-1 do zero, AD-17), então
-    misturar seria calcular sobre o grafo errado silenciosamente. Também não
-    existem aqui os conceitos `phototaxis`/`yaw_steering`/`locomotion_drive`
-    — são específicos da topologia/curadoria do ocelar, fabricá-los pro
-    `bristle` seria inventar semântica que RN-08 proíbe.
-
-    Mesma mecânica de janela deslizante/normalização tanh de
-    `motor.MotorDecoder`, duplicada aqui de propósito (código pequeno,
-    mais seguro que forçar reuso incorreto) — ver docstring do módulo.
-    """
-
+    """Canal `grooming` do circuito bristle (toque), a partir dos descendentes curados."""
     def __init__(self, connectome: Connectome, window_ms: float = C.MOTOR_WINDOW_MS) -> None:
         self.connectome = connectome
         self.window_ms = window_ms
@@ -201,10 +113,7 @@ class BristleMotorDecoder:
         return (count / len(nids)) / window_s
 
     def decode(self) -> dict[str, float]:
-        """Taxa de disparo por grupo na janela atual, normalizada via tanh.
-        `grooming` (comportamento publicado) + `conn_*` (cluster de
-        conectividade, evidência mais fraca — mesmo prefixo que AD-15 usa
-        pro ocelar, pra deixar óbvio que é inferência, não medido)."""
+        """Taxa de disparo por grupo na janela atual, normalizada via tanh."""
         vec = {name: float(np.tanh(self._rate_hz(nids) / C.MOTOR_RATE_SCALE))
                for name, nids in self._published_groups.items()}
         for name, nids in self._connectivity_groups.items():
@@ -212,8 +121,7 @@ class BristleMotorDecoder:
         return vec
 
     def active_output_count(self) -> int:
-        """Quantos descendentes do bristle dispararam ao menos uma vez na
-        janela atual."""
+        """Quantos descendentes do bristle dispararam ao menos uma vez na janela atual."""
         if not self._history:
             return 0
         active = np.zeros(self.connectome.n, dtype=bool)

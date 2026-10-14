@@ -17,36 +17,8 @@ import java.util.Locale;
 import java.util.Random;
 import java.util.logging.Level;
 
-/**
- * F14 (27/09/2026) — experimento de lesão pro subcircuito `thermo`
- * (calor/frio), mesmo desenho estatístico e mesmo formato de CSV dos
- * experimentos anteriores — reaproveita {@code sim/tools/lesion_analysis.py}
- * sem mudar nada nele.
- *
- * <p><b>Só testa a fuga de CALOR PERIGOSO</b> — decisão de projeto (ver
- * `docs/03-roadmap-fases.md` F12): frio e calor de bioma só mudam o balão
- * de texto, não a velocidade (`MotorMapping.heatAvoidVelocity` só é chamado
- * com {@code heatAvoidDirection != null}, que só existe com fonte
- * PERIGOSA — lava/fogo/magma/fogueira acesa por perto, ver
- * {@link ThermalSensor}). Testar frio aqui mediria ruído — não há efeito
- * de movimento pra detectar. A origem (x/y/z do comando) precisa ficar
- * perto de lava/fogo/magma, dentro do raio do sensor (3 blocos).
- *
- * <p>Ambiente, igual {@link HygroLesionExperiment}: a fonte de calor não é
- * consumida, continua lá o experimento inteiro — qualquer origem com fonte
- * perigosa por perto serve pros dois grupos.
- *
- * <p>N trials sorteados aleatoriamente entre thermo normal e lesionado.
- * Cada trial: teleporta a abelha de volta à origem, zera velocidade, roda
- * por N segundos medindo comprimento de trajetória. Direção esperada: com
- * `thermal` ativo ela foge (`HEAT_AVOID_SPEED_BLOCKS_PER_TICK=0,4`,
- * prioridade acima de recuperação/desvio/fome/sono) — o grupo NORMAL
- * deveria ter `path_length`/`avg_speed` MAIORES que o LESIONADO (mesmo
- * sentido do escape: estímulo real acelera a fuga, mascarado deixa só o
- * voo normal de phototaxis).
- */
+/** Lesão do circuito thermo (F14): mede a fuga de fonte de calor com e sem o circuito. */
 public final class ThermoLesionExperiment {
-
     private static final Random RNG = new Random();
     private static final int TICKS_PER_SECOND = 20;
 
@@ -58,11 +30,6 @@ public final class ThermoLesionExperiment {
         this.controlLoop = controlLoop;
     }
 
-    /**
-     * @param forcedOrigin se não-nulo, a abelha é teleportada pra cá ANTES do
-     *     primeiro trial, no mesmo instante de execução do comando (mesma
-     *     lição da F6 sobre deriva de IA nativa entre comandos).
-     */
     public void run(Bee bee, int trials, int secondsPerTrial, Location forcedOrigin, CommandSender notify) {
         if (!controlLoop.isRunning()) {
             notify.sendMessage("Loop de controle precisa estar rodando primeiro: /flywirebee control start");
@@ -145,9 +112,6 @@ public final class ThermoLesionExperiment {
         try (PrintWriter out = new PrintWriter(new FileWriter(file))) {
             out.println("trial,lesioned,path_length,avg_speed");
             for (TrialResult r : results) {
-                // Locale.ROOT — nunca o locale padrão da JVM (pt_BR usa vírgula
-                // decimal, que colide com a vírgula do CSV e corrompe o arquivo
-                // silenciosamente).
                 out.printf(Locale.ROOT, "%d,%s,%.4f,%.4f%n",
                         r.trial(), r.lesioned(), r.pathLength(), r.avgSpeed());
             }

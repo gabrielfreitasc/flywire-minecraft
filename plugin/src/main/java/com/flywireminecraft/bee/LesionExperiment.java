@@ -17,26 +17,8 @@ import java.util.Locale;
 import java.util.Random;
 import java.util.logging.Level;
 
-/**
- * Experimento de lesão — critério de saída da F4 (ver docs/00-visao-geral.md,
- * "Critério de falsificação"): silenciar os fotorreceptores deve mudar o
- * comportamento de forma mensurável. Se não mudar, a simulação não está
- * acoplada — só gera movimento.
- *
- * <p>N trials alternados aleatoriamente entre normal e lesionado (ordem
- * aleatória, não estritamente alternada, para não confundir condição com
- * deriva temporal — luz do mundo muda com o ciclo dia/noite ao longo do
- * experimento). Cada trial: teleporta a abelha de volta à origem, zera
- * velocidade, roda por N segundos medindo comprimento de trajetória (soma
- * das distâncias por tick — mais informativo que deslocamento início-fim,
- * que zera se a abelha só circular no lugar).
- *
- * <p>Grava um CSV (não faz estatística em Java — isso é trabalho de
- * `sim/tools/lesion_analysis.py`, mesma divisão que o resto do projeto:
- * Java executa, Python faz ciência).
- */
+/** Lesão dos fotorreceptores (F4): critério de falsificação, silenciar a entrada tem de mudar o comportamento. */
 public final class LesionExperiment {
-
     private static final Random RNG = new Random();
     private static final int TICKS_PER_SECOND = 20;
 
@@ -48,14 +30,6 @@ public final class LesionExperiment {
         this.controlLoop = controlLoop;
     }
 
-    /**
-     * @param forcedOrigin se não-nulo, a abelha é teleportada pra cá ANTES do
-     *     primeiro trial, no mesmo instante de execução do comando — sem
-     *     intervalo pra IA nativa derivar (achado F6, 17/09/2026: um comando
-     *     de teleporte separado ainda deixava a abelha andar/voar no tempo
-     *     entre ele e o comando do experimento rodar). Se nulo, usa a posição
-     *     atual da abelha, como antes.
-     */
     public void run(Bee bee, int trials, int secondsPerTrial, Location forcedOrigin, CommandSender notify) {
         if (!controlLoop.isRunning()) {
             notify.sendMessage("Loop de controle precisa estar rodando primeiro: /flywirebee control start");
@@ -137,9 +111,6 @@ public final class LesionExperiment {
         try (PrintWriter out = new PrintWriter(new FileWriter(file))) {
             out.println("trial,lesioned,path_length,avg_speed");
             for (TrialResult r : results) {
-                // Locale.ROOT — nunca o locale padrão da JVM (aqui, pt_BR usa
-                // vírgula como separador decimal, que colide com a vírgula do
-                // CSV e corrompe o arquivo silenciosamente).
                 out.printf(Locale.ROOT, "%d,%s,%.4f,%.4f%n",
                         r.trial(), r.lesioned(), r.pathLength(), r.avgSpeed());
             }

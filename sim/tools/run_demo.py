@@ -1,12 +1,6 @@
-"""
-Demonstra o critério de saída da F2: um run de 10 s gravado em DuckDB, e uma
-consulta SQL que responde "quais tipos celulares mais dispararam sob estímulo
-X" sem script ad-hoc (telemetry.top_cell_types).
+"""Run de 10 s gravado em DuckDB e consulta dos tipos que mais dispararam (critério da F2).
 
-Liga engine.py + motor.py + telemetry.py — o primeiro run real de ponta a
-ponta do simulador.
-
-Uso:  python tools/run_demo.py   (a partir de sim/, com o venv ativo)
+Uso:  python tools/run_demo.py   (a partir de sim/, venv ativo)
 """
 from __future__ import annotations
 

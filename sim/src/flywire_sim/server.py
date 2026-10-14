@@ -1,165 +1,8 @@
-"""
-L5 — ponte TCP com o plugin Minecraft.
-
-Protocolo: JSON-lines sobre TCP em BRIDGE_PORT. Ver docs/02-arquitetura.md.
-
-  plugin -> sim : {"t_ms":.., "light":.., "dorsal_light":.., "damage":false,
-                    "touch_contact":false, "touch_proximity":false,       # F7/AD-17
-                    "raining":false,                                     # F7/AD-17, hygro
-                    "alarm_explosion":false, "alarm_hostile_mob":false,   # F8, johnston
-                    "sound_music":false,                                 # F8, johnston (24/09/2026)
-                    "looming_threat":false,                              # F9, escape (24/09/2026)
-                    "food_contact":false,                                # F10, taste (25/09/2026)
-                    "thermo_heat":false, "thermo_cold":false,            # F12, thermo (26/09/2026)
-                    "pheromone_contact":false,               # F17, olfactory (30/09/2026, sem sensor real ainda)
-                    "aggression_contact":false,              # F18, aggression (30/09/2026, sem sensor real ainda)
-                    "path_integration_contact":false,        # F19, path_integration (01/10/2026, sem sensor real ainda)
-                    "mute": ["DNp", "sensory"],               # opcional
-                    "stimulate": {"group": "DNg", "amplitude": 3.0}}  # opcional
-  sim -> plugin : {"t_ms":.., "motor": {<canal>: valor, ...}, "active_dn":..,
-                    "bristle_motor": {<canal>: valor, ...}, "bristle_active_dn":..,  # se bristle_connectome foi passado
-                    "hygro_motor": {<canal>: valor, ...}, "hygro_active_dn":..,  # se hygro_connectome foi passado
-                    "johnston_motor": {<canal>: valor, ...}, "johnston_active_dn":..,  # se johnston_connectome foi passado
-                    "escape_motor": {<canal>: valor, ...}, "escape_active_dn":..,  # se escape_connectome foi passado
-                    "taste_motor": {<canal>: valor, ...}, "taste_active_dn":..,  # se taste_connectome foi passado
-                    "thermo_motor": {<canal>: valor, ...}, "thermo_active_dn":..,  # se thermo_connectome foi passado
-                    "olfactory_motor": {<canal>: valor, ...}, "olfactory_active_dn":..,  # se olfactory_connectome foi passado
-                    "aggression_motor": {<canal>: valor, ...}, "aggression_active_dn":..,  # se aggression_connectome foi passado
-                    "path_integration_motor": {<canal>: valor, ...}, "path_integration_active_dn":..}  # se path_integration_connectome foi passado
-
-F7/AD-17 — segundo e terceiro `Engine` opcionais pros subcircuitos `bristle`
-(toque) e `hygro` (chuva), independentes do ocelar e entre si (AD-17:
-"engines separados", não grafo único — ver docs/02-arquitetura.md). F8
-(23/09/2026) acrescenta um quarto `Engine`, `johnston` (vento/som), mesmo
-padrão. F9 (24/09/2026) acrescenta um quinto, `escape` (fuga por looming,
-AD-20) — mesmo padrão, com uma diferença: sua semente (LC4/LPLC2) não é
-`super_class == "sensory"`, ver `ingest.build(sensory_cell_types=...)` e
-`tools/build_f9_circuit.py`. `damage`/`touch_proximity` (a família de
-sensores de toque decidida pelo usuário, ver `plugin/README.md` —
-`touch_contact` saiu do OR em 25/09/2026, ver `on_sensor`) combinam em OR
-simples — qualquer um presente estimula a semente do `bristle` com
-`SENSOR_TOUCH_AMPLITUDE`; `raining` (`World#hasStorm()`)
-estimula a semente do `hygro` com `SENSOR_RAIN_AMPLITUDE`; `alarm_explosion`/
-`alarm_hostile_mob` (ver `AlarmSensor.java` — deliberadamente mais
-restrito que `touch_proximity`, só explosão e mob HOSTIL, achado do
-usuário citando Eberl, Hardy & Kernan 2000) e `sound_music` (jukebox
-tocando por perto, som AMBIENTE não só ameaça — pedido do usuário,
-24/09/2026) combinam em OR e estimulam a semente do `johnston` com
-`SENSOR_ALARM_AMPLITUDE`; `looming_threat` (`LoomingSensor.java` — distância
-até ameaça mais próxima caindo rápido) OU `damage` (dano real — hit mais
-forte que aproximação, escala pra fuga plena, pedido do usuário 25/09/2026)
-combinam em OR e estimulam a semente do `escape` com
-`SENSOR_LOOMING_AMPLITUDE`; `food_contact` (`TasteSensor.java` — contato
-com bloco/item comestível, F10 25/09/2026) estimula a semente do `taste`
-com `SENSOR_TASTE_AMPLITUDE`; `thermo_heat`/`thermo_cold` (`ThermalSensor.java`
-— fonte de calor/frio por perto, F12 26/09/2026) estimulam SEPARADAMENTE os
-TRNs de aquecimento e os de frio do `thermo` com `SENSOR_THERMO_AMPLITUDE`
-(cada flag só a sua semente, por `cell_sub_class`); `pheromone_contact`
-(F17, 30/09/2026 — sem sensor real no plugin ainda, sempre `false`) estimula
-a semente do `olfactory` com `SENSOR_OLFACTORY_AMPLITUDE`; `aggression_contact`
-(F18, 30/09/2026 — idem, sem sensor real, sempre `false`) estimula a semente
-do `aggression` (10 neurônios `pC1a-e`) com `SENSOR_AGGRESSION_AMPLITUDE`;
-`path_integration_contact` (F19, 01/10/2026 — idem, sem sensor real,
-sempre `false`) estimula a semente do `path_integration` (422 neurônios
-`PFNp/m/a/d`) com `SENSOR_PATH_INTEGRATION_AMPLITUDE`. Ausência de
-estímulo = só a dinâmica basal (RN-09) roda. Campos `bristle_*`/
-`hygro_*`/`johnston_*`/`escape_*`/`taste_*`/`thermo_*`/`olfactory_*`/
-`aggression_*`/`path_integration_*` na resposta só aparecem se
-`SimulationServer` foi construído com o `Connectome` correspondente
-(default `None` nos nove — sem isso, comportamento idêntico a antes desta
-mudança, compatível com `main()` chamado só com o ocelar e com os testes
-existentes).
-
-**Quais canais já viraram comportamento real em `MotorMapping.java` (só
-`johnston`/`olfactory`/`aggression`/`path_integration` seguem telemetria
-pura hoje):** `grooming` (`bristle`, F7), `hygrotaxis` (`hygro`, F7),
-`escape_drive` (`escape`, F9, confirmado por lesão F14), `appetite`
-(`taste`, F10, confirmado por lesão F14), `thermal` (`thermo`, F12,
-confirmado por lesão F14). `startle` (`johnston`) só tem efeito INDIRETO
-(acordar do sono noturno, F13, confirmado por lesão F15) — o canal em si
-nunca controla velocidade diretamente. `pheromone` (`olfactory`, F17),
-`aggression` (`aggression`, F18) e `path_integration` (`path_integration`,
-F19) são telemetria pura, recém criados, sem sensor no plugin ainda — os
-dois primeiros por falta de evento de mundo óbvio, o terceiro porque o
-estímulo real seria derivado do PRÓPRIO movimento da abelha (self-motion),
-não de um sensor de ambiente.
-
-Campo `mute` (F5, ferramenta de lesão por comando): lista de nomes de grupo a
-silenciar (os 8 grupos de `motor.groups` + "sensory" = os 273 fotorreceptores).
-Quando AUSENTE, o silenciamento atual não muda — só é alterado quando o campo
-está presente (mesmo lista vazia, que limpa o silenciamento). Ver
-`engine.py::Engine.set_silenced`. Mecanismo DIFERENTE do experimento de lesão
-da F4 (que zera `light`, não silencia neurônio nenhum) — aqui a saída
-sináptica do grupo é removida da rede de verdade. Só o `Engine` principal
-(ocelar) aceita `mute`/`stimulate` — mesmo escopo de sempre, RN-08 curou
-`motor.groups` só pra ele.
-
-Campo `stimulate` (F5, estimulação dirigida): injeta corrente extra num grupo
-nomeado, SOMADA ao estímulo de luz dos fotorreceptores (não substitui). Mesma
-semântica de "ausente = sem mudança" do `mute`. `{"group": null}` ou
-`{"group": "", "amplitude": 0}` limpa o estímulo dirigido. Ver
-`engine.py::Engine.set_directed_stimulus`.
-
-RN-06 — cada circuito roda a dt=1 ms em PROCESSO próprio (F16, 30/09/2026 —
-ver docs/03-roadmap-fases.md), desacoplado do tick do jogo E dos outros
-circuitos. O jogo nunca espera o simulador terminar passos extras: cada linha
-de sensor recebida atualiza o estímulo compartilhado e recebe de volta, na
-hora, o ÚLTIMO vetor motor já computado por cada processo — nunca um vetor
-calculado sob demanda.
-
-**F16 — por que multiprocessing, não threading.** Medido (29/09/2026): os 7
-circuitos somados num laço único (thread) já usavam 99,6% do orçamento de
-1ms/tick — quase zero de sobra pra um circuito novo (ver F16 em
-docs/03-roadmap-fases.md). Threading Python deu só 1,22x de aceleração com 2
-engines (GIL trava a maior parte da execução, só o trecho dentro de
-numpy/scipy solta) — não resolve. Multiprocessing (processos de verdade,
-sem GIL) mediu 0,407ms/tick pro mais lento dos 7 rodando em paralelo — 59,3%
-de sobra — DESDE QUE as threads internas de BLAS (OpenBLAS/MKL, que cada
-processo abriria por conta própria) sejam limitadas a 1 por processo (ver
-`os.environ` logo abaixo); sem isso, multiprocessing dá 0,666ms/tick — pior
-que threading, melhor que nada, mas deixando a maior parte do ganho na mesa.
-**Armadilha registrada em CONVENCOES.md:** presumir paralelismo grátis com
-numpy/scipy sem controlar threads de BLAS pode piorar as coisas.
-
-Cada `Engine`/`MotorDecoder` (F5-F12) vive inteiramente dentro do seu próprio
-processo — nenhum outro processo (nem o coordenador/`SimulationServer`) toca
-nesse estado depois de criado. Coordenação entre processos usa só dois
-mecanismos, os dois deliberadamente pequenos e de baixa frequência:
-(1) um `multiprocessing.Array` compartilhado com os valores de estímulo
-crus (`light`, `touch`, `raining`, ...), lido por cada processo a cada tick
-seu (1ms) — não é fila, não bloqueia, é leitura de memória compartilhada; e
-(2) uma fila de saída por circuito (`maxsize=1`, sempre substitui o valor
-antigo em vez de acumular) onde cada processo publica o canal decodificado a
-cada janela de 50ms (`MOTOR_WINDOW_MS`) — o coordenador drena tudo que
-chegou e guarda só o mais recente de cada circuito, nunca espera. `mute`/
-`stimulate` (F5, só o `Engine` principal) usam uma fila de controle própria,
-com a mesma semântica "só o mais recente pendente vale" que a versão de
-thread única já tinha.
-
-Canais do vetor motor: RN-08 segue em aberto (ver motor.py) — os nomes de
-canal são os grupos provisórios por prefixo de `cell_type` (DNp, DNg, ...),
-não "forward"/"yaw"/"lift" como o contrato aspiracional de
-`docs/02-arquitetura.md` descreve. Reconciliar quando RN-08 tiver curadoria.
-
-Mapeamento sensor -> estímulo (`light` -> corrente nos fotorreceptores) é
-provisório — ver `SENSOR_LIGHT_GAIN` em config.py.
-
-Se o plugin cair, o simulador continua rodando — a ciência não depende do
-jogo. Sem handshake, sem estado de sessão: reconexão é reinício da conexão,
-não do simulador.
-"""
+"""L5 — ponte TCP com o plugin Minecraft."""
 from __future__ import annotations
 
 import os
 
-# F16 (29-30/09/2026) — CRÍTICO, precisa rodar antes de QUALQUER import que
-# traga numpy/scipy (graph, engine, motor, numpy em si logo abaixo). Sem
-# isto, cada processo worker abre várias threads internas de BLAS por conta
-# própria, e N processos disputando os mesmos núcleos entre si deixa
-# multiprocessing PIOR que sequencial, não melhor (medido, ver docstring do
-# módulo e docs/03-roadmap-fases.md F16: 0,666ms/tick sem isto, 0,407ms/tick
-# com). `setdefault` — respeita override explícito do operador (ex.:
-# container com núcleos de sobra reservados só pra isto), não força.
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 os.environ.setdefault("MKL_NUM_THREADS", "1")
@@ -192,12 +35,7 @@ from .path_integration_motor import PathIntegrationMotorDecoder
 from .taste_motor import TasteMotorDecoder
 from .thermo_motor import ThermoMotorDecoder
 
-# F16 — índices no `multiprocessing.Array` de estímulo compartilhado. Um
-# array só, 11 posições, em vez de um por circuito — todos os sensores crus
-# já eram computados juntos em `on_sensor` antes desta mudança, então
-# continuam sendo escritos juntos aqui (mesma seção crítica de sempre, só
-# que agora em memória compartilhada entre processos em vez de atributos de
-# instância lidos por uma thread).
+# F16
 _STIM_LIGHT = 0
 _STIM_TOUCH = 1
 _STIM_RAINING = 2
@@ -206,32 +44,13 @@ _STIM_LOOMING = 4
 _STIM_FOOD = 5
 _STIM_THERMO_HEAT = 6
 _STIM_THERMO_COLD = 7
-# F17 — reservado desde já (mesmo padrão dos outros seis: todo circuito
-# ganha seu campo de protocolo junto, não depois), mas SEM sensor real no
-# plugin ainda — `ThermalSensor`/`TasteSensor`/etc. têm equivalente óbvio
-# no Minecraft (luz, chuva, som, comida, calor); feromônio de *Drosophila*
-# não tem. `pheromone_contact` chega sempre `false` até essa decisão ser
-# tomada (provavelmente junto com corte/agressividade, ver checklist do
-# usuário) — até lá, `olfactory` roda só no regime basal (RN-09).
-# F18 — mesmo motivo do F17: `pC1a-e` não tem equivalente óbvio de sensor
-# no Minecraft (corte/agressividade entre abelhas — precisaria decidir o
-# que conta como "contexto agressivo" no jogo). Reservado, sempre `false`.
+# F17, RN-09, F18
 _STIM_PHEROMONE = 8
 _STIM_AGGRESSION = 9
-# F19 — mesma situação do F17/F18: sem evento de mundo óbvio pro
-# plugin. Diferente dos outros, `PFN` reage a self-motion da própria
-# abelha, não a um evento externo — quando decidido, o sensor
-# provavelmente vem de `ControlLoop.heading` (mudança de direção
-# comandada), não de um novo sensor de ambiente. Reservado, sempre `false`.
+# F19, F17, F18
 _STIM_PATH_INTEGRATION = 10
 _STIM_SIZE = 11
 
-# F16 — cada circuito tem sua própria "receita" de estímulo (quais nids,
-# que amplitude) — funções puras de nível de módulo (picklable, não
-# closures) em vez de método de classe, porque rodam DENTRO do processo
-# worker, chamadas por `_engine_worker`. `heating_nids`/`cold_nids` só têm
-# uso real na receita do `thermo`; as outras ignoram (mesma assinatura pra
-# manter o laço do worker genérico).
 StimulusFn = Callable[[Any, Connectome, np.ndarray, np.ndarray], tuple[np.ndarray, float]]
 
 
@@ -285,9 +104,6 @@ def _stim_path_integration(
     )
 
 
-# nome -> (DecoderFactory, StimulusFn) dos sete circuitos opcionais. "main"
-# (ocelar) é tratado à parte em SimulationServer.__init__ porque é o único
-# obrigatório e o único que aceita mute/stimulate.
 _OPTIONAL_CIRCUITS: dict[str, tuple[type, StimulusFn]] = {
     "bristle": (BristleMotorDecoder, _stim_bristle),
     "hygro": (HygroMotorDecoder, _stim_hygro),
@@ -313,19 +129,6 @@ def _engine_worker(
     record: bool = False,
     record_db_path: Any = None,
 ) -> None:
-    """F16 — laço de um circuito, rodando em PROCESSO próprio a dt=1ms real.
-
-    `control_queue` não-`None` só pro worker do `main` (mute/stimulate, F5)
-    — os outros nove sempre recebem `None`. Ver docstring do módulo pro
-    desenho geral (array de estímulo compartilhado + fila de saída
-    `maxsize=1`).
-
-    `record` (F20, 06/10/2026) — liga um `telemetry.Recorder` LOCAL a este
-    processo, gravando em `record_db_path` (cada `Recorder` abre sua
-    própria conexão DuckDB — não dá pra compartilhar entre processos).
-    Desde 13/10/2026 vale pra qualquer circuito, cada um no seu arquivo
-    (`telemetry.db_path_for`) — o coordenador decide quais gravam.
-    """
     engine = Engine(connectome)
     decoder = decoder_cls(connectome)
 
@@ -338,10 +141,6 @@ def _engine_worker(
             processed_dir=telemetry.processed_dir_for(name),
         )
 
-    # F5 — só o worker principal resolve nome de grupo -> nids (precisa do
-    # MotorDecoder.groups DESTE engine específico, RN-08). Construído aqui
-    # dentro (não no coordenador) porque agora é o único lugar onde o
-    # MotorDecoder do ocelar existe de verdade.
     group_lookup: dict[str, np.ndarray] | None = None
     if control_queue is not None:
         group_lookup = dict(decoder.groups)
@@ -351,8 +150,6 @@ def _engine_worker(
         group_lookup["steering_left"] = steering_left
         group_lookup["steering_right"] = steering_right
 
-    # F12 — só o `thermo` usa isto (as duas sementes separadas por
-    # cell_sub_class); as outras receitas de estímulo ignoram.
     sensory_arr = np.asarray(connectome.sensory)
     heating_nids = np.array([], dtype=np.int64)
     cold_nids = np.array([], dtype=np.int64)
@@ -365,17 +162,11 @@ def _engine_worker(
     window_steps = max(int(C.MOTOR_WINDOW_MS), 1)
     next_tick = time.monotonic()
 
-    # Ctrl+C no terminal manda SIGINT pro grupo inteiro: sem isto o worker
-    # morreria com KeyboardInterrupt no meio do laço, antes do coordenador
-    # sinalizar `stop_event`. Quem decide parar é o coordenador (stop()).
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     try:
         while not stop_event.is_set():
             if control_queue is not None:
-                # F5 — drena tudo que chegou desde o último tick, mas só aplica
-                # o MAIS RECENTE de cada tipo (mesma semântica "só o pendente
-                # mais novo vale" da versão de thread única — não acumula).
                 last_mute: list[str] | None = None
                 last_stimulate: dict[str, Any] | None = None
                 while True:
@@ -403,13 +194,13 @@ def _engine_worker(
                     else:
                         engine.set_directed_stimulus(np.asarray(group, dtype=np.int64), amplitude)
 
-            vals = stim_array[:]  # cópia rápida da memória compartilhada, sem segurar lock além disso
+            vals = stim_array[:]
             nids, amplitude = stimulus_fn(vals, connectome, heating_nids, cold_nids)
             engine.stimulate(nids, amplitude)
             frame = engine.step()
             decoder.push(frame.t_ms, frame.spikes)
             if recorder is not None:
-                recorder.log_stimulus(frame.t_ms, nids, amplitude)  # só grava se mudou
+                recorder.log_stimulus(frame.t_ms, nids, amplitude)
                 recorder.log_spikes(frame.t_ms, frame.spikes)
 
             if frame.t_ms % window_steps == 0:
@@ -421,8 +212,6 @@ def _engine_worker(
                     "channels": channels,
                     "active_dn": decoder.active_output_count(),
                 }
-                # maxsize=1 — sempre substitui o antigo, nunca acumula (RN-06:
-                # o coordenador só quer o mais recente, nunca espera).
                 try:
                     output_queue.get_nowait()
                 except queue_module.Empty:
@@ -437,22 +226,14 @@ def _engine_worker(
             if sleep_for > 0:
                 time.sleep(sleep_for)
             else:
-                next_tick = time.monotonic()  # atrasado — não acumula dívida
+                next_tick = time.monotonic()
     finally:
-        # F20 (13/10/2026) — no `finally`: o Recorder bufferiza até
-        # `flush_every` linhas; sem flush final, o resto se perde (achado
-        # real: sessão em Docker gravou spikes mas ZERO motor_frames).
         if recorder is not None:
-            recorder.close()  # flush final + fecha a conexão DuckDB, nunca deixa aberta
+            recorder.close()
 
 
 def parse_record_telemetry(value: str) -> frozenset[str]:
-    """F20 — lê `FLYWIRE_RECORD_TELEMETRY`: vazio = nada; `1`/`true`/`yes` =
-    só o ocelar (`main`, comportamento original); `all` = todos; senão,
-    lista separada por vírgula (`main,taste`). Nome desconhecido é avisado
-    e ignorado — não derruba o simulador por um erro de digitação.
-    Circuito pedido mas sem dados em data/processed/ simplesmente não grava
-    (o processo dele nem sobe)."""
+    """Lê FLYWIRE_RECORD_TELEMETRY: '1' (só main), lista 'main,taste' ou 'all'."""
     known = {"main", *_OPTIONAL_CIRCUITS}
     v = value.strip().lower()
     if not v:
@@ -495,27 +276,7 @@ class _TCPServer(socketserver.ThreadingTCPServer):
 
 
 class SimulationServer:
-    """Servidor TCP + um processo por circuito, cada um a dt=1ms real (F16).
-
-    Uso:
-
-        cc = graph.load()
-        with SimulationServer(cc) as srv:
-            ...  # srv.port, roda até sair do bloco
-
-    F7/AD-17 — `bristle_connectome`/`hygro_connectome` opcionais ligam um
-    segundo e um terceiro `Engine` independentes (toque, chuva), cada um no
-    seu próprio processo (F16), sem misturar estado com o ocelar nem entre
-    si. F8 acrescenta `johnston_connectome` (vento/som). F9 acrescenta
-    `escape_connectome` (fuga por looming, AD-20). F10 acrescenta
-    `taste_connectome` (paladar apetitivo). F12 acrescenta
-    `thermo_connectome` (calor/frio). F17 acrescenta `olfactory_connectome`
-    (feromônio). F18 acrescenta `aggression_connectome` (corte/
-    agressividade). F19 acrescenta `path_integration_connectome`
-    (integração de trajetórias). `None` (default, nos nove) preserva o
-    comportamento de antes desta mudança — nenhum teste existente ou
-    chamada antiga precisa mudar.
-    """
+    """Servidor TCP + um processo por circuito, cada um a dt=1ms real (F16)."""
 
     def __init__(
         self,
@@ -545,10 +306,6 @@ class SimulationServer:
         self.aggression_connectome = aggression_connectome
         self.path_integration_connectome = path_integration_connectome
 
-        # F12 — mesma metadata de sempre (7 TRNs de aquecimento, 9 de frio),
-        # computada aqui só pra introspecção/testes (ex.: `srv.
-        # _thermo_heating_nids` nos testes) — o worker do thermo recalcula a
-        # própria cópia de forma independente, a partir do MESMO connectome.
         if thermo_connectome is not None:
             sensory = np.asarray(thermo_connectome.sensory)
             sub_class = thermo_connectome.nodes.loc[sensory, "cell_sub_class"].to_numpy()
@@ -558,43 +315,28 @@ class SimulationServer:
             self._thermo_heating_nids = np.array([], dtype=np.int64)
             self._thermo_cold_nids = np.array([], dtype=np.int64)
 
-        # F16 — 'spawn' explícito nos dois SOs (Windows já só tem spawn;
-        # Linux/Docker default seria 'fork', mas forkar um processo com
-        # threads vivas — o servidor TCP já usa threads — é terreno
-        # arriscado no POSIX. 'spawn' sempre recomeça do zero, sem herdar
-        # estado de thread nenhum, mesmo comportamento nos dois ambientes.
         self._mp_ctx = mp.get_context("spawn")
         self._stim_array = self._mp_ctx.Array("d", _STIM_SIZE)
         self._stop_event = self._mp_ctx.Event()
         self._control_queue: mp.Queue = self._mp_ctx.Queue()
 
-        # F16 — só protege as duas estruturas coordenador-side que podem
-        # ser lidas/escritas por threads handler concorrentes (múltiplas
-        # conexões simultâneas, teoricamente — o protocolo assume uma só,
-        # mas não custa nada proteger). NÃO protege o `_stim_array` (esse já
-        # tem seu próprio lock interno, `multiprocessing.Array` default) nem
-        # as filas (essas são thread/processo-safe por natureza).
         self._lock = threading.Lock()
-        self._touch = False  # F7/AD-17 — OR de damage/touch_proximity (F9: touch_contact saiu, ver on_sensor)
-        self._raining = False  # F7/AD-17 — World#hasStorm(), estímulo da semente do hygro
-        self._alarm = False  # F8 — OR de alarm_explosion/alarm_hostile_mob, estímulo da semente do johnston
-        self._looming = False  # F9 — looming_threat, estímulo da semente do escape
-        self._food = False  # F10 — food_contact, estímulo da semente do taste
-        self._thermo_heat = False  # F12 — thermo_heat, estímulo dos TRNs de aquecimento
-        self._thermo_cold = False  # F12 — thermo_cold, estímulo dos TRNs de frio
-        self._pheromone = False  # F17 — pheromone_contact, sem sensor real no plugin ainda
-        self._aggression = False  # F18 — aggression_contact, sem sensor real no plugin ainda
-        self._path_integration = False  # F19 — path_integration_contact, sem sensor real no plugin ainda
+        self._touch = False
+        self._raining = False
+        self._alarm = False
+        self._looming = False
+        self._food = False
+        self._thermo_heat = False
+        self._thermo_cold = False
+        self._pheromone = False
+        self._aggression = False
+        self._path_integration = False
         self._latest: dict[str, Any] = {"t_ms": 0, "motor": {}, "active_dn": 0}
         self._latest_by_circuit: dict[str, dict[str, Any]] = {}
 
         self._processes: list[Any] = []
         self._output_queues: dict[str, mp.Queue] = {}
 
-        # F20 — `record_telemetry`: `True` = só o ocelar (compatível com o
-        # F20 original); coleção = nomes de circuito (`main`, `taste`...).
-        # `telemetry_db_path` é o arquivo do `main`; os outros ficam ao lado
-        # (`telemetry.db_path_for`).
         if record_telemetry is True:
             recorded: frozenset[str] = frozenset({"main"})
         elif not record_telemetry:
@@ -604,7 +346,7 @@ class SimulationServer:
 
         def _db_path(name: str) -> Any:
             if telemetry_db_path is None:
-                return None  # o worker usa telemetry.db_path_for(name) padrão
+                return None
             from .telemetry import db_path_for
 
             return db_path_for(name, Path(telemetry_db_path))
@@ -650,9 +392,6 @@ class SimulationServer:
         return self._tcp.server_address[1]
 
     def start(self) -> None:
-        # F16 — processos ANTES da thread TCP: evita a combinação
-        # fork+threads-vivas mesmo que 'spawn' já torne isso improvável de
-        # dar problema — hábito seguro, sem custo.
         for p in self._processes:
             p.start()
         self._serve_thread.start()
@@ -667,62 +406,22 @@ class SimulationServer:
                 p.terminate()
 
     def on_sensor(self, sensor: dict[str, Any]) -> None:
-        """Chamado pela thread de conexão a cada linha recebida.
-
-        Só atualiza o estado compartilhado — nunca chama engine.step() nem
-        espera nenhum processo de simulação (RN-06).
-        """
+        """Chamado pela thread de conexão a cada linha recebida."""
         light = float(sensor.get("light", 0.0))
-        # F7/AD-17 — família de sensores de toque (damage já existia, os
-        # outros dois são novos, ver docs/02-arquitetura.md).
-        #
-        # F9 (25/09/2026, pedido do usuário) — `touch_contact` (esbarrar em
-        # BLOCO/parede/chão) saiu do OR: bater numa parede durante o voo não
-        # é o mesmo estímulo biológico de algo pousar/tocar o corpo da mosca
-        # (mesmo princípio já usado no `AlarmSensor` do johnston — Eberl,
-        # Hardy & Kernan 2000: toque com objeto inofensivo não deveria
-        # disparar a mesma resposta que contato real). O campo continua
-        # chegando no protocolo (telemetria/diagnóstico do lado do plugin,
-        # ver `TouchSensor.java`), só não estimula mais a semente do
-        # `bristle` aqui. `touch_proximity` (TouchSensor.isNearSomething)
-        # também foi restrito nesta mesma sessão pra só contar mob/animal/
-        # NPC/jogador, não qualquer entidade — ver `TouchSensor.java`.
         touch = bool(sensor.get("damage", False)) or bool(sensor.get("touch_proximity", False))
         raining = bool(sensor.get("raining", False))
-        # F8 — família de sensores de alarme (ver AlarmSensor.java): OR
-        # simples, mesma lógica de `touch` acima.
         alarm = bool(sensor.get("alarm_explosion", False)) or bool(sensor.get("alarm_hostile_mob", False)) \
             or bool(sensor.get("sound_music", False))
-        # F9 — `damage` (dano real, DamageTracker) também estimula a semente
-        # do `escape`, não só `looming_threat` (25/09/2026, pedido do
-        # usuário): levar um HIT de verdade é um sinal de ameaça mais forte
-        # que taxa de aproximação — deveria escalar pra fuga plena, não só
-        # pro toque/grooming. Mesmo `damage` que já estimula `bristle`
-        # (linha `touch` acima) — um hit real dispara os dois circuitos,
-        # não é exclusivo.
         looming = bool(sensor.get("looming_threat", False)) or bool(sensor.get("damage", False))
-        # F10 — contato com bloco/item comestível (ver TasteSensor.java)
-        # estimula a semente do `taste`.
         food = bool(sensor.get("food_contact", False))
-        # F12 — fonte de calor/frio por perto (ver ThermalSensor.java).
         thermo_heat = bool(sensor.get("thermo_heat", False))
         thermo_cold = bool(sensor.get("thermo_cold", False))
-        # F17 — sem sensor real no plugin ainda (ver _STIM_PHEROMONE acima);
-        # chega sempre `false` até a decisão de mapeamento (jogador segurando
-        # algo? outra abelha por perto? — ligado a corte/agressividade,
-        # ainda não decidido). Campo já aceito, pra não precisar mudar o
-        # protocolo de novo quando essa decisão vier.
         pheromone = bool(sensor.get("pheromone_contact", False))
-        # F18 — mesmo motivo do F17 acima, sem sensor real ainda.
         aggression = bool(sensor.get("aggression_contact", False))
-        # F19 — mesmo motivo do F17/F18, sem sensor real ainda.
         path_integration = bool(sensor.get("path_integration_contact", False))
         mute = sensor.get("mute")
         stimulate = sensor.get("stimulate")
 
-        # F16 — grava no array compartilhado (lido por CADA processo a cada
-        # tick seu). `get_lock()` protege só a seção crítica de escrita, não
-        # segura nada além disso.
         with self._stim_array.get_lock():
             self._stim_array[_STIM_LIGHT] = light
             self._stim_array[_STIM_TOUCH] = 1.0 if touch else 0.0
@@ -748,18 +447,12 @@ class SimulationServer:
             self._aggression = aggression
             self._path_integration = path_integration
 
-        # F5 — só manda pra fila de controle (worker principal) quando o
-        # campo está PRESENTE — mesma semântica "ausente = sem mudança" de
-        # sempre, agora expressa como "não manda mensagem nenhuma" em vez
-        # de "não sobrescreve o campo pendente".
         if mute is not None:
             self._control_queue.put(("mute", list(mute)))
         if stimulate is not None:
             self._control_queue.put(("stimulate", dict(stimulate)))
 
     def latest_frame(self) -> dict[str, Any]:
-        """Drena o que chegou de cada processo e monta a resposta — nunca
-        bloqueia, nunca espera um processo terminar um passo (RN-06)."""
         with self._lock:
             for name, q in self._output_queues.items():
                 payload = None
@@ -773,7 +466,7 @@ class SimulationServer:
 
             main_payload = self._latest_by_circuit.get("_main")
             if main_payload is None:
-                return dict(self._latest)  # antes do primeiro frame do main chegar
+                return dict(self._latest)
 
             result: dict[str, Any] = {
                 "t_ms": main_payload["t_ms"],
@@ -799,10 +492,8 @@ class SimulationServer:
 
 
 def main() -> None:
+    """Sobe a ponte TCP com todos os circuitos extraídos em data/processed."""
     cc = graph.load()
-    # F7/AD-17 — carrega o bristle se já foi extraído
-    # (`python tools/build_f7_circuits.py`); degrada de volta pro
-    # comportamento anterior (só ocelar) se ainda não foi, em vez de falhar.
     bristle_cc: Connectome | None = None
     try:
         bristle_cc = graph.load(C.PROCESSED / "bristle")
@@ -893,20 +584,12 @@ def main() -> None:
             "(python tools/build_f19_circuit.py pra gerar)",
             flush=True,
         )
-    # F20 (06/10/2026) — opt-in explícito via variável de ambiente (operador
-    # liga pra uma sessão de calibração, não fica sempre gravando em jogo
-    # normal — arquivo DuckDB cresceria sem limite). Só o `main` (ocelar)
-    # grava por enquanto, ver docstring de `_engine_worker`.
     record_telemetry = parse_record_telemetry(os.environ.get("FLYWIRE_RECORD_TELEMETRY", ""))
     if record_telemetry:
         from .telemetry import db_path_for
 
         for name in sorted(record_telemetry):
             print(f"telemetria: gravando {name} em {db_path_for(name)}", flush=True)
-    # F20 (13/10/2026) — `docker stop`/`compose up` recriando o container
-    # mandam SIGTERM pro PID 1; o padrão do Python mata na hora, sem sair do
-    # `with` — stop() nunca roda e os Recorders nunca fazem o flush final.
-    # Tratado igual a Ctrl+C: sai do `with`, stop() avisa os workers.
     signal.signal(signal.SIGTERM, signal.default_int_handler)
     with SimulationServer(
         cc, bristle_cc, hygro_cc, johnston_cc, escape_cc, taste_cc, thermo_cc, olfactory_cc, aggression_cc,

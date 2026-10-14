@@ -1,19 +1,4 @@
-"""
-F12 (26/09/2026) — extrai o subcircuito de temperatura (calor/frio):
-mesma mecânica de F7-F10 (`ingest.select_seed`/`ingest.build`, AD-17).
-
-**Semente:** 16 TRNs (neurônios receptores de temperatura) em
-`cell_class == "thermosensory"`: `heating` (7, `TRN_VP2`) e `cold` (9,
-`TRN_VP3a`/`TRN_VP3b`). Os 13 `humid` (`TRN_VP1m`) ficam de fora — são
-umidade, domínio do `hygro`. 100% colinérgicos (15/16 ACh, sem artefato de
-serotonina tipo RN-01a — checado).
-
-**Alcance de salto (26/09/2026):** 1 salto dá só 2 descendentes (163 nós,
-insuficiente pra decodificar); 2 saltos dão 71 descendentes mas arrastam
-1.561 neurônios sensoriais NÃO relacionados — por isso
-`sensory_only_seed=True` (AD-23): só os 16 TRNs recebem estímulo.
-
-**Escreve em `data/processed/thermo/`** — nunca em `data/processed/` direto.
+"""Extrai o subcircuito thermo (calor/frio) para data/processed/thermo/ (F12, AD-23).
 
 Uso:  python tools/build_f12_circuit.py   (a partir de sim/, venv ativo)
 """

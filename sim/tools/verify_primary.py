@@ -1,18 +1,8 @@
-"""
-Verifica os arquivos primários da Zenodo (10.5281/zenodo.10676866) e confronta
-o espelho GitHub aresta por aresta. Fecha a DT-1 e a DT-2 parcialmente.
+"""DT-1: confere o MD5 do Zenodo, o espelho aresta por aresta e a versão da anotação.
 
-Também confere a anotação (`Supplemental_file1_neuron_annotations.tsv`) contra
-a versão fixada do repositório oficial dos autores (Schlegel et al. 2024,
-`flyconnectome/flywire_annotations`) pelo hash de blob do git — offline, sem
-rede. Rodado em 13/10/2026: MD5 dos 5 primários OK, 15.091.983 pares idênticos
-(0 só num lado, 0 peso divergente), anotação idêntica ao commit `17fc5772`.
+Lê feather só por memory-map com colunas selecionadas (AD-12): o arquivo de 9,5 GB não cabe em RAM.
 
-Uso:  python3 sim/tools/verify_primary.py [--skip-md5]
-
-RESTRIÇÃO: a VM tem ~3,8 GB de RAM. Nada aqui carrega arquivo inteiro —
-feather é lido com memory_map e seleção de colunas. Não mudar para
-read_feather() sem colunas: o de 9,5 GB derruba o processo.
+Uso:  python sim/tools/verify_primary.py [--skip-md5]
 """
 from __future__ import annotations
 
@@ -33,12 +23,7 @@ EXPECTED_MD5 = {
 # Dorkenwald et al. 2024
 EXPECTED_TOTAL_SYNAPSES = 54_492_922
 
-# Hash de blob do git (`git hash-object --no-filters`) da anotação, no commit
-# 17fc5772 (04/05/2026, "minor fixes for a few annotations") de
-# github.com/flyconnectome/flywire_annotations, caminho
-# supplemental_files/Supplemental_file1_neuron_annotations.tsv. Versões
-# posteriores existem (29/09/2026: anotações de Tastekin et al. 2026) — trocar
-# de versão é decisão de dado (re-rodar o ingest), não correção deste número.
+# de Tastekin et al. 2026
 ANNOTATION_FILE = "Supplemental_file1_neuron_annotations.tsv"
 ANNOTATION_GIT_BLOB = "afea3e15a5671f5da0b9f7dd2e932d328c3b57a0"
 ANNOTATION_COMMIT = "17fc5772"
@@ -67,7 +52,7 @@ def check_md5() -> None:
 
 
 def git_blob_sha1(path: Path, chunk: int = 8 << 20) -> str:
-    """Mesmo hash que `git hash-object --no-filters` (sha1 de "blob <tam>\0" + conteúdo)."""
+    """Mesmo hash que `git hash-object --no-filters` (sha1 de "blob \0" + conteúdo)."""
     h = hashlib.sha1(f"blob {path.stat().st_size}\0".encode())
     with path.open("rb") as fh:
         while block := fh.read(chunk):
@@ -108,7 +93,6 @@ def compare_edges() -> None:
     sch = schema_of(primary)
     print("  " + ", ".join(sch.names))
 
-    # Descobre os nomes das colunas sem assumir
     def pick(*candidates):
         for c in candidates:
             if c in sch.names:
@@ -132,7 +116,6 @@ def compare_edges() -> None:
     print(f"  sinapses no primário: {total:,}"
           f"  ({'confere' if total == EXPECTED_TOTAL_SYNAPSES else 'DIVERGE'} com o artigo)")
 
-    # o primário é quebrado por neurópilo -> agregar por par
     prim = prim.groupby(["pre", "post"], sort=False, as_index=False).syn.sum()
     print(f"  pares únicos no primário: {len(prim):,}")
 

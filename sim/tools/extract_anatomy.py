@@ -1,32 +1,6 @@
-"""
-Extrai anatomia real (posição 3D + neurópilo dominante) pros 625 neurônios do
-subcircuito v1, a partir da fonte primária da Zenodo (AD-11). "Anatomia real"
-era trabalho futuro registrado desde a F0 (AD-05) — nunca bloqueante pra v1
-(topologia pura bastava), motivado agora pelo usuário.
-
-RN-05 — `root_id` não sobe de L1. Este script lê `root_id` dos arquivos
-primários (é a chave deles), mas escreve `nid` no resultado. Não expor
-`root_id` além daqui.
-
-AD-12 — RAM da máquina é limitada; `flywire_synapses_783.feather` tem 9,5 GB.
-NUNCA lido inteiro: iteração por record batch (1985 batches de ~65536 linhas
-cada, confirmado via `pyarrow.ipc`), filtrando pros 625 neurônios do
-subcircuito a cada batch e descartando o resto. Memória fica limitada ao
-tamanho do resultado filtrado (pequeno — 625 de ~139k neurônios), não ao
-arquivo inteiro.
-
-Duas fontes, custo bem diferente:
-- Neurópilo: `per_neuron_neuropil_count_{pre,post}_783.feather` (241 MB juntos)
-  — já é contagem por neurônio, não precisa do arquivo de sinapse individual.
-- Posição 3D: só existe em `flywire_synapses_783.feather` (coordenada por
-  SINAPSE, não por neurônio) — centroide calculado aqui, média de todas as
-  posições de sinapse em que o neurônio participa (pré ou pós).
-
-Coordenadas ficam em unidades brutas do dataset (espaço de voxel do FlyWire),
-não metros nem blocos do Minecraft — nenhuma conversão de escala feita aqui.
+"""Extrai posição 3D e neurópilo dominante dos neurônios do circuito ocelar a partir do Zenodo (AD-11).
 
 Uso:  python tools/extract_anatomy.py   (a partir de sim/, venv ativo)
-Escreve: data/processed/anatomy_783.parquet
 """
 from __future__ import annotations
 
@@ -59,8 +33,7 @@ def load_our_root_ids() -> pd.DataFrame:
 
 
 def extract_neuropil(root_ids: set[int]) -> pd.DataFrame:
-    """Neurópilo dominante por neurônio (pré + pós somados). Arquivos pequenos,
-    lidos inteiros é seguro — não precisa de batch aqui."""
+    """Neurópilo dominante por neurônio (pré + pós somados)."""
     frames = []
     for path, col in ((NEUROPIL_PRE_FILE, "pre_pt_root_id"), (NEUROPIL_POST_FILE, "post_pt_root_id")):
         df = pd.read_feather(path, columns=[col, "neuropil", "count"])
@@ -74,8 +47,6 @@ def extract_neuropil(root_ids: set[int]) -> pd.DataFrame:
 
 
 def extract_positions(root_ids: set[int]) -> pd.DataFrame:
-    """Centroide de posição por neurônio, streaming por record batch — nunca
-    materializa o arquivo de 9,5GB inteiro (AD-12)."""
     root_ids_arr = pa.array(sorted(root_ids), type=pa.int64())
     reader = ipc.open_file(SYNAPSE_FILE)
     n_batches = reader.num_record_batches
@@ -101,9 +72,6 @@ def extract_positions(root_ids: set[int]) -> pd.DataFrame:
     print(f"total: {len(matched)} sinapses envolvendo o subcircuito, "
           f"{time.monotonic() - t0:.0f}s", flush=True)
 
-    # cada linha contribui uma amostra de posição pro neurônio PRÉ (posição pré-sináptica)
-    # e uma pro neurônio PÓS (posição pós-sináptica) — um neurônio que é pré numa sinapse
-    # e pós em outra entra nas duas listas, cada amostra na posição certa pro seu papel.
     pre_samples = matched[["pre_pt_root_id", "pre_pt_position_x", "pre_pt_position_y", "pre_pt_position_z"]]
     pre_samples.columns = ["root_id", "x", "y", "z"]
     post_samples = matched[["post_pt_root_id", "post_pt_position_x", "post_pt_position_y", "post_pt_position_z"]]

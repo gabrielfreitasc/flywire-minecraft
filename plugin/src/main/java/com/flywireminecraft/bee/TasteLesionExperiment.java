@@ -17,55 +17,10 @@ import java.util.Locale;
 import java.util.Random;
 import java.util.logging.Level;
 
-/**
- * F14 (27/09/2026) — experimento de lesão pro subcircuito `taste` (paladar
- * apetitivo), mesmo desenho estatístico dos experimentos anteriores — CSV
- * ganha uma coluna a mais (`final_distance_to_food`, ver mais abaixo), mas
- * `sim/tools/lesion_analysis.py` analisa qualquer coluna numérica presente
- * automaticamente, sem precisar mudar o script.
- *
- * <p>Orientado a EVENTO/objeto, igual {@link TouchLesionExperiment}: sem
- * comida de verdade perto da origem, nem a condição normal nem a lesionada
- * têm estímulo — o experimento mediria ruído. A origem (x/y/z do comando)
- * precisa ficar perto de um bloco de comida (mel, melancia, abóbora, bolo,
- * plantação madura) OU item comestível largado no chão, dentro do raio de
- * busca do {@link TasteSensor} (4 blocos) — quem roda o comando garante
- * isso antes.
- *
- * <p>Suprime o efeito do `bristle` na velocidade pelo experimento inteiro
- * (mesma técnica de {@link HygroLesionExperiment#run}, aplicada
- * preventivamente aqui em vez de esperar redescobrir em jogo): o jogador
- * parado perto pra observar, ou uma abelha/animal por perto da fonte de
- * comida, aciona `touch_proximity` e `grooming` teria prioridade sobre
- * `appetite` em {@code MotorMapping}, mascarando o efeito do taste.
- *
- * <p>N trials sorteados aleatoriamente entre taste normal e lesionado. Cada
- * trial: teleporta a abelha de volta à origem, zera velocidade, roda por N
- * segundos medindo comprimento de trajetória. Direção esperada: com
- * `appetite` ativo ela voa até a comida e para bem perto/em cima dela
- * (`MotorMapping.TASTE_ARRIVAL_THRESHOLD_BLOCKS`) — o grupo NORMAL deveria
- * ter `path_length`/`avg_speed` MENORES (mesmo sentido do `bristle`: real =
- * pousa/para, mascarado = nunca para, sempre voando via phototaxis).
- *
- * <p><b>`final_distance_to_food` (29/09/2026, achado real — ver F14 em
- * `docs/03-roadmap-fases.md`):</b> `path_length` sozinho deu nulo nas duas
- * primeiras rodadas mesmo com o mascaramento confirmado funcionando
- * (`appetite` cruzando `TASTE_THRESHOLD` do jeito certo em cada condição,
- * via log). Hipótese: `TASTE_APPROACH_SPEED_BLOCKS_PER_TICK` tem a MESMA
- * ordem de grandeza de `MAX_SPEED_BLOCKS_PER_TICK` (voo normal) — taste só
- * muda a DIREÇÃO do voo (pra comida em vez de pra luz), não a velocidade
- * como escape/thermo mudam, então `path_length` acumulado pode não
- * distinguir os dois casos mesmo quando o circuito está certo. Métrica
- * direta pra essa hipótese: onde ela está no FIM do trial, não quanto
- * andou no caminho — deveria ficar perto da comida (posição capturada UMA
- * vez no início do experimento, assumindo fonte estática — bloco ou item
- * já parado) no grupo normal, e longe/aleatória no lesionado.
- */
+/** Lesão do circuito taste (F14): mede chegada à comida com e sem o circuito. */
 public final class TasteLesionExperiment {
-
     private static final Random RNG = new Random();
     private static final int TICKS_PER_SECOND = 20;
-    /** Sentinela quando nenhuma comida foi detectada no início — não deveria acontecer, ver aviso em {@link #run}. */
     private static final double NO_FOOD_DETECTED_SENTINEL = -1.0;
 
     private final Plugin plugin;
@@ -77,11 +32,6 @@ public final class TasteLesionExperiment {
         this.controlLoop = controlLoop;
     }
 
-    /**
-     * @param forcedOrigin se não-nulo, a abelha é teleportada pra cá ANTES do
-     *     primeiro trial, no mesmo instante de execução do comando (mesma
-     *     lição da F6 sobre deriva de IA nativa entre comandos).
-     */
     public void run(Bee bee, int trials, int secondsPerTrial, Location forcedOrigin, CommandSender notify) {
         if (!controlLoop.isRunning()) {
             notify.sendMessage("Loop de controle precisa estar rodando primeiro: /flywirebee control start");
@@ -92,11 +42,6 @@ public final class TasteLesionExperiment {
             bee.setVelocity(new Vector(0, 0, 0));
         }
         Location origin = bee.getLocation().clone();
-        // F14 (29/09/2026) — capturada UMA vez aqui, não recalculada a cada
-        // trial: assume fonte estática (bloco ou item já parado), ver
-        // docstring da classe. Referência fixa pra `final_distance_to_food`
-        // mesmo se ela sair do raio de busca do TasteSensor (4 blocos)
-        // durante um trial lesionado.
         TasteSensor.FoodTarget initialFood = tasteSensor.findNearestFood(bee);
         Location foodLocation = initialFood != null ? initialFood.location() : null;
         if (foodLocation == null) {
@@ -104,10 +49,7 @@ public final class TasteLesionExperiment {
                     + "o experimento vai medir ruído.");
         }
         List<TrialResult> results = new ArrayList<>();
-        // Mesma técnica de HygroLesionExperiment — evita que touch_proximity
-        // (jogador/mob perto da comida) mascare o efeito do taste via grooming.
         controlLoop.setBristleSuppressedForExperiment(true);
-        // F30 — saciada, ela ignoraria a comida nas duas condições (nulo falso).
         controlLoop.setSatietyGateSuppressedForExperiment(true);
         notify.sendMessage("Experimento de lesão de paladar iniciado: " + trials + " trials de "
                 + secondsPerTrial + "s. Confirme que há comida real a até 4 blocos da origem.");
@@ -166,8 +108,6 @@ public final class TasteLesionExperiment {
 
                 if (tick >= durationTicks) {
                     double durationS = durationTicks / (double) TICKS_PER_SECOND;
-                    // F14 — distância até a comida NO FIM do trial (posição fixa
-                    // capturada no início do experimento, ver docstring da classe).
                     double finalDistance = foodLocation != null
                             ? current.distance(foodLocation) : NO_FOOD_DETECTED_SENTINEL;
                     results.add(new TrialResult(
@@ -190,15 +130,8 @@ public final class TasteLesionExperiment {
         }
         File file = new File(dir, "taste_lesion_experiment.csv");
         try (PrintWriter out = new PrintWriter(new FileWriter(file))) {
-            // F14 (29/09/2026) — final_distance_to_food além de path_length/
-            // avg_speed: ver docstring da classe pra por quê (path_length
-            // sozinho deu nulo nas duas primeiras rodadas mesmo com o
-            // mascaramento confirmado funcionando).
             out.println("trial,lesioned,path_length,avg_speed,final_distance_to_food");
             for (TrialResult r : results) {
-                // Locale.ROOT — nunca o locale padrão da JVM (pt_BR usa vírgula
-                // decimal, que colide com a vírgula do CSV e corrompe o arquivo
-                // silenciosamente).
                 out.printf(Locale.ROOT, "%d,%s,%.4f,%.4f,%.4f%n",
                         r.trial(), r.lesioned(), r.pathLength(), r.avgSpeed(), r.finalDistanceToFood());
             }

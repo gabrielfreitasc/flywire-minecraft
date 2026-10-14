@@ -1,28 +1,4 @@
-"""
-L4 equivalente pro subcircuito `thermo` (F12, temperatura: calor/frio). Igual
-ao `hygro`/`johnston`/`taste` (e ao contrário do `escape`, que tem DNp01/
-DNp02 documentados na literatura): nenhuma leitura de literatura/BANC foi
-feita pros 71 descendentes daqui. Não fabricar essa semântica (ver
-`docs/04-regras-de-negocio.md` RN-08).
-
-**Único canal exposto: `thermal`.** Mesmo mecanismo de `hygrotaxis`/
-`startle`/`appetite` — `topology.group_outputs_by_predicted_sign` separa os
-descendentes em quem responde de forma excitatória (47) vs. inibitória (24)
-ao estímulo da semente (TRNs de aquecimento e de frio), sem depender de
-saber o que cada tipo "significa". `thermal = tanh((taxa_excitatória −
-taxa_inibitória) / C.THERMO_MOTOR_RATE_SCALE)` — escala PRÓPRIA (ver
-`config.py`: a genérica satura o baseline, tanh 0,79).
-
-**Não distingue calor de frio** — as duas sementes (heating/cold) alimentam
-o MESMO canal; quem chama (`server.py`) escolhe qual semente
-estimular. Distinguir os dois no canal exigiria decodificar grupos de saída
-separados por semente, não feito ainda.
-
-Só validação de RN-09 (`tools/thermo_calibration_check.py`: diff média
-=173,10 no grupo excitatório com as duas sementes, p≈0) — prova que o
-CIRCUITO responde, não que o COMPORTAMENTO responde. Telemetria pura, não
-entra em `MotorMapping.java` (mesma disciplina de `hygrotaxis`/`startle`).
-"""
+"""L4 equivalente pro subcircuito `thermo` (F12, temperatura: calor/frio)."""
 from __future__ import annotations
 
 from collections import deque
@@ -36,12 +12,7 @@ from .graph import Connectome
 
 
 class ThermoMotorDecoder:
-    """Mesma mecânica de janela deslizante/normalização tanh de
-    `motor.MotorDecoder`/`hygro_motor.HygroMotorDecoder`, duplicada aqui de
-    propósito (código pequeno, mais seguro que forçar reuso incorreto entre
-    circuitos com espaços de `nid` independentes, ver docstring de
-    `BristleMotorDecoder`)."""
-
+    """Canal `thermal` do circuito thermo (calor/frio): tanh((taxa exc − taxa inh) / escala), janela deslizante."""
     def __init__(self, connectome: Connectome, window_ms: float = C.MOTOR_WINDOW_MS) -> None:
         self.connectome = connectome
         self.window_ms = window_ms
@@ -70,8 +41,7 @@ class ThermoMotorDecoder:
         return {"thermal": float(np.tanh((exc_rate - inh_rate) / C.THERMO_MOTOR_RATE_SCALE))}
 
     def active_output_count(self) -> int:
-        """Quantos descendentes do thermo dispararam ao menos uma vez na
-        janela atual."""
+        """Quantos descendentes do thermo dispararam ao menos uma vez na janela atual."""
         if not self._history:
             return 0
         active = np.zeros(self.connectome.n, dtype=bool)

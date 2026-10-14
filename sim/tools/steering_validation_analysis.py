@@ -1,19 +1,6 @@
-"""
-Analisa o CSV do experimento de validação de yaw_steering (gravado pelo
-plugin Java, SteeringValidationExperiment.java) — F6/AD-16, ver
-docs/04-regras-de-negocio.md RN-08.
-
-Pergunta: o canal yaw_steering (RN-08/AD-16 — par bilateral dos 4 tipos
-"steering") corresponde a virar pra um lado real do mundo, ou não significa
-nada direcional? Testa estimulando só o neurônio esquerdo (`left`) ou só o
-direito (`right`) do par bilateral, e medindo o ângulo de giro LÍQUIDO
-acumulado (não distância) — se `left` e `right` girarem em sentidos opostos,
-e diferentes de `baseline` (sem estímulo), o canal controla direção de
-verdade, e o sinal de cada condição diz qual sentido é qual.
+"""Analisa o CSV da validação de yaw_steering (SteeringValidationExperiment, RN-08/AD-16).
 
 Uso:  python tools/steering_validation_analysis.py [caminho/do/csv]
-Sem argumento, procura em
-mc-server/plugins/FlywireBee/steering_validation_experiment.csv.
 """
 from __future__ import annotations
 

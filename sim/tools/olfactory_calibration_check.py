@@ -1,16 +1,4 @@
-"""
-RN-09 pro subcircuito `olfactory` (F17, feromônio): estimular a semente de
-429 ORNs de feromônio (`ORN_DA1`/`VA1d`/`VA1v`/`DL3`/`DC3`) tem efeito
-estatisticamente mensurável sobre a atividade dos 74 descendentes,
-comparado a não estimular. Também mede a distribuição de baseline/
-estimulado em Hz do grupo excitatório, pra escolher escala de normalização
-ANTES de fixar limiar (lição do F9/F10/F12) — mesmo desenho de
-`thermo_calibration_check.py`/`taste_calibration_check.py`.
-
-Sem curadoria por identidade celular disponível pros 74 descendentes
-(diferente do `escape`, que tem DNp01/DNp02 documentados na literatura) —
-comparação pareada, separando por topologia de sinal prevista
-(`topology.group_outputs_by_predicted_sign`).
+"""RN-09 no circuito olfactory (F17, feromônio): estimular a semente muda os descendentes? Mede também a escala do canal.
 
 Uso:  python tools/olfactory_calibration_check.py   (a partir de sim/, venv ativo)
 """

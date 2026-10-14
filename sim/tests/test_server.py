@@ -1,10 +1,4 @@
-"""
-Testes do bridge (server.py). Ver docs/02-arquitetura.md e RN-06.
-
-Versão rápida do critério de saída da F3 (o teste completo, 60s a 20Hz, é
-tools/fake_minecraft_client.py — grande demais para rodar em toda execução
-da suíte).
-"""
+"""Testes do bridge (server.py)."""
 from __future__ import annotations
 
 import json
@@ -23,13 +17,6 @@ def _send(sock_file, sensor: dict) -> dict:
 
 
 def _wait_until(sock_file, sensor: dict, ready, timeout: float = 10.0) -> dict:
-    """F16 (30/09/2026) — repete `sensor` (t_ms crescente) até `ready(payload)`
-    ser verdadeiro, ou desiste após `timeout`s. Substitui esperas fixas
-    curtas (`time.sleep(0.1)` + N tentativas): spawn de processo (cada
-    circuito agora é um processo próprio, não mais uma thread) é mais lento
-    e mais variável que criar thread — sob a suíte inteira rodando em
-    sequência (várias SimulationServer sendo criadas/destruídas), uma
-    espera fixa curta é frágil. `ready` recebe o payload inteiro."""
     deadline = time.monotonic() + timeout
     t_ms = sensor.get("t_ms", 0)
     payload: dict = {}
@@ -64,42 +51,13 @@ def test_bridge_request_response_no_frame_loss():
             sock.close()
 
 
-# F16 (30/09/2026) — test_bridge_history_stays_bounded_by_window movido pra
-# test_motor_telemetry.py::test_motor_history_stays_bounded_by_window. Depois
-# da reforma pra multiprocessing, `srv.motor` não existe mais como atributo
-# do processo de teste (o MotorDecoder do ocelar vive dentro do processo
-# worker) — testar isso direto no MotorDecoder é mais rápido E mais preciso
-# do que tentar inferir pelo protocolo.
-
-
 def test_bridge_mute_field_silences_neurons():
-    """F5 — campo 'mute' silencia o grupo nomeado, e omiti-lo não desfaz isso.
-
-    F16 (30/09/2026) — `Engine.set_silenced` em si já é testado a fundo em
-    test_engine.py (test_set_silenced_blocks_spikes/replaces_not_accumulates);
-    depois da reforma pra multiprocessing esse `Engine` vive dentro do
-    processo worker, sem acesso direto (`srv.engine` não existe mais). O que
-    este teste precisa validar é só a FIAÇÃO do protocolo: que o campo
-    "mute" chega no worker certo e tem efeito observável.
-
-    Sinal escolhido — mutar o próprio grupo de saída ("DNp", um dos 8
-    canais por prefixo de `motor.groups`) e checar O CANAL DELE, não
-    `phototaxis` (tentativa anterior, descartada: `phototaxis` responde
-    pouco e de forma não-monotônica à luz — achado real da F6 — então
-    "sensory" mutado vs. livre não separa de forma confiável em poucas
-    amostras). Silenciar "DNp" faz esses neurônios NUNCA aparecerem no
-    SpikeFrame — a taxa do grupo fica em ZERO de verdade (não é ruído
-    baixo, é ausência), então `tanh(0/escala)=0.0` exato, sem depender de
-    quanta variância basal (RN-09) esse grupo tem.
-    """
+    """F5 — campo 'mute' silencia o grupo nomeado, e omiti-lo não desfaz isso."""
     cc = graph.load()
     with SimulationServer(cc, host="127.0.0.1", port=0) as srv:
         sock = socket.create_connection(("127.0.0.1", srv.port), timeout=5.0)
         sock_file = sock.makefile("rwb")
         try:
-            # A mensagem de mute fica na fila de controle até o worker
-            # nascer e aplicar — não importa se o processo ainda nem
-            # começou a rodar quando isto é enviado.
             _send(sock_file, {"t_ms": 0, "light": 0.5, "dorsal_light": 0.0, "damage": False, "mute": ["DNp"]})
             payload = _wait_until(
                 sock_file, {"t_ms": 50, "light": 0.5, "dorsal_light": 0.0, "damage": False},
@@ -107,7 +65,6 @@ def test_bridge_mute_field_silences_neurons():
             )
             assert payload["motor"]["DNp"] == 0.0
 
-            # sem "mute" no campo, o silenciamento anterior deve persistir
             payload = _send(sock_file, {"t_ms": 100, "light": 0.5, "dorsal_light": 0.0, "damage": False})
             assert payload["motor"]["DNp"] == 0.0
         finally:
@@ -115,8 +72,6 @@ def test_bridge_mute_field_silences_neurons():
 
 
 def test_bridge_without_bristle_omits_bristle_fields():
-    """F7/AD-17 — sem bristle_connectome (default None), resposta idêntica a
-    antes desta mudança: sem 'bristle_motor'/'bristle_active_dn'."""
     cc = graph.load()
     with SimulationServer(cc, host="127.0.0.1", port=0) as srv:
         time.sleep(0.1)
@@ -134,12 +89,6 @@ def test_bridge_without_bristle_omits_bristle_fields():
 
 
 def test_bridge_with_bristle_exposes_bristle_telemetry():
-    """F7/AD-17 — com bristle_connectome, a resposta ganha 'bristle_motor'
-    (telemetria só, RN-08 equivalente não validado o bastante pra virar
-    controle) e 'bristle_active_dn'. touch_proximity/damage disparam a
-    semente do bristle via SENSOR_TOUCH_AMPLITUDE (OR simples) — F9
-    (25/09/2026): touch_contact saiu do OR (esbarrar em bloco não é o mesmo
-    estímulo biológico de tocar algo vivo, ver server.py::on_sensor)."""
     cc = graph.load()
     bristle_cc = graph.load(C.PROCESSED / "bristle")
     with SimulationServer(cc, bristle_cc, host="127.0.0.1", port=0) as srv:
@@ -159,10 +108,6 @@ def test_bridge_with_bristle_exposes_bristle_telemetry():
 
 
 def test_touch_contact_alone_does_not_stimulate_bristle():
-    """F9 (25/09/2026) — bug real achado pelo usuário: esbarrar em bloco
-    (touch_contact) não deveria estimular grooming, só toque/proximidade de
-    algo vivo (touch_proximity) ou dano (damage). Teste direto de
-    on_sensor(), sem precisar de socket."""
     cc = graph.load()
     srv = SimulationServer(cc, host="127.0.0.1", port=0)
     srv.on_sensor({"t_ms": 0, "light": 0.0, "touch_contact": True, "touch_proximity": False, "damage": False})
@@ -172,10 +117,6 @@ def test_touch_contact_alone_does_not_stimulate_bristle():
 
 
 def test_damage_alone_stimulates_escape():
-    """F9 (25/09/2026, pedido do usuário) — levar um hit de verdade (damage)
-    também estimula a semente do `escape`, não só looming_threat — um hit é
-    sinal de ameaça mais forte que taxa de aproximação, deveria escalar pra
-    fuga plena."""
     cc = graph.load()
     srv = SimulationServer(cc, host="127.0.0.1", port=0)
     srv.on_sensor({"t_ms": 0, "light": 0.0, "damage": False, "looming_threat": False})
@@ -185,8 +126,6 @@ def test_damage_alone_stimulates_escape():
 
 
 def test_bridge_without_hygro_omits_hygro_fields():
-    """F7/AD-17 — sem hygro_connectome (default None), resposta idêntica a
-    antes desta mudança: sem 'hygro_motor'/'hygro_active_dn'."""
     cc = graph.load()
     with SimulationServer(cc, host="127.0.0.1", port=0) as srv:
         time.sleep(0.1)
@@ -204,10 +143,6 @@ def test_bridge_without_hygro_omits_hygro_fields():
 
 
 def test_bridge_with_hygro_exposes_hygrotaxis():
-    """F7/AD-17 — com hygro_connectome, a resposta ganha 'hygro_motor'
-    (telemetria só, canal 'hygrotaxis' de topologia de sinal, RN-09
-    validado mas sem lesão em servidor real) e 'hygro_active_dn'. 'raining'
-    dispara a semente do hygro via SENSOR_RAIN_AMPLITUDE."""
     cc = graph.load()
     hygro_cc = graph.load(C.PROCESSED / "hygro")
     with SimulationServer(cc, hygro_connectome=hygro_cc, host="127.0.0.1", port=0) as srv:
@@ -224,8 +159,6 @@ def test_bridge_with_hygro_exposes_hygrotaxis():
 
 
 def test_bridge_without_johnston_omits_johnston_fields():
-    """F8 — sem johnston_connectome (default None), resposta idêntica a
-    antes desta mudança: sem 'johnston_motor'/'johnston_active_dn'."""
     cc = graph.load()
     with SimulationServer(cc, host="127.0.0.1", port=0) as srv:
         time.sleep(0.1)
@@ -243,11 +176,6 @@ def test_bridge_without_johnston_omits_johnston_fields():
 
 
 def test_bridge_with_johnston_exposes_startle():
-    """F8 — com johnston_connectome, a resposta ganha 'johnston_motor'
-    (telemetria só, canal 'startle' de topologia de sinal, RN-09 validado
-    mas sem lesão em servidor real) e 'johnston_active_dn'.
-    'alarm_hostile_mob'/'alarm_explosion' disparam a semente do johnston
-    via SENSOR_ALARM_AMPLITUDE (OR simples)."""
     cc = graph.load()
     johnston_cc = graph.load(C.PROCESSED / "johnston")
     with SimulationServer(cc, johnston_connectome=johnston_cc, host="127.0.0.1", port=0) as srv:
@@ -264,8 +192,6 @@ def test_bridge_with_johnston_exposes_startle():
 
 
 def test_bridge_without_escape_omits_escape_fields():
-    """F9 — sem escape_connectome (default None), resposta idêntica a antes
-    desta mudança: sem 'escape_motor'/'escape_active_dn'."""
     cc = graph.load()
     with SimulationServer(cc, host="127.0.0.1", port=0) as srv:
         time.sleep(0.1)
@@ -283,11 +209,6 @@ def test_bridge_without_escape_omits_escape_fields():
 
 
 def test_bridge_with_escape_exposes_escape_drive():
-    """F9 — com escape_connectome, a resposta ganha 'escape_motor'
-    (telemetria só, canal 'escape_drive' curado por identidade de tipo
-    celular — DNp01+DNp02, RN-09 validado mas sem lesão em servidor real) e
-    'escape_active_dn'. 'looming_threat' dispara a semente do escape via
-    SENSOR_LOOMING_AMPLITUDE."""
     cc = graph.load()
     escape_cc = graph.load(C.PROCESSED / "escape")
     with SimulationServer(cc, escape_connectome=escape_cc, host="127.0.0.1", port=0) as srv:
@@ -304,8 +225,6 @@ def test_bridge_with_escape_exposes_escape_drive():
 
 
 def test_bridge_without_taste_omits_taste_fields():
-    """F10 — sem taste_connectome (default None), resposta idêntica a antes
-    desta mudança: sem 'taste_motor'/'taste_active_dn'."""
     cc = graph.load()
     with SimulationServer(cc, host="127.0.0.1", port=0) as srv:
         time.sleep(0.1)
@@ -323,10 +242,6 @@ def test_bridge_without_taste_omits_taste_fields():
 
 
 def test_bridge_with_taste_exposes_appetite():
-    """F10 — com taste_connectome, a resposta ganha 'taste_motor'
-    (telemetria só, canal 'appetite' de topologia de sinal, RN-09 validado
-    mas sem lesão em servidor real) e 'taste_active_dn'. 'food_contact'
-    dispara a semente do taste via SENSOR_TASTE_AMPLITUDE."""
     cc = graph.load()
     taste_cc = graph.load(C.PROCESSED / "taste")
     with SimulationServer(cc, taste_connectome=taste_cc, host="127.0.0.1", port=0) as srv:
@@ -361,9 +276,6 @@ def test_bridge_without_thermo_omits_thermo_fields():
 
 
 def test_bridge_with_thermo_exposes_thermal():
-    """F12 — com thermo_connectome, a resposta ganha 'thermo_motor' (canal
-    'thermal', telemetria) e 'thermo_active_dn'. As duas sementes (7 TRNs de
-    aquecimento, 9 de frio) ficam separadas por `cell_sub_class`."""
     cc = graph.load()
     thermo_cc = graph.load(C.PROCESSED / "thermo")
     with SimulationServer(cc, thermo_connectome=thermo_cc, host="127.0.0.1", port=0) as srv:
@@ -400,10 +312,6 @@ def test_bridge_without_olfactory_omits_olfactory_fields():
 
 
 def test_bridge_with_olfactory_exposes_pheromone():
-    """F17 — com olfactory_connectome, a resposta ganha 'olfactory_motor'
-    (canal 'pheromone', telemetria — sem sensor real no plugin ainda) e
-    'olfactory_active_dn'. 'pheromone_contact' dispara a semente (429 ORNs
-    de feromônio: ORN_DA1/VA1d/VA1v/DL3/DC3) via SENSOR_OLFACTORY_AMPLITUDE."""
     cc = graph.load()
     olfactory_cc = graph.load(C.PROCESSED / "olfactory")
     with SimulationServer(cc, olfactory_connectome=olfactory_cc, host="127.0.0.1", port=0) as srv:
@@ -438,10 +346,6 @@ def test_bridge_without_aggression_omits_aggression_fields():
 
 
 def test_bridge_with_aggression_exposes_aggression_channel():
-    """F18 — com aggression_connectome, a resposta ganha 'aggression_motor'
-    (canal 'aggression', telemetria — sem sensor real no plugin ainda) e
-    'aggression_active_dn'. 'aggression_contact' dispara a semente (10
-    neurônios pC1a-e) via SENSOR_AGGRESSION_AMPLITUDE."""
     cc = graph.load()
     aggression_cc = graph.load(C.PROCESSED / "aggression")
     with SimulationServer(cc, aggression_connectome=aggression_cc, host="127.0.0.1", port=0) as srv:
@@ -476,16 +380,6 @@ def test_bridge_without_path_integration_omits_path_integration_fields():
 
 
 def test_bridge_with_path_integration_exposes_path_integration_channel():
-    """F19 — com path_integration_connectome, a resposta ganha
-    'path_integration_motor' (canal 'path_integration', telemetria — sem
-    sensor real no plugin ainda) e 'path_integration_active_dn'.
-    'path_integration_contact' dispara a semente (422 neurônios PFN
-    p/m/a/d) via SENSOR_PATH_INTEGRATION_AMPLITUDE.
-
-    F19 (correção 06/10/2026) — 'path_integration_dna02_hz' é taxa CRUA
-    de DNa02 (sem tanh, ver docstring de path_integration_motor.py),
-    fora do limite [-1,1] dos canais normalizados de propósito — checado
-    separado, só tipo e não-negatividade (é uma taxa, nunca < 0)."""
     cc = graph.load()
     path_integration_cc = graph.load(C.PROCESSED / "path_integration")
     with SimulationServer(
@@ -507,10 +401,6 @@ def test_bridge_with_path_integration_exposes_path_integration_channel():
 
 
 def test_bridge_record_telemetry_writes_duckdb(tmp_path):
-    """F20 (06/10/2026) — `record_telemetry=True` grava spikes/stimuli/
-    motor_frames do ocelar num DuckDB real (só o `main` — compatível com o
-    F20 original; outros circuitos são pedidos por nome, ver o teste
-    seguinte)."""
     import duckdb
 
     cc = graph.load()
@@ -525,7 +415,7 @@ def test_bridge_record_telemetry_writes_duckdb(tmp_path):
             _wait_until(sock_file, sensor, lambda p: "phototaxis" in p.get("motor", {}))
         finally:
             sock.close()
-        time.sleep(0.3)  # dá tempo do worker gravar mais alguns frames antes do stop()
+        time.sleep(0.3)
 
     assert db_path.exists()
     con = duckdb.connect(str(db_path))
@@ -538,9 +428,6 @@ def test_bridge_record_telemetry_writes_duckdb(tmp_path):
 
 
 def test_bridge_record_telemetry_one_file_per_circuit(tmp_path):
-    """F20 (13/10/2026) — com uma coleção de nomes, cada circuito pedido
-    grava no SEU arquivo (`runs.duckdb` pro main, `runs_bristle.duckdb`...);
-    circuito não pedido não cria arquivo."""
     import duckdb
 
     cc = graph.load()
@@ -581,7 +468,7 @@ def test_parse_record_telemetry():
     assert parse_record_telemetry("TRUE") == frozenset({"main"})
     assert parse_record_telemetry("all") == frozenset({"main", *_OPTIONAL_CIRCUITS})
     assert parse_record_telemetry(" main, taste ") == frozenset({"main", "taste"})
-    assert parse_record_telemetry("main,tastee") == frozenset({"main"})  # erro de digitação ignorado
+    assert parse_record_telemetry("main,tastee") == frozenset({"main"})
 
 
 def test_bridge_survives_client_disconnect():
@@ -589,8 +476,7 @@ def test_bridge_survives_client_disconnect():
     cc = graph.load()
     with SimulationServer(cc, host="127.0.0.1", port=0) as srv:
         sock = socket.create_connection(("127.0.0.1", srv.port), timeout=5.0)
-        sock.close()  # desconecta abruptamente, sem handshake de saída
+        sock.close()
 
         time.sleep(0.5)
-        # F16 — não é mais uma thread só, é um processo por circuito ativo.
         assert all(p.is_alive() for p in srv._processes)

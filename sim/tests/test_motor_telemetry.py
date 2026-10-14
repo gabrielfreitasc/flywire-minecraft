@@ -1,10 +1,4 @@
-"""
-Testes de motor.py e telemetry.py. Ver docs/03-roadmap-fases.md (F2).
-
-Não testam semântica comportamental — RN-08 (mapeamento descendente ->
-comportamento) segue em aberto, precisa de curadoria. Testam só o mecanismo:
-agrupamento, normalização, e que o esquema DuckDB grava/lê o que promete.
-"""
+"""Testes de motor.py e telemetry.py."""
 from __future__ import annotations
 
 import duckdb
@@ -33,7 +27,7 @@ def test_motor_groups_cover_all_descendants(connectome):
     total = sum(len(nids) for nids in groups.values())
     assert total == len(connectome.output)
     all_nids = np.concatenate(list(groups.values()))
-    assert len(all_nids) == len(set(all_nids.tolist()))  # sem sobreposição
+    assert len(all_nids) == len(set(all_nids.tolist()))
 
 
 def test_motor_decode_range(connectome):
@@ -41,7 +35,7 @@ def test_motor_decode_range(connectome):
     motor = MotorDecoder(connectome)
     rng = np.random.default_rng(0)
     for t_ms in range(1, 101):
-        spikes = rng.random(connectome.n) < 0.2  # taxa alta o bastante pra saturar
+        spikes = rng.random(connectome.n) < 0.2
         motor.push(t_ms, spikes)
     vec = motor.decode()
     expected_keys = (
@@ -55,8 +49,7 @@ def test_motor_decode_range(connectome):
 
 
 def test_published_behavior_groups_are_real_types(connectome):
-    """RN-08/AD-14+AD-15 — os 18 tipos com categoria publicada (Namiki 2018 +
-    BANC) existem de fato no subcircuito."""
+    """RN-08/AD-14+AD-15 — os 18 tipos com categoria publicada (Namiki 2018 + BANC) existem de fato no subcircuito."""
     groups = group_by_published_behavior(connectome)
     assert set(groups) == {
         "fast_locomotion",
@@ -71,13 +64,11 @@ def test_published_behavior_groups_are_real_types(connectome):
         "neuromodulatory",
     }
     total = sum(len(nids) for nids in groups.values())
-    assert total == 39  # 18 tipos, 39 neurônios — conferido manualmente contra o dado
-    assert total < len(connectome.output)  # cobertura parcial, não fabricar o resto
+    assert total == 39
+    assert total < len(connectome.output)
 
 
 def test_connectivity_cluster_groups_are_real_types(connectome):
-    """RN-08/AD-15 — os 27 tipos com cluster de conectividade BANC (sem
-    comportamento medido) existem de fato no subcircuito."""
     groups = group_by_connectivity_cluster(connectome)
     assert set(groups) == {
         "flight_steering_1",
@@ -90,9 +81,8 @@ def test_connectivity_cluster_groups_are_real_types(connectome):
         "probing",
     }
     total = sum(len(nids) for nids in groups.values())
-    assert total == 50  # 27 tipos, 50 neurônios — conferido manualmente contra o dado
-    assert total < len(connectome.output)  # cobertura parcial, não fabricar o resto
-    # sem sobreposição com o que já tem comportamento medido (evidências não se misturam)
+    assert total == 50
+    assert total < len(connectome.output)
     published_nids = {
         nid for nids in group_by_published_behavior(connectome).values() for nid in nids
     }
@@ -101,13 +91,10 @@ def test_connectivity_cluster_groups_are_real_types(connectome):
 
 
 def test_steering_bilateral_pairs_are_balanced(connectome):
-    """RN-08/F6 — os 4 tipos steering bilaterais têm exatamente 1 neurônio à
-    esquerda e 1 à direita cada (achado 17/09/2026, coluna `side`)."""
     left, right = group_steering_by_side(connectome)
     assert len(left) == 4
     assert len(right) == 4
     assert set(left).isdisjoint(right)
-    # os tipos dos dois lados batem — é par bilateral, não coincidência de contagem
     out_nodes = connectome.nodes.loc[connectome.output]
     left_types = set(out_nodes.loc[left].cell_type)
     right_types = set(out_nodes.loc[right].cell_type)
@@ -121,15 +108,8 @@ def test_motor_decode_empty_history_is_zero(connectome):
 
 
 def test_motor_history_stays_bounded_by_window(connectome):
-    """F16 (30/09/2026) — movido de test_server.py: depois da reforma pra
-    multiprocessing, o MotorDecoder do ocelar vive dentro do processo
-    worker, não mais acessível como `srv.motor` do processo de teste. A
-    estrutura que mais cresceria num vazamento é `_history` — testado aqui
-    direto (mais rápido e preciso que subir um SimulationServer inteiro só
-    pra isso)."""
     motor = MotorDecoder(connectome)
     spikes = np.zeros(connectome.n, dtype=bool)
-    # janela MOTOR_WINDOW_MS=50, dt=1ms -> no máximo ~50-60 frames retidos
     for t_ms in range(500):
         motor.push(t_ms, spikes)
     assert len(motor._history) <= 60
@@ -153,17 +133,15 @@ def test_telemetry_roundtrip(tmp_path, connectome):
 
 
 def test_telemetry_stimulus_logged_only_on_change(tmp_path, connectome):
-    """Estímulo repetido tick a tick grava UMA vez; mudança de amplitude e
-    religar depois de desligado (mesmo valor) gravam de novo."""
     db_path = tmp_path / "test_runs.duckdb"
     nids = np.asarray(connectome.sensory[:5])
 
     with Recorder(db_path=db_path) as rec:
         for t in range(10):
-            rec.log_stimulus(t, nids, 2.0)  # 1 evento
-        rec.log_stimulus(10, nids, 3.0)  # mudou amplitude: 1 evento
-        rec.log_stimulus(11, np.array([], dtype=np.int64), 0.0)  # desligou: nada
-        rec.log_stimulus(12, nids, 3.0)  # religou igual: 1 evento
+            rec.log_stimulus(t, nids, 2.0)
+        rec.log_stimulus(10, nids, 3.0)
+        rec.log_stimulus(11, np.array([], dtype=np.int64), 0.0)
+        rec.log_stimulus(12, nids, 3.0)
         run_id = rec.run_id
 
     con = duckdb.connect(str(db_path))

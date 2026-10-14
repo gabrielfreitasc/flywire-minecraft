@@ -1,16 +1,4 @@
-"""
-RN-09 pro subcircuito `aggression` (F18, corte/agressividade): estimular a
-semente de 10 neurônios `pC1a-e` (bilaterais) tem efeito estatisticamente
-mensurável sobre os 25 descendentes, comparado a não estimular. Também
-mede a distribuição de baseline/estimulado em Hz do grupo excitatório, pra
-escolher escala de normalização ANTES de fixar limiar (lição do
-F9/F10/F12/F17) — mesmo desenho de `olfactory_calibration_check.py`.
-
-Sem curadoria por identidade celular disponível pros 25 descendentes
-(diferente do `escape`, que tem DNp01/DNp02 documentados na literatura) —
-comparação pareada, separando por topologia de sinal prevista
-(`topology.group_outputs_by_predicted_sign`). Grupo inibitório previsto
-fica VAZIO (achado real, não erro) — só o excitatório é testado.
+"""RN-09 no circuito aggression (F18): estimular a semente muda os descendentes? Mede também a escala do canal.
 
 Uso:  python tools/aggression_calibration_check.py   (a partir de sim/, venv ativo)
 """

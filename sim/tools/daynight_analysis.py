@@ -1,19 +1,6 @@
-"""
-Analisa o CSV do experimento dia/noite (gravado pelo plugin Java,
-DayNightExperiment.java) — F6, ver docs/03-roadmap-fases.md.
-
-Compara path_length e avg_speed entre trials de dia (meio-dia, day=True) e de
-noite (meia-noite, day=False). Mesmo critério de falsificação do experimento
-de lesão da F4 (docs/00-visao-geral.md), aplicado a um eixo diferente: em vez
-de silenciar fotorreceptores, varia a hora do mundo. `light`
-(`Block.getLightLevel()`) é quem alimenta os fotorreceptores e já é sensível
-a dia/noite — `dorsal_light` só foi usado como filtro de confundidor (abelha
-ao ar livre) na hora de rodar o experimento, não entra nesta análise. Ver
-CONVENCOES.md, "Armadilhas conhecidas".
+"""Analisa o CSV do experimento dia/noite (DayNightExperiment, F6).
 
 Uso:  python tools/daynight_analysis.py [caminho/do/daynight_experiment.csv]
-Sem argumento, procura em mc-server/plugins/FlywireBee/daynight_experiment.csv
-(caminho padrão onde o plugin grava, ver plugin/README.md).
 """
 from __future__ import annotations
 

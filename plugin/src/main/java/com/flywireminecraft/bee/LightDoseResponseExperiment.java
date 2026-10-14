@@ -17,30 +17,8 @@ import java.util.Locale;
 import java.util.Random;
 import java.util.logging.Level;
 
-/**
- * Dose-resposta de luz (F6, 17/09/2026) — pergunta em aberto deixada pelo
- * experimento dia/noite: luz 0,25 (noite) produziu MAIS distância que luz
- * 1,0 (dia), o oposto do esperado, e luz 0 (F4) deu a MENOR distância das
- * três condições já medidas. Isso é compatível com resposta NÃO-MONOTÔNICA
- * à luz — mas com só 3 pontos (0 / 0,25 / 1,0, medidos em experimentos
- * diferentes, não comparáveis entre si) não dá pra afirmar isso. Este
- * experimento mede 4 níveis (0 / 0,25 / 0,5 / 1,0) sorteados trial a trial
- * **na mesma rodada, mesma origem** — comparável de verdade, ao contrário
- * dos pontos anteriores.
- *
- * <p>Usa {@link ControlLoop#setForcedLight} em vez de tentar achar horas do
- * mundo que produzam luz 0,5 exata — `light` só assume valores discretos que
- * o motor de iluminação do Minecraft produz (RN-06/CONVENCOES.md), então
- * forçar o valor enviado à ponte é o único jeito de testar níveis
- * arbitrários. Não muda `server.py` nem o protocolo — mesmo mecanismo que já
- * fazia `/flywirebee lesion` mandar `light=0`.
- *
- * <p>**Não impõe `goals off`** — quem roda decide, mas F6 já mostrou que sem
- * isso a IA nativa pode mascarar o efeito (dia/noite deu nulo em 3 rodadas
- * com IA ligada, virou p=0,00184 com `goals off`). Ver `docs/03-roadmap-fases.md`.
- */
+/** Dose-resposta de luz (F6): várias intensidades sorteadas trial a trial na mesma origem. */
 public final class LightDoseResponseExperiment {
-
     private static final Random RNG = new Random();
     private static final int TICKS_PER_SECOND = 20;
     private static final double[] LEVELS = {0.0, 0.25, 0.5, 1.0};
@@ -53,14 +31,6 @@ public final class LightDoseResponseExperiment {
         this.controlLoop = controlLoop;
     }
 
-    /**
-     * @param forcedOrigin se não-nulo, a abelha é teleportada pra cá ANTES do
-     *     primeiro trial, no mesmo instante de execução do comando — sem
-     *     intervalo pra IA nativa derivar (achado 17/09/2026: um comando
-     *     `/flywirebee goto` separado ainda deixava a abelha andar/voar no
-     *     tempo entre ele e o comando do experimento rodar). Se nulo, usa a
-     *     posição atual da abelha como origem, como antes.
-     */
     public void run(Bee bee, int trials, int secondsPerTrial, Location forcedOrigin, CommandSender notify) {
         if (!controlLoop.isRunning()) {
             notify.sendMessage("Loop de controle precisa estar rodando primeiro: /flywirebee control start");
@@ -144,8 +114,6 @@ public final class LightDoseResponseExperiment {
         try (PrintWriter out = new PrintWriter(new FileWriter(file))) {
             out.println("trial,light_level,path_length,avg_speed");
             for (TrialResult r : results) {
-                // Locale.ROOT — vírgula decimal do pt_BR corrompe CSV, já visto no
-                // experimento de lesão (CONVENCOES.md).
                 out.printf(Locale.ROOT, "%d,%.2f,%.4f,%.4f%n",
                         r.trial(), r.lightLevel(), r.pathLength(), r.avgSpeed());
             }

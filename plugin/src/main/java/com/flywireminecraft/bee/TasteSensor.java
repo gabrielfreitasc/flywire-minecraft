@@ -13,49 +13,8 @@ import org.bukkit.inventory.ItemStack;
 
 import java.util.Set;
 
-/**
- * F10 (25/09/2026) — sinal de "comida" pro subcircuito `taste` (paladar
- * apetitivo, GRNs de açúcar/água). Achado do usuário: diferente de
- * humanos (papilas gustativas só na boca), a mosca prova com o CORPO
- * TODO — os próprios tipos celulares da semente confirmam isso (sensilas
- * de perna, boca e faringe, ver `sim/tools/build_f10_circuit.py`). Por
- * isso o gatilho aqui é mais amplo que "comeu": qualquer contato com
- * comida conta, não só ingestão.
- *
- * <p><b>Comportamento (25/09/2026, pedido do usuário, ver
- * {@link MotorMapping}).</b> Não é só sim/não — {@link #findNearestFood(Bee)}
- * localiza ONDE a comida está, pra ela poder voar até lá. Bloco/item
- * dropado: pousa em cima. Jogador segurando comida: segue o jogador
- * enquanto o item estiver na mão.
- *
- * <p>Três fontes, a mais próxima vence:
- * <ul>
- *   <li><b>Bloco de comida</b> — mel, melancia, abóbora, bolo, ou
- *       plantação madura, num cubo de blocos ao redor. Curadoria manual —
- *       Bukkit não tem uma flag "isFood" pra Material de BLOCO (só pra
- *       item, ver abaixo), diferente de itens.</li>
- *   <li><b>Item de comida largado no chão</b> — pedido do usuário: fruta/
- *       comida dropada por perto também deveria disparar. Usa
- *       {@link Material#isEdible()}, a flag nativa do Bukkit pra "dá pra
- *       comer" — mais robusto que curar uma lista manual de itens (cobre
- *       maçã, pão, carne, fatia de melancia, cenoura, batata, biscoito,
- *       torta de abóbora, etc. automaticamente).</li>
- *   <li><b>Jogador segurando comida</b> — mesmo pedido do usuário: jogador
- *       com item comestível na mão (principal ou secundária) por perto
- *       também conta, mesma checagem {@code isEdible()}.</li>
- * </ul>
- *
- * <p>Raio/lista de blocos são estimativa de engenharia, PROVISÓRIOS — mesma
- * disciplina de {@link TouchSensor}/{@link AlarmSensor}/{@link LoomingSensor}.
- */
+/** F10 — sinal de "comida" pro subcircuito `taste` (paladar apetitivo, GRNs de açúcar/água). */
 public final class TasteSensor {
-
-    /**
-     * Blocos "de comida" de verdade — mel, melancia, abóbora, bolo (ver
-     * pedido original do usuário). Bukkit não tem {@code isEdible()} pra
-     * bloco (só item), curadoria manual. {@code CARVED_PUMPKIN} fora —
-     * é decorativo/máscara, não comida.
-     */
     private static final Set<Material> FOOD_BLOCKS = Set.of(
             Material.HONEY_BLOCK,
             Material.MELON,
@@ -64,83 +23,35 @@ public final class TasteSensor {
             Material.SWEET_BERRY_BUSH
     );
 
-    /** Plantações — só conta madura (pronta pra colher), não muda em qualquer estágio. */
     private static final Set<Material> MATURE_FOOD_CROPS = Set.of(
             Material.WHEAT, Material.CARROTS, Material.POTATOES, Material.BEETROOTS
     );
 
-    /** Raio de busca por bloco/item/jogador com comida, em blocos. Provisório. */
     static final double FOOD_SEARCH_RADIUS_BLOCKS = 4.0;
 
-    /**
-     * F21 (06/10/2026) — pedido do usuário: "seria interessante estigarmos
-     * essa busca por comida quando estiver com fome". Biologia real: insetos
-     * em privação alimentar aumentam o esforço/raio de forrageamento (busca
-     * mais ampla, não só espera passiva). Soma a {@link #FOOD_SEARCH_RADIUS_BLOCKS}
-     * proporcional a {@link EnergyTracker#hungerFactor}: no máximo (faminta),
-     * o raio DOBRA (4,0 → 8,0). Não é sensor novo — mesma varredura de
-     * {@link #findNearestFood(Bee, double)}, só o raio muda.
-     */
+    // F21
     static final double HUNGRY_SEARCH_RADIUS_EXTRA_BLOCKS = 4.0;
 
-    // F22 (06/10/2026, pedido do usuário) — ver ControlLoop#setIgnorePlayer.
     private volatile boolean ignorePlayer = false;
 
-    /** Ver docstring do campo {@link #ignorePlayer}. */
     void setIgnorePlayer(boolean ignore) {
         this.ignorePlayer = ignore;
     }
 
-    /**
-     * Deslocamento em Y pra mirar exatamente na SUPERFÍCIE DE CIMA de um
-     * bloco (não afundada dentro dele) — {@code Block#getLocation()}
-     * devolve o canto inferior, +1,0 em Y é o topo exato. Bug real, achado
-     * do usuário (25/09/2026): mesma constante era reaproveitada pra ITEM
-     * também, e item largado descansa REBAIXADO (perto do chão, ~0,1-0,25
-     * de altura) — reaproveitar o mesmo +1,0 fazia ela pairar um bloco
-     * INTEIRO acima do item, longe demais pra parecer "encostada".
-     * Separado abaixo.
-     */
     private static final double BLOCK_TOP_SURFACE_Y_OFFSET = 1.0;
 
-    /** Item largado fica rente ao chão — deslocamento bem menor que o do bloco (ver acima). */
     private static final double ITEM_HOVER_Y_OFFSET = 0.2;
 
-    /** Altura acima dos pés do jogador — perto da mão/tronco, pra "seguir" parecer natural. */
     private static final double PLAYER_HOVER_Y_OFFSET = 1.0;
 
-    /**
-     * F10 — pedido do usuário (25/09/2026): "nos blocos e items dropados
-     * ela deve pousar acima deles. Em caso de items segurados pelo player
-     * ela deve seguir o player enquanto o item estiver sendo segurado."
-     *
-     * @param location onde voar (já com o deslocamento pra ficar ACIMA do
-     *     bloco/item/jogador, nunca a posição crua do bloco/entidade).
-     * @param heldByPlayer {@code true} só quando a fonte é um jogador
-     *     segurando comida — quem chama ({@code ControlLoop}) usa isto só
-     *     pra decidir se recalcula a posição a cada troca (jogador se move)
-     *     ou não; o comportamento de voo em si (ir até lá, parar perto) é o
-     *     MESMO nos dois casos, recomputado a cada troca de qualquer jeito.
-     */
+    /** F10 — pedido do usuário: "nos blocos e items dropados ela deve pousar acima deles. */
     public record FoodTarget(Location location, boolean heldByPlayer) {
     }
 
-    /**
-     * Sinal de nível — a fonte de comida mais próxima agora, ou
-     * {@code null} se nenhuma estiver no raio padrão
-     * ({@link #FOOD_SEARCH_RADIUS_BLOCKS}). Ver {@link #findNearestFood(Bee, double)}
-     * pra busca com raio ampliado pela fome.
-     */
     public FoodTarget findNearestFood(Bee bee) {
         return findNearestFood(bee, FOOD_SEARCH_RADIUS_BLOCKS);
     }
 
-    /**
-     * Mesma varredura de {@link #findNearestFood(Bee)}, com raio explícito —
-     * F21: permite {@code ControlLoop} ampliar o raio com a fome
-     * ({@link #HUNGRY_SEARCH_RADIUS_EXTRA_BLOCKS}) sem duplicar a lógica de
-     * varredura de blocos e entidades.
-     */
     public FoodTarget findNearestFood(Bee bee, double searchRadiusBlocks) {
         Location center = bee.getLocation();
         World world = center.getWorld();

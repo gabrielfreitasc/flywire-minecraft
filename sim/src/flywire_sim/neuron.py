@@ -1,21 +1,4 @@
-"""
-L3 — modelo de neurônio: leaky integrate-and-fire.
-
-Contrato:
-
-    state = LIFState.zeros(n)
-    spikes = step(state, current, dt_ms)   # -> NDArray[bool] (n,), muta `state`
-
-RN-07 — período refratário de REFRACTORY_MS com reset ao repouso: um neurônio
-que acabou de disparar não integra corrente nem pode disparar de novo até o
-contador de refratário zerar.
-
-Parâmetros em config.py (V_REST, V_THRESHOLD, TAU_MS, REFRACTORY_MS).
-Herdados de Shiu et al. 2024, ajustados para o cérebro INTEIRO — num
-subcircuito de 625 neurônios a excitação recorrente é muito menor e a rede
-pode não disparar. Calibrar SYNAPTIC_GAIN por varredura em engine.py antes
-de mexer aqui.
-"""
+"""L3 — modelo de neurônio: leaky integrate-and-fire."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -30,8 +13,8 @@ from . import config as C
 class LIFState:
     """Estado mutável de uma população de neurônios LIF, indexado por nid."""
 
-    V: NDArray[np.float32]              # potencial de membrana
-    refractory_ms: NDArray[np.float32]  # tempo restante de refratário (0 = livre)
+    V: NDArray[np.float32]
+    refractory_ms: NDArray[np.float32]
 
     @classmethod
     def zeros(cls, n: int) -> LIFState:
@@ -46,12 +29,7 @@ def step(
     current: NDArray[np.floating],
     dt_ms: float = C.DT_MS,
 ) -> NDArray[np.bool_]:
-    """Avança `state` em um passo de dt_ms. Retorna a máscara de quem disparou.
-
-    Integração de Euler: dV/dt = -(V - V_REST) / TAU_MS + current.
-    Neurônios em refratário (RN-07) não integram e ficam presos em V_REST;
-    apenas o contador decresce.
-    """
+    """Avança `state` em um passo de dt_ms."""
     in_refractory = state.refractory_ms > 0.0
     state.refractory_ms = np.maximum(state.refractory_ms - dt_ms, 0.0)
 

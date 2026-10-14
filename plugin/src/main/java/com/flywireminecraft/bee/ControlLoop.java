@@ -20,190 +20,78 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 
 /**
- * L5→L6 — laço de controle em tempo real: sensor da abelha → ponte → vetor
- * motor → velocidade aplicada.
+ * L5→L6 — laço de controle em tempo real: sensor da abelha → ponte → vetor motor → velocidade aplicada.
  *
- * <p>RN-06 — o tick do jogo NUNCA espera o simulador. A troca com a ponte
- * ({@link BridgeClient#sendSensorAndReceiveMotor}) é I/O bloqueante de rede;
- * rodá-la na thread principal travaria o servidor inteiro a cada tick. Por
- * isso:
- *
- * <ul>
- *   <li>Leitura de sensor e aplicação de velocidade rodam na thread principal
- *       (obrigatório — API do Bukkit não é thread-safe para isso);</li>
- *   <li>A troca com a ponte roda numa thread dedicada, nunca mais de uma por
- *       vez ({@code exchangeInFlight});</li>
- *   <li>A cada tick, a abelha recebe o ÚLTIMO vetor motor já calculado — nunca
- *       espera uma troca em andamento terminar. Mesma lógica de
- *       {@code server.py::Engine.step()} do lado Python.</li>
- * </ul>
+ * <p>RN-06: o tick do jogo nunca espera o simulador. Sensor e velocidade rodam na thread
+ * principal (a API do Bukkit não é thread-safe); a troca com a ponte roda numa thread
+ * dedicada, uma por vez, e cada tick aplica o último vetor motor já recebido.
  */
 public final class ControlLoop {
-
     private final Plugin plugin;
     private final FlywireBeeMarker marker;
     private final DamageTracker damageTracker;
     private final TouchSensor touchSensor = new TouchSensor();
-    private final AlarmSensor alarmSensor; // F8 — vento/som (johnston)
-    private final LoomingSensor loomingSensor = new LoomingSensor(); // F9/AD-20 — looming (escape)
-    private final TasteSensor tasteSensor = new TasteSensor(); // F10 — comida (taste)
-    private volatile boolean tasteTargetHeldByPlayer = false; // F10 — ver StatusLabel
-    // F25 (06/10/2026) — ver applyForagingSearchModifiers. Mesma defasagem
-    // de 1 tick já aceita em tasteTargetHeldByPlayer/coldNear.
+    private final AlarmSensor alarmSensor;
+    private final LoomingSensor loomingSensor = new LoomingSensor();
+    private final TasteSensor tasteSensor = new TasteSensor();
+    private volatile boolean tasteTargetHeldByPlayer = false;
     private volatile boolean foodVisible = false;
-    // F30 — ver EnergyTracker.SEEK_FOOD_BELOW. Mesma defasagem de 1 tick de foodVisible.
     private volatile boolean seekingFood = false;
-    private volatile boolean satietyGateSuppressedForExperiment = false; // F30 — ver setSatietyGateSuppressedForExperiment
-    // F28 (07/10/2026) — ver foodTargetMinWorldY. Mesma defasagem de 1 tick de foodVisible.
+    private volatile boolean satietyGateSuppressedForExperiment = false;
     private volatile Location foodTargetLocation = null;
-    /**
-     * F28 — folga acima do alvo de comida que o teto de fome/frio sempre
-     * respeita. Achado real em jogo: teto relativo ao chão LOGO ABAIXO
-     * deixava o fundo da abelha ~0,014 abaixo do topo de uma melancia num
-     * degrau 1 bloco mais alto — travou a 0,85 do alvo (= 0,5 meia largura
-     * da melancia + 0,35 da abelha), batendo na lateral.
-     */
+    // F28
     private static final double FOOD_TARGET_CLEARANCE_BLOCKS = 0.5;
-    // F14 (29/09/2026, achado real) — ver docstring do stuck-check
-    // (intentionalLanding): sem isto, o sistema de recuperação confundia
-    // "chegou na comida e parou de propósito" com "travou contra
-    // obstáculo" e empurrava ela pra longe logo depois de chegar —
-    // explicava por que tastelesion não fechava mesmo com o mascaramento
-    // confirmado funcionando (ver F14 em docs/03-roadmap-fases.md).
+    // Parar na comida é intencional: sem isto o sistema anti-obstáculo a empurra para longe (F14).
     private volatile boolean tasteArrived = false;
-    private final EnergyTracker energyTracker = new EnergyTracker(); // F11 — fome/energia, proxy de engenharia
-    private final ThermalSensor thermalSensor = new ThermalSensor(); // F12 — calor/frio (thermo)
-    private final SleepState sleepState = new SleepState(); // F13 — sonolência noturna, proxy de engenharia
-    // F12 — estado lido pelo StatusLabel/velocidade no PRÓXIMO tick (mesma
-    // defasagem de 1 tick de escapeLatchTicksLeft). heatAvoidDirection != null
-    // = fugindo de perigo térmico agora (circuito thermo ativo + fonte perigosa
-    // por perto + sem fuga por medo em curso).
+    private final EnergyTracker energyTracker = new EnergyTracker();
+    private final ThermalSensor thermalSensor = new ThermalSensor();
+    private final SleepState sleepState = new SleepState();
     private volatile Vector heatAvoidDirection = null;
     private volatile boolean heatNear = false;
-    /** F13 — `startle` acima disto, com alarme real ativo, conta como "som alto" que desperta. */
+    // F13
     private static final double WAKE_STARTLE_THRESHOLD = 0.5;
     private volatile boolean coldNear = false;
-    /** F21 — 0,0-1,0, mesma defasagem de 1 tick de heatNear/coldNear. Ver {@code applyColdModifiers}. */
     private volatile double coldSeverity = 0.0;
     private final String bridgeHost;
     private final int bridgePort;
 
-    private static final int LOG_EVERY_TICKS = 20;   // 1x por segundo
-    private static final int VISUALIZE_EVERY_TICKS = 5; // 4Hz — 20Hz de partículas seria spam visual
-    private static final int HUD_EVERY_TICKS = 4;    // 5Hz — F6, painel "Flywire Bee Live"
+    private static final int LOG_EVERY_TICKS = 20;
+    private static final int VISUALIZE_EVERY_TICKS = 5;
+    private static final int HUD_EVERY_TICKS = 4;
 
     private final ActivityVisualizer visualizer = new ActivityVisualizer();
-    private final StatusLabel statusLabel = new StatusLabel(); // F9 — balão de texto acima da abelha
+    private final StatusLabel statusLabel = new StatusLabel();
 
     private BridgeClient bridge;
     private ExecutorService bridgeExecutor;
     private BukkitTask tickTask;
     private final AtomicBoolean exchangeInFlight = new AtomicBoolean(false);
     private volatile Vector latestVelocity = new Vector(0, 0, 0);
-    // F7/AD-17 — velocidade que esteve ativa durante o tick que acabou de
-    // passar, usada por TouchSensor pra saber o deslocamento ESPERADO e
-    // comparar com o real (heurística de touch_contact). Não confundir com
-    // latestVelocity, que é a próxima a ser aplicada.
     private volatile Vector lastAppliedVelocity = new Vector(0, 0, 0);
     private volatile JsonObject latestMotor = new JsonObject();
     private volatile int latestActiveDn = 0;
-    // F7/AD-17 — telemetria do subcircuito bristle (vazio se server.py não
-    // tiver bristle_connectome carregado).
     private volatile JsonObject latestBristleMotor = new JsonObject();
-    // F7/AD-17 — telemetria do subcircuito hygro (vazio se server.py não
-    // tiver hygro_connectome carregado). Só o canal `hygrotaxis`, telemetria
-    // pura — ver hygro_motor.py, não entra em MotorMapping.java ainda.
     private volatile JsonObject latestHygroMotor = new JsonObject();
-    // F8 — telemetria do subcircuito johnston (vazio se server.py não tiver
-    // johnston_connectome carregado). Só o canal `startle`, telemetria pura.
     private volatile JsonObject latestJohnstonMotor = new JsonObject();
-    // F9/AD-20 — telemetria do subcircuito escape (vazio se server.py não
-    // tiver escape_connectome carregado). Só o canal `escape_drive`,
-    // telemetria pura — ver escape_motor.py, não entra em MotorMapping.java
-    // ainda (sem sensor calibrado/lesão em servidor real).
     private volatile JsonObject latestEscapeMotor = new JsonObject();
-    // F10 — telemetria do subcircuito taste (vazio se server.py não tiver
-    // taste_connectome carregado). Só o canal `appetite`, telemetria pura —
-    // ver taste_motor.py, não entra em MotorMapping.java ainda.
     private volatile JsonObject latestTasteMotor = new JsonObject();
-    // F12 — telemetria do subcircuito thermo; canal `thermal`. Decide fuga de
-    // calor perigoso (MotorMapping.isThermalActive) e o texto do balão.
     private volatile JsonObject latestThermoMotor = new JsonObject();
-    // F7/AD-17 — achado em servidor real (20/09/2026): pausar TouchSensor só
-    // ENQUANTO grooming está ativo não bastava. Toda vez que grooming CRUZA
-    // o limiar (subindo OU descendo), a velocidade comandada muda de direção
-    // abruptamente (voo horizontal <-> descida vertical) — a abelha tem
-    // inércia física, não troca de direção instantaneamente, e esse
-    // descompasso momentâneo parecia "toque" de novo, prolongando a
-    // oscilação. Folga curta em torno de QUALQUER troca de estado (não só
-    // entrando) resolve. GROOMING_TRANSITION_GRACE_TICKS é provisório, não
-    // calibrado.
-    private static final int GROOMING_TRANSITION_GRACE_TICKS = 10; // 0,5s a 20Hz
+    // F7, AD-17
+    private static final int GROOMING_TRANSITION_GRACE_TICKS = 10;
     private boolean wasGroomingActive = false;
     private int groomingGraceTicksLeft = 0;
 
-    // F7/AD-17 — achado em servidor real (20/09/2026), SEPARADO do problema
-    // acima: mesmo com grooming reagindo, nem "voar" (phototaxis) nem
-    // "descer na vertical" (pouso) tiram a abelha de um obstáculo do LADO
-    // (morro, degrau de bloco) — nenhum dos dois movimentos a afasta.
-    // Também piora porque grooming oscilando perto do limiar rearma a folga
-    // de transição o tempo todo, quase sempre pausando TouchSensor — o
-    // sinal de toque nem chega a se sustentar direito. Recuperação MECÂNICA,
-    // independente da decisão do circuito: mede deslocamento real a cada
-    // STUCK_CHECK_TICKS; se ficou abaixo de STUCK_DISPLACEMENT_THRESHOLD_BLOCKS
-    // e não é um pouso intencional (onGround + grooming ativo), aplica um
-    // empurrão pra cima por RECOVERY_BOOST_TICKS — tenta escalar o
-    // obstáculo. Constantes provisórias, não calibradas, primeira tentativa
-    // de engenharia. Não fabrica sinal nenhum do circuito — é só robustez
-    // de física de embodiment, mesma categoria do achado de `setVelocity()`
-    // vencendo a IA nativa (ver "Risco investigado" no plugin/README.md).
-    // F7/AD-17 — polimento (22/09/2026), pedido do usuário: "travar entre
-    // blocos" (cercada em vários lados) ficava perceptível demais — 2s só
-    // pra DETECTAR que travou, mais um empurrão de força moderada que às
-    // vezes não bastava pra escapar de vez, exigindo vários ciclos de
-    // detecção+empurrão em sequência. Recalibrado: detecção mais rápida
-    // (1s em vez de 2s — ainda uma barra baixa, 0.3 blocos, fácil de
-    // passar em voo livre normal, então não deveria gerar mais falso
-    // positivo) e empurrão mais longo/decisivo (1,5s em vez de 1s,
-    // horizontal maior). Estimativas de engenharia, não calibradas.
-    private static final int STUCK_CHECK_TICKS = 20; // 1s a 20Hz
+    // F7, AD-17
+    private static final int STUCK_CHECK_TICKS = 20;
     private static final double STUCK_DISPLACEMENT_THRESHOLD_BLOCKS = 0.3;
     private static final double RECOVERY_BOOST_BLOCKS_PER_TICK = 0.15;
-    private static final int RECOVERY_BOOST_TICKS = 30; // 1,5s de empurrão
-    // F26 (07/10/2026, achado do usuário em jogo) — faminta e sem comida, o
-    // teto forçado (1,5 bloco: fome F11 na inanição e busca F25) descia ela
-    // de volta pra altura do MESMO obstáculo assim que o empurrão de
-    // recuperação acabava; a direção horizontal (circuito) não muda, então
-    // batia de novo — ciclo. Folga: após o empurrão, o teto de fome/busca
-    // fica suspenso por este tempo (velocidade reduzida continua valendo).
-    // F27 — frio também entra (primeira versão deixou de fora; no frio
-    // letárgico é justamente o teto mais baixo). Sono não: quase parada.
-    private static final int OBSTACLE_GRACE_TICKS = 20; // 1s
+    private static final int RECOVERY_BOOST_TICKS = 30;
+    // F26, F11, F25, F27
+    private static final int OBSTACLE_GRACE_TICKS = 20;
     private int obstacleGraceTicksLeft = 0;
-    // F7 — polimento (pendência registrada em docs/03-roadmap-fases.md,
-    // 20/09/2026): o empurrão era só vertical, sem componente horizontal pra
-    // longe do obstáculo nem giro do corpo, por isso parecia um solavanco em
-    // vez de um movimento de escape. Direção horizontal = oposto da direção
-    // COMANDADA no momento em que travou (heading, não a orientação visual)
-    // — é a direção que a abelha estava tentando seguir quando esbarrou,
-    // logo o obstáculo está aproximadamente nela. Estimativa de engenharia,
-    // não calibrada, mesma categoria das constantes acima.
+    // F7
     private static final double RECOVERY_BOOST_HORIZONTAL_BLOCKS_PER_TICK = 0.15;
-    // F9 — bug real, achado do usuário (25/09/2026): "oposto de heading"
-    // parte de uma suposição que só vale na PRIMEIRA tentativa — que o
-    // obstáculo está aproximadamente na direção que ela tentava seguir.
-    // Numa área reclusa/cercada por vários lados, isso pode simplesmente
-    // estar ERRADO (o obstáculo real pode estar em qualquer direção), e
-    // como `heading` (yaw_steering do ocelar) gira muito devagar
-    // (MAX_YAW_RADIANS_PER_TICK=0,01), tentativas consecutivas usavam
-    // quase a MESMA direção — log real mostrou o mesmo vetor de empurrão
-    // (~variação de 0,001) se repetindo por dezenas de segundos, sem nunca
-    // liberar. Corrigido escalando a estratégia: a PRIMEIRA falha ainda usa
-    // a heurística original (barata, funciona na maioria dos casos — morro/
-    // degrau únicos); a partir da SEGUNDA falha consecutiva no mesmo
-    // episódio de travamento, sorteia uma direção horizontal aleatória a
-    // cada nova tentativa — explora em vez de insistir numa hipótese que já
-    // provou estar errada. Reseta assim que ela volta a se mover de verdade.
+    // F9
     private static final java.util.Random STUCK_RECOVERY_RNG = new java.util.Random();
     private Location stuckCheckAnchor = null;
     private int stuckCheckTicksLeft = STUCK_CHECK_TICKS;
@@ -211,125 +99,47 @@ public final class ControlLoop {
     private Vector recoveryEscapeDirection = new Vector(0, 0, 0);
     private int consecutiveStuckCount = 0;
 
-    // F7/AD-17 — pedido do usuário (22/09/2026): nem todo toque/proximidade
-    // deveria virar pouso-e-limpeza — sem dado químico real da mosca pra
-    // decidir quando, sorteia 50/50 a cada NOVO episódio de grooming
-    // (mesmo instante em que a folga de transição já existente detecta a
-    // subida do limiar): metade das vezes pousa e se limpa (comportamento
-    // original, já validado por lesão), metade só DESVIA — empurrão breve
-    // pra longe da direção atual (mesmo mecanismo/escala do sistema de
-    // recuperação de obstáculo acima, reaproveitado) e depois volta a voar
-    // normal (phototaxis/hygro), ignorando esse episódio de grooming por
-    // completo. Engenharia pra dar variedade de comportamento, NÃO é
-    // achado biológico novo — RN-08/RN-09 e a validação por lesão do
-    // grooming continuam intocadas, isto só decide QUANDO deixar o sinal
-    // já validado controlar o movimento.
+    // F7, AD-17, RN-08, RN-09
     private static final java.util.Random GROOMING_DODGE_RNG = new java.util.Random();
-    private static final int DODGE_BOOST_TICKS = 20; // ~1s, mesma escala do RECOVERY_BOOST_TICKS
+    private static final int DODGE_BOOST_TICKS = 20;
     private static final double DODGE_BOOST_HORIZONTAL_BLOCKS_PER_TICK = 0.2;
     private volatile boolean groomingEpisodeIsDodge = false;
     private int dodgeBoostTicksLeft = 0;
     private Vector dodgeDirection = new Vector(0, 0, 0);
 
-    // F9 — pedido do usuário (25/09/2026): escape_drive/looming_threat são
-    // sinais de NÍVEL que podem cair rápido (a ameaça mais próxima sai do
-    // raio de busca, ou a distância para de fechar) — sem isto, a fuga
-    // podia durar só 1-2 trocas (menos de 100ms), tempo curto demais pra
-    // observar visualmente o comportamento. Mesmo mecanismo de "trava
-    // temporal" já usado em LANDED_GRACE_TICKS/SHELTER_ABANDON_TICKS: uma
-    // vez que o circuito REAL cruza o limiar, garante pelo menos
-    // ESCAPE_LATCH_TICKS de fuga visível, recarregando a contagem enquanto
-    // a ameaça continuar de verdade (não é um tempo fixo desde o disparo —
-    // se a ameaça persistir, a fuga persiste). Direção é capturada uma vez
-    // por recarga (não recalculada a cada tick do latch) — estável o
-    // bastante pra dar pra acompanhar visualmente, mesmo se a ameaça saltar
-    // de posição entre trocas.
-    private static final int ESCAPE_LATCH_TICKS = 50; // ~2,5s a 20Hz, dentro do pedido de "2 a 3 segundos"
+    // F9
+    private static final int ESCAPE_LATCH_TICKS = 50;
     private int escapeLatchTicksLeft = 0;
     private Vector escapeLatchDirection = new Vector(0, 0, 0);
-    // F7/AD-17 — bug 2 real (21/09/2026, ver MotorMapping.toVelocity):
-    // bee.isOnGround()/isInWater() não são estáveis tick a tick na
-    // superfície da água (física de boiar do jogo + leitura fora da thread
-    // principal), então reagir a uma leitura de UM tick só fazia o mergulho
-    // de busca de abrigo reativar em rajadas, girando o corpo sem parar até
-    // a abelha morrer de novo.
-    //
-    // F7/AD-17 — bug 3 real (22/09/2026), no fix de "buscar até achar
-    // abrigo": uma trava PERMANENTE (true pra sempre até o canal desativar)
-    // resolvia o bug 2, mas criava outro — uma vez tocando chão/água UMA
-    // VEZ (mesmo de raspão, ou empurrada pelo sistema de recuperação de
-    // obstáculo), o código achava "já pousou" PRA SEMPRE, mesmo que ela
-    // estivesse bem no ar de novo — ela só deslizava na horizontal, nunca
-    // mais mergulhava. Corrigido trocando a trava permanente por uma
-    // JANELA CURTA de tolerância: `landed` fica true por até
-    // LANDED_GRACE_TICKS depois do último toque confirmado — absorve
-    // flicker de 1 tick (bug 2) sem perder decolagem de verdade (bug 3).
-    private static final int LANDED_GRACE_TICKS = 10; // ~0,5s a 20Hz, mesma ordem de GROOMING_TRANSITION_GRACE_TICKS
-    // F7/AD-17 — bug 7 real (22/09/2026), regressão do fix do bug 6 (abelha
-    // flutuando parada): usar a MESMA janela curta (LANDED_GRACE_TICKS,
-    // 0,5s) pra desfazer um abrigo já achado fez ela abandonar cobertura
-    // real toda vez que um flicker normal de onGround (bug 2, mesma
-    // instabilidade de sempre, agora batendo numa abelha PARADA embaixo de
-    // galho/folha em vez de em voo) durasse um pouco mais que 0,5s — saía
-    // voando de novo achando que tinha perdido o abrigo, mesmo continuando
-    // no mesmo lugar. Corrigido separando os dois: LANDED_GRACE_TICKS
-    // continua decidindo mergulhar vs. procurar (precisa ser curto, senão
-    // ela demora pra reagir de verdade a ficar no ar), mas desistir de um
-    // abrigo já achado usa uma janela bem mais tolerante
-    // (SHELTER_ABANDON_TICKS, poucos segundos) — flicker de meio segundo
-    // não derruba mais uma abelha genuinamente descansando; só ausência
-    // sustentada de verdade (o cenário do bug 6, minutos flutuando) derruba.
-    private static final int SHELTER_ABANDON_TICKS = 60; // ~3s a 20Hz
-    // F7/AD-17 — busca guiada (23/09/2026, ver ShelterSensor.findNearbyShelterDirection
-    // e docstring do parâmetro shelterDirectionHint em MotorMapping.toVelocity):
-    // distância de sondagem, em blocos. Estimativa de engenharia — pequena o
-    // bastante pra ser barata (8 lookups de heightmap por troca), grande o
-    // bastante pra alcançar um abrigo pequeno perto antes dela passar batido.
+    // F7, AD-17
+    private static final int LANDED_GRACE_TICKS = 10;
+    // F7, AD-17
+    private static final int SHELTER_ABANDON_TICKS = 60;
+    // F7, AD-17
     private static final int SHELTER_LOOK_AHEAD_BLOCKS = 4;
     private volatile int ticksSinceGroundOrWaterContact = LANDED_GRACE_TICKS;
-    // F7/AD-17 — decisão do usuário (21/09/2026): "abrigo" só conta com
-    // teto de verdade acima (ShelterSensor), não só ter tocado chão/água
-    // em qualquer lugar a céu aberto. Trava assim que observa cobertura
-    // real; só destrava quando o canal do hygro desativa. Sem conceito
-    // equivalente pro grooming (toque não tem noção de "abrigo").
     private volatile boolean shelterFoundThisEpisode = false;
-    // F7/AD-17 — polimento (22/09/2026): diferente de ticksSinceGroundOrWaterContact
-    // (janela CURTA, esquece depois de LANDED_GRACE_TICKS no ar), este fica
-    // true PRA SEMPRE dentro do episódio assim que ela toca chão/água pela
-    // primeira vez — usado só pra MotorMapping saber se o próximo mergulho
-    // é o primeiro do episódio (rápido) ou uma re-descida durante a busca
-    // (suave, ver SEARCH_REDESCENT_BLOCKS_PER_TICK).
     private volatile boolean hasTouchedThisEpisode = false;
 
     private volatile long exchangeCount = 0;
     private volatile long exchangeFailures = 0;
     private long tickCount = 0;
     private volatile Double forcedLight = null;
-    private volatile boolean touchLesioned = false; // F7/AD-17 — ver setTouchLesioned
-    private volatile boolean hygroLesioned = false; // F7/AD-17 — ver setHygroLesioned
-    private volatile boolean bristleSuppressedForExperiment = false; // F7/AD-17 — ver setBristleSuppressedForExperiment
-    private volatile boolean escapeLesioned = false; // F9/F14 — ver setEscapeLesioned
-    private volatile boolean ignoringPlayer = false; // F22 — ver setIgnorePlayer/isIgnoringPlayer
-    private volatile boolean tasteLesioned = false; // F10/F14 — ver setTasteLesioned
-    private volatile boolean thermoLesioned = false; // F12/F14 — ver setThermoLesioned
-    private volatile boolean johnstonLesioned = false; // F8/F14 — ver setJohnstonLesioned
+    private volatile boolean touchLesioned = false;
+    private volatile boolean hygroLesioned = false;
+    private volatile boolean bristleSuppressedForExperiment = false;
+    private volatile boolean escapeLesioned = false;
+    private volatile boolean ignoringPlayer = false;
+    private volatile boolean tasteLesioned = false;
+    private volatile boolean thermoLesioned = false;
+    private volatile boolean johnstonLesioned = false;
     private volatile boolean visualize = true;
-    // F6/AD-16 — direção COMANDADA, persiste entre trocas (não é a orientação
-    // visual da abelha, que a IA nativa continua controlando). null = precisa
-    // reinicializar a partir de bee.getLocation().getDirection() no próximo
-    // tick. Bug corrigido 17/09/2026: antes recapturava a orientação real da
-    // abelha a cada troca, então a rotação de yaw_steering nunca acumulava —
-    // ver MotorMapping.java.
     private volatile Vector heading = null;
 
-    // F5 — ferramenta de lesão por comando (server.py, campo "mute"). Nomes
-    // válidos: os 8 grupos por prefixo de cell_type + "sensory" (fotorreceptores).
-    // Mecanismo DIFERENTE do `lesioned` acima (que zera light) — este silencia
-    // a saída sináptica do grupo de verdade, no engine.
     private final Set<String> mutedGroups = ConcurrentHashMap.newKeySet();
     private volatile boolean muteDirty = false;
 
-    /** F5 — liga/desliga as partículas de atividade. Controle nunca depende disso. */
+    /** F5 — liga/desliga as partículas de atividade. */
     public void setVisualize(boolean visualize) {
         this.visualize = visualize;
     }
@@ -353,8 +163,6 @@ public final class ControlLoop {
         return Set.copyOf(mutedGroups);
     }
 
-    // F5 — estimulação dirigida (server.py, campo "stimulate"). Soma com o
-    // estímulo de luz nos fotorreceptores, não o substitui.
     private volatile BridgeClient.StimulateSpec directedStimulus;
     private volatile boolean stimulateDirty = false;
 
@@ -368,48 +176,15 @@ public final class ControlLoop {
         stimulateDirty = true;
     }
 
-    /**
-     * RN — experimento de lesão (docs/00-visao-geral.md, critério de
-     * falsificação): quando true, o sensor de luz real é ignorado e sempre
-     * se envia light=0 — os fotorreceptores nunca recebem estímulo do mundo,
-     * só a dinâmica basal (bias+ruído) do circuito continua rodando. A lesão
-     * é aplicada aqui (do lado do plugin, antes de mandar pra ponte), não no
-     * simulador — mais simples e não exige mudar o protocolo. Implementado
-     * em cima de {@link #setForcedLight} (lesão = caso particular, light=0).
-     */
     public void setLesioned(boolean lesioned) {
         this.forcedLight = lesioned ? 0.0 : null;
     }
 
-    /**
-     * F7/AD-17 — experimento de lesão pro `bristle` (toque): quando true,
-     * {@code damage}/{@code touch_contact}/{@code touch_proximity} sempre
-     * chegam `false` na ponte, não importa o que os sensores reais
-     * detectem — mesma filosofia de {@link #setLesioned}, aplicada aqui
-     * (plugin) em vez do simulador, sem mudar o protocolo. Os sensores
-     * continuam rodando de verdade (não pausa `TouchSensor`/`DamageTracker`)
-     * — só a LEITURA que chega no circuito é mascarada, igual `light=0` não
-     * desliga o bloco, só ignora o valor real dele.
-     */
     public void setTouchLesioned(boolean lesioned) {
         this.touchLesioned = lesioned;
     }
 
-    /**
-     * F22 (06/10/2026, pedido do usuário) — "todos os circuitos não reagem
-     * à presença do jogador". Diferente de {@link #setTouchLesioned} (que
-     * mascara a LEITURA de um circuito inteiro pra lesão), isto muda a
-     * VARREDURA de entidades dentro de {@link #touchSensor}/
-     * {@link #loomingSensor}/{@link #tasteSensor} — os três únicos sensores
-     * que tratam {@code Player} como fonte de estímulo (proximidade/
-     * grooming, ameaça/fuga, jogador segurando comida). Útil pra calibrar
-     * QUALQUER outro circuito sem o jogador precisar ficar perto da abelha
-     * pra observar/testar contaminando o resultado — mesmo problema que já
-     * apareceu nos logs de calibração do F21 (`proximity=true
-     * grooming=0,99` enquanto o usuário testava frio/fome por perto).
-     * Outros mobs/itens continuam contando normalmente — só o jogador é
-     * excluído.
-     */
+    /** F22 — "todos os circuitos não reagem à presença do jogador". */
     public void setIgnorePlayer(boolean ignore) {
         this.ignoringPlayer = ignore;
         touchSensor.setIgnorePlayer(ignore);
@@ -417,142 +192,53 @@ public final class ControlLoop {
         tasteSensor.setIgnorePlayer(ignore);
     }
 
-    /** Estado atual de {@link #setIgnorePlayer} — experimentos que forçam o modo restauram o anterior no fim. */
+    /** Estado atual de #setIgnorePlayer — experimentos que forçam o modo restauram o anterior no fim. */
     public boolean isIgnoringPlayer() {
         return ignoringPlayer;
     }
 
-    /**
-     * Enche a energia ({@link EnergyTracker}) — mesmo papel do
-     * {@code setHealth(max)} por trial do {@link EscapeLesionExperiment}:
-     * num experimento de minutos, a fome (F11/F21) desaceleraria a abelha
-     * aos poucos, ruído que não tem a ver com o circuito testado.
-     */
     public void refillEnergyForExperiment() {
         energyTracker.reset();
     }
 
-    /**
-     * F7/AD-17 — experimento de lesão pro `hygro` (chuva): quando true,
-     * {@code raining} sempre chega `false` na ponte, não importa o que
-     * {@code World#hasStorm()} diga de verdade — mesma filosofia de
-     * {@link #setLesioned}/{@link #setTouchLesioned}. O sensor real continua
-     * sendo lido (não pausa nada) — só a LEITURA enviada é mascarada.
-     */
     public void setHygroLesioned(boolean lesioned) {
         this.hygroLesioned = lesioned;
     }
 
-    /**
-     * F7/AD-17 — confundidor real encontrado na primeira rodada de
-     * {@code /flywirebee hygrolesion} (22/09/2026): a origem precisa ficar
-     * perto de árvore/construção pra ter abrigo de verdade (`ShelterSensor`),
-     * mas "perto de árvore" também aciona {@code touch_proximity} do
-     * `bristle` (raio de 3 blocos) — o log confirmou {@code grooming}
-     * saturado (~0,998) o experimento inteiro, e {@code MotorMapping}
-     * checa `grooming` ANTES de `hygrotaxis`, então o pouso do `grooming`
-     * mascarava a busca de abrigo do `hygro` o tempo todo, invalidando a
-     * medição. Diferente de {@link #setTouchLesioned} (mascara o que é
-     * ENVIADO ao circuito do bristle) — isto faz {@code MotorMapping}
-     * ignorar a saída do bristle na hora de decidir velocidade, mesmo que
-     * o circuito continue rodando e disparando de verdade (telemetria/
-     * visualização não mentem, só o efeito no movimento é suprimido).
-     * Escopo: só durante o experimento de lesão do hygro, ligado/desligado
-     * pelo próprio {@link HygroLesionExperiment}.
-     */
     public void setBristleSuppressedForExperiment(boolean suppressed) {
         this.bristleSuppressedForExperiment = suppressed;
     }
 
-    /**
-     * F30 — durante {@link TasteLesionExperiment}, a saciedade não pode
-     * filtrar a comida: cheia, ela ignoraria a comida nas DUAS condições
-     * (normal e lesionada) e o experimento daria nulo por um motivo que
-     * não tem nada a ver com o circuito.
-     */
     public void setSatietyGateSuppressedForExperiment(boolean suppressed) {
         this.satietyGateSuppressedForExperiment = suppressed;
     }
 
-    /**
-     * F14 (27/09/2026) — experimento de lesão pro `escape` (fuga por
-     * looming/dano): quando true, {@code looming_threat} E {@code damage}
-     * sempre chegam `false` na ponte — mesma filosofia de
-     * {@link #setTouchLesioned}. Zerar {@code damage} aqui também impede
-     * que ele chegue ao `bristle` nesta troca (mesmo campo, ver
-     * {@code damageToSend} em {@code onTick}) — de propósito: sem isso, um
-     * hit mascarado do `escape` ainda dispararia `grooming`, que teria
-     * prioridade em {@code MotorMapping} sobre a ausência de fuga e
-     * confundiria a métrica (mesma lição do confundidor real do
-     * {@link #setBristleSuppressedForExperiment}, aplicada preventivamente
-     * aqui em vez de esperar redescobrir em jogo).
-     */
     public void setEscapeLesioned(boolean lesioned) {
         this.escapeLesioned = lesioned;
     }
 
-    /**
-     * F14 (27/09/2026) — experimento de lesão pro `taste` (paladar
-     * apetitivo): quando true, {@code food_contact} sempre chega `false` na
-     * ponte, não importa o que {@link TasteSensor} detecte de verdade —
-     * mesma filosofia de {@link #setTouchLesioned}. `appetite` nunca cruza
-     * {@code MotorMapping.TASTE_THRESHOLD}, então ela ignora a comida
-     * visível e segue só phototaxis/hygro/grooming.
-     */
     public void setTasteLesioned(boolean lesioned) {
         this.tasteLesioned = lesioned;
     }
 
-    /**
-     * F14 (27/09/2026) — experimento de lesão pro `thermo` (calor/frio):
-     * quando true, {@code thermo_heat} E {@code thermo_cold} sempre chegam
-     * `false` na ponte, não importa o que {@link ThermalSensor} detecte —
-     * mesma filosofia de {@link #setTouchLesioned}. `thermal` nunca cruza
-     * {@code MotorMapping.THERMO_THRESHOLD}, então perto de uma fonte de
-     * calor perigosa ela não foge.
-     */
     public void setThermoLesioned(boolean lesioned) {
         this.thermoLesioned = lesioned;
     }
 
-    /**
-     * F14 (29/09/2026) — experimento de lesão pro `johnston` (vento/som):
-     * quando true, {@code alarm_explosion}/{@code alarm_hostile_mob}/
-     * {@code sound_music} sempre chegam `false` na ponte — mesma filosofia
-     * de {@link #setTouchLesioned}. O único efeito REAL de `startle` hoje é
-     * indireto (acordar do sono noturno, ver {@code loudSound}/F13) — sem
-     * o circuito real confirmando (`startle` acima de
-     * {@link #WAKE_STARTLE_THRESHOLD} na resposta da ponte, que reflete o
-     * que foi ENVIADO), ela não desperta mesmo com som real tocando por
-     * perto. Ver {@link JohnstonLesionExperiment}.
-     */
     public void setJohnstonLesioned(boolean lesioned) {
         this.johnstonLesioned = lesioned;
     }
 
-    /** F14 — exposto pra {@link JohnstonLesionExperiment} saber quando pode começar a medir. */
+    /** F14 — exposto pra JohnstonLesionExperiment saber quando pode começar a medir. */
     public boolean isDrowsy() {
         return sleepState.isDrowsy();
     }
 
-    /**
-     * F6 — experimento de dose-resposta ({@link LightDoseResponseExperiment}):
-     * substitui a luz real por um valor arbitrário em [0, 1], ignorando o
-     * bloco onde a abelha está. {@code null} volta a usar a luz real. Mesmo
-     * mecanismo de {@link #setLesioned} generalizado — dois overrides ao
-     * mesmo tempo não fazem sentido, quem chamar por último vence.
-     */
     public void setForcedLight(Double level) {
         this.forcedLight = level;
     }
 
-    /**
-     * F6/AD-16 — reinicia a direção comandada a partir da orientação real da
-     * abelha no próximo tick. Chamar antes de cada trial de
-     * {@link SteeringValidationExperiment} — sem isso, o giro acumulado de um
-     * trial vazaria pro início do próximo, quebrando a independência entre
-     * trials.
-     */
+    /** F6/AD-16 — reinicia a direção comandada a partir da orientação real da abelha no próximo tick. */
     public void resetHeading() {
         this.heading = null;
     }
@@ -588,9 +274,9 @@ public final class ControlLoop {
         });
         latestVelocity = new Vector(0, 0, 0);
         lastAppliedVelocity = new Vector(0, 0, 0);
-        heading = null; // F6/AD-16 — começa do zero, da orientação real da abelha
-        touchSensor.reset(); // F7/AD-17 — sem posição anterior pra comparar ainda
-        loomingSensor.reset(); // F9/AD-20 — sem distância anterior pra comparar ainda
+        heading = null;
+        touchSensor.reset();
+        loomingSensor.reset();
         wasGroomingActive = false;
         groomingGraceTicksLeft = 0;
         stuckCheckAnchor = null;
@@ -626,7 +312,7 @@ public final class ControlLoop {
             tickTask = null;
         }
         LiveHud.clear(plugin);
-        statusLabel.remove(); // F9 — não deixa o marcador do balão de texto sobrando no mundo
+        statusLabel.remove();
         if (bridgeExecutor != null) {
             bridgeExecutor.shutdownNow();
             bridgeExecutor = null;
@@ -635,34 +321,22 @@ public final class ControlLoop {
             try {
                 bridge.close();
             } catch (IOException ignored) {
-                // servidor caindo mesmo assim, não há o que fazer com o erro aqui
             }
             bridge = null;
         }
     }
 
-    /** Roda na thread principal, a cada tick (20Hz). */
     private void onTick() {
         Bee bee = findMarkedBee();
         if (bee == null) {
             return;
         }
 
-        // F7/AD-17 — bug encontrado em servidor real (20/09/2026): enquanto o
-        // grooming já está no controle (ver MotorMapping.isGroomingActive),
-        // NÃO grava contato — senão o próprio pouso vira um loop
-        // auto-sustentado (parar em cima de bloco esbarra ao tentar
-        // micro-mover, conta como touch_contact, realimenta grooming, nunca
-        // solta). touchSensor.reset() garante que, quando grooming soltar,
-        // a comparação recomeça do zero, sem posição antiga arrastada.
+        // Com grooming no controle não grava contato: o próprio pouso viraria toque e realimentaria o grooming.
         boolean groomingActive = MotorMapping.isGroomingActive(latestBristleMotor);
         if (groomingActive != wasGroomingActive) {
-            // Acabou de cruzar o limiar (subindo ou descendo) — folga, ver
-            // docstring do campo acima.
             groomingGraceTicksLeft = GROOMING_TRANSITION_GRACE_TICKS;
             if (groomingActive) {
-                // F7/AD-17 — novo episódio começando: sorteia pousar vs
-                // desviar (ver docstring de groomingEpisodeIsDodge).
                 groomingEpisodeIsDodge = GROOMING_DODGE_RNG.nextBoolean();
                 if (groomingEpisodeIsDodge) {
                     dodgeBoostTicksLeft = DODGE_BOOST_TICKS;
@@ -681,96 +355,33 @@ public final class ControlLoop {
                 groomingGraceTicksLeft--;
             }
         } else {
-            // grava ANTES de aplicar a velocidade nova: compara a posição
-            // atual (resultado de lastAppliedVelocity, aplicada no tick
-            // anterior) contra a posição gravada na chamada anterior.
             touchSensor.recordTick(bee, lastAppliedVelocity);
         }
 
-        // F9/AD-20 — sem interação com grooming/pouso (diferente do touch
-        // acima) — só rastreia distância até ameaça mais próxima, todo tick.
         loomingSensor.recordTick(bee);
 
-        // F7/AD-17 — recuperação mecânica de obstáculo lateral, independente
-        // da decisão do circuito (ver docstring do campo). Mede a cada
-        // STUCK_CHECK_TICKS; não reseta o relógio durante um empurrão em
-        // andamento (senão nunca teria chance de medir se ele funcionou).
         if (stuckCheckAnchor == null) {
             stuckCheckAnchor = bee.getLocation();
         } else if (recoveryBoostTicksLeft == 0) {
             stuckCheckTicksLeft--;
             if (stuckCheckTicksLeft <= 0) {
-                // F7/AD-17 — achado real (22/09/2026): abelha presa entre
-                // blocos nas duas laterais + na frente (retaguarda livre)
-                // durante a busca de abrigo, sistema de recuperação NUNCA
-                // disparou. Causa: distance() mede 3D total, e o planeio da
-                // busca (SEARCH_HOVER_BLOCKS_PER_TICK) sozinho já produz
-                // deslocamento vertical suficiente pra passar do limiar de
-                // 0,3 blocos — o detector achava "não travou" só por ela
-                // estar subindo/descendo, mesmo presa na horizontal.
-                // Corrigido medindo só X/Z: o que importa pra saber se ela
-                // está escapando de um cercado lateral é progresso
-                // horizontal, não altitude.
                 Location current = bee.getLocation();
                 double dx = current.getX() - stuckCheckAnchor.getX();
                 double dz = current.getZ() - stuckCheckAnchor.getZ();
                 double moved = Math.sqrt(dx * dx + dz * dz);
-                // F7/AD-17 — pouso do grooming é sempre intencional dentro da
-                // janela de tolerância (ticksSinceGroundOrWaterContact, bug 3
-                // em ControlLoop). Busca de abrigo (hygro) só conta como
-                // intencional quando achou cobertura DE VERDADE
-                // (shelterFoundThisEpisode) — enquanto ainda procurando
-                // (tocou chão/água mas sem teto), ela continua se deslocando,
-                // e se ficar presa contra um obstáculo nesse meio tempo, o
-                // sistema de recuperação deve continuar podendo ajudar, não
-                // achar que é "abrigo". F14 (29/09/2026, achado real,
-                // tastelesion) — mesmo raciocínio faltava pro taste: chegar
-                // na comida (`tasteArrived`, `MotorMapping.
-                // TASTE_ARRIVAL_THRESHOLD_BLOCKS`) faz `computeTasteVelocity`
-                // parar de propósito (velocidade zero), e sem esta linha o
-                // sistema de recuperação confundia isso com travamento e
-                // empurrava ela pra longe da comida repetidamente — bug
-                // real, não só confundidor de origem, achado ao investigar
-                // por que a distância final até a comida não fechava mesmo
-                // com o mascaramento confirmado funcionando.
                 boolean landedStable = ticksSinceGroundOrWaterContact < LANDED_GRACE_TICKS;
                 boolean intentionalLanding = (landedStable && groomingActive)
                         || (shelterFoundThisEpisode
                                 && MotorMapping.isSeekingShelterActive(latestHygroMotor))
                         || tasteArrived;
-                // F24 (06/10/2026) — achado real do usuário: faminta E com
-                // frio extremo ao mesmo tempo (hunger×cold chega a 0,035 da
-                // velocidade normal, F11/F21), ela voa tão devagar de
-                // propósito até a comida que nunca passa do limiar fixo
-                // abaixo — o sistema confundia "lenta por fadiga" com
-                // "travada contra obstáculo" e empurrava ela pra longe,
-                // repetindo e divergindo mais a cada ciclo (mesma classe do
-                // bug de intentionalLanding em F14, variante nova: não é
-                // "parar", é "mover devagar demais por fadiga combinada").
-                // Escala o limiar pela MESMA fadiga que reduz a velocidade
-                // de verdade (fome × frio × sono, ver applyHungerModifiers/
-                // applyColdModifiers/sleepState.isDrowsy) — se ela está
-                // comandada a se mover a 3,5% da velocidade, exigir só 3,5%
-                // do deslocamento normal pra não achar que travou.
-                // Limitação conhecida: não distingue se a fadiga esteve
-                // realmente ativa nos últimos 20 ticks (ex.: medo venceu
-                // fadiga nesse meio tempo) — leitura do estado AGORA, mesma
-                // disciplina provisória de LoomingSensor/AlarmSensor.
                 double effectiveStuckThreshold = STUCK_DISPLACEMENT_THRESHOLD_BLOCKS * fatigueSpeedFraction();
                 if (moved < effectiveStuckThreshold && !intentionalLanding) {
                     consecutiveStuckCount++;
                     recoveryBoostTicksLeft = RECOVERY_BOOST_TICKS;
                     if (consecutiveStuckCount == 1) {
-                        // Primeira falha: heurística barata, funciona na
-                        // maioria dos casos (obstáculo único na direção que
-                        // ela tentava seguir).
                         Vector commandedDirection = heading != null ? heading : bee.getLocation().getDirection();
                         recoveryEscapeDirection = horizontalOpposite(commandedDirection);
                     } else {
-                        // F9 — 2ª+ falha consecutiva: a heurística acima já
-                        // provou estar errada pra este travamento — explora
-                        // em vez de repetir a mesma direção (ver docstring
-                        // do campo STUCK_RECOVERY_RNG).
                         recoveryEscapeDirection = randomHorizontalDirection();
                     }
                     plugin.getLogger().info(String.format(Locale.ROOT,
@@ -790,17 +401,9 @@ public final class ControlLoop {
             }
         }
 
-        // RN-06: aplica o último vetor já calculado, nunca espera a ponte —
-        // exceto durante um empurrão de recuperação em andamento, que
-        // sobrescreve por cima (ver acima).
         Vector velocityToApply;
         Vector heatAvoid = heatAvoidDirection;
         if (heatAvoid != null) {
-            // F12 (26/09/2026, pedido do usuário) — perigo térmico (lava,
-            // magma, fogo) VENCE recuperação/desvio/fome: mandar a abelha
-            // pra "longe do que travou" perto de lava não pode ser opção.
-            // Só a fuga por medo é mais urgente (heatAvoidDirection já vem
-            // nulo enquanto ela está travada).
             velocityToApply = MotorMapping.heatAvoidVelocity(heatAvoid);
         } else if (recoveryBoostTicksLeft > 0) {
             velocityToApply = new Vector(
@@ -812,16 +415,12 @@ public final class ControlLoop {
                 obstacleGraceTicksLeft = OBSTACLE_GRACE_TICKS;
             }
         } else if (dodgeBoostTicksLeft > 0) {
-            // F7/AD-17 — episódio de grooming sorteado como "desvio" (ver
-            // groomingEpisodeIsDodge): empurrão breve pra longe, puramente
-            // horizontal, mesmo mecanismo do sistema de recuperação acima.
             velocityToApply = new Vector(
                     dodgeDirection.getX() * DODGE_BOOST_HORIZONTAL_BLOCKS_PER_TICK,
                     0,
                     dodgeDirection.getZ() * DODGE_BOOST_HORIZONTAL_BLOCKS_PER_TICK);
             dodgeBoostTicksLeft--;
         } else if (escapeLatchTicksLeft > 0) {
-            // F11 — fuga NÃO é reduzida pela fome (medo vence cansaço).
             velocityToApply = latestVelocity;
         } else {
             boolean obstacleGrace = obstacleGraceTicksLeft > 0;
@@ -832,8 +431,6 @@ public final class ControlLoop {
             velocityToApply = applyColdModifiers(bee, velocityToApply, obstacleGrace);
             velocityToApply = applyForagingSearchModifiers(bee, velocityToApply, obstacleGrace);
             if (sleepState.isDrowsy()) {
-                // F13 — sonolenta: quase parada e baixa. Só neste ramo: fuga,
-                // fuga de calor, recuperação e desvio já ficam de fora.
                 velocityToApply = limitSpeedAndHeight(
                         bee, velocityToApply, SleepState.DROWSY_SPEED_FRACTION, SleepState.DROWSY_CEILING_BLOCKS);
             }
@@ -841,19 +438,6 @@ public final class ControlLoop {
         bee.setVelocity(velocityToApply);
         lastAppliedVelocity = velocityToApply;
 
-        // F6/AD-16 — achado do usuário (18/09/2026): setVelocity() move a
-        // abelha, mas NÃO gira o corpo visual dela — isso é responsabilidade
-        // da IA nativa (MoveControl), que só ajusta esporadicamente quando
-        // não está perseguindo objetivo nenhum (a maioria removida por
-        // `goals off`). Resultado: corpo aponta pra um lado, movimento real
-        // vai pra outro — parece "andar de ré" mesmo o giro medido
-        // (net_turn_rad) estando correto. Corrigido girando o corpo junto
-        // com a velocidade REALMENTE aplicada a cada tick (não
-        // `latestVelocity` — durante um empurrão de recuperação (F7,
-        // polimento) o corpo precisa acompanhar a direção de escape, não a
-        // direção que o circuito escolheria se não tivesse travado) —
-        // conversão vetor->yaw padrão do Bukkit (yaw=0 look +Z/sul, cresce no
-        // sentido horário visto de cima).
         if (velocityToApply.lengthSquared() > 1.0E-6) {
             Vector dir = velocityToApply.clone().normalize();
             float yaw = (float) Math.toDegrees(Math.atan2(-dir.getX(), dir.getZ()));
@@ -863,10 +447,6 @@ public final class ControlLoop {
         if (visualize && tickCount % VISUALIZE_EVERY_TICKS == 0) {
             visualizer.render(bee, latestMotor, latestBristleMotor, latestHygroMotor, latestJohnstonMotor,
                     latestEscapeMotor, latestTasteMotor, latestThermoMotor, heatNear, coldNear, coldSeverity);
-            // F9 — mesma cadência das partículas, texto não precisa de 20Hz.
-            // escapeLatchTicksLeft é campo (não local), seguro de ler aqui
-            // mesmo computado mais abaixo nesta troca — reflete o valor do
-            // FIM do tick anterior, defasagem de 1 tick (50ms), imperceptível.
             statusLabel.update(bee, latestBristleMotor, latestHygroMotor, latestJohnstonMotor, latestTasteMotor,
                     groomingEpisodeIsDodge, shelterFoundThisEpisode, escapeLatchTicksLeft > 0,
                     tasteTargetHeldByPlayer, energyTracker.level(),
@@ -882,12 +462,6 @@ public final class ControlLoop {
         double realLight = bee.getLocation().getBlock().getLightLevel() / 15.0;
         Double forced = forcedLight;
         double light = forced != null ? forced : realLight;
-        // F7/AD-17 — sensor do subcircuito hygro (chuva): nível, igual
-        // touch_proximity, não borda. World#hasStorm() já reflete o ciclo de
-        // clima do Minecraft sem precisar de heurística nenhuma (diferente
-        // de touch_contact, que precisou de uma por falta de evento nativo).
-        // Lido aqui (antes do log) e reaproveitado mais abaixo pra troca com
-        // a ponte — mesmo valor, não duas leituras.
         boolean raining = bee.getWorld().hasStorm();
 
         if (tickCount % LOG_EVERY_TICKS == 0) {
@@ -906,33 +480,19 @@ public final class ControlLoop {
             String appetite = latestTasteMotor.has("appetite")
                     ? String.format(Locale.ROOT, "%.3f", latestTasteMotor.get("appetite").getAsDouble())
                     : "-";
-            // F14 (29/09/2026) — achado real: escapelesion/tastelesion/thermolesion
-            // são difíceis de depurar sem ver `thermal` e a distância até a comida
-            // no log (precisou de arqueologia de log linha a linha pra diagnosticar
-            // o resultado invertido do thermo e o nulo do taste). Diagnóstico
-            // ampliado aqui, mesma cadência (1x/s), sem mudar comportamento.
             String thermal = latestThermoMotor.has("thermal")
                     ? String.format(Locale.ROOT, "%.3f", latestThermoMotor.get("thermal").getAsDouble())
                     : "-";
-            // F21 (06/10/2026) — mesmo raciocínio do F14: calibrar busca por
-            // comida com fome e desaceleração por frio exige ver os dois
-            // valores contínuos no log, não só o sim/não.
             double loggedHunger = energyTracker.hungerFactor();
             double loggedFoodSearchRadius = TasteSensor.FOOD_SEARCH_RADIUS_BLOCKS
                     + loggedHunger * TasteSensor.HUNGRY_SEARCH_RADIUS_EXTRA_BLOCKS;
             TasteSensor.FoodTarget loggedFood = seekingFood
                     ? tasteSensor.findNearestFood(bee, loggedFoodSearchRadius)
-                    : null; // F30 — saciada não "vê" comida
+                    : null;
             String tasteDist = loggedFood != null
                     ? String.format(Locale.ROOT, "%.2f", loggedFood.location().distance(bee.getLocation()))
                     : "-";
             ThermalSensor.Reading loggedThermal = thermalSensor.read(bee);
-            // F21 — `vel` é a decisão CRUA dos circuitos (latestVelocity,
-            // antes de fome/frio/sono); `applied` é o que de fato foi mandado
-            // pro `setVelocity()` no fim do tick anterior (lastAppliedVelocity,
-            // já com os moduladores de embodiment). Precisa dos dois lado a
-            // lado pra calibrar se applyColdModifiers está reduzindo de
-            // verdade quando outro canal (ex.: hygro/chuva) domina a direção.
             plugin.getLogger().info(String.format(Locale.ROOT,
                     "[ControlLoop] light=%.2f (real=%.2f, forçado=%s) vel=%s applied=%s trocas=%d falhas=%d "
                             + "proximity=%s grooming=%s onGround=%s raining=%s hygrotaxis=%s "
@@ -951,105 +511,48 @@ public final class ControlLoop {
         tickCount++;
 
         if (!exchangeInFlight.compareAndSet(false, true)) {
-            return; // troca anterior ainda em andamento
+            return;
         }
 
         double dorsalLight = bee.getLocation().getBlock().getLightFromSky() / 15.0;
         boolean damage = damageTracker.consumeRecentDamage();
-        // F7/AD-17 — família de sensores de toque (ver TouchSensor): contact
-        // é borda (consumido), proximity é nível (lido de novo a cada troca).
         boolean touchContact = touchSensor.consumeContact();
         boolean touchProximity = touchSensor.isNearSomething(bee);
         if (touchContact) {
-            // F7/AD-17 — log imediato, não espera o resumo periódico (LOG_EVERY_TICKS):
-            // é o único jeito de confirmar visualmente que o teste manual (voar contra
-            // parede) disparou o sensor. Ver "Sensor de toque" em plugin/README.md.
             plugin.getLogger().info("[TouchSensor] touch_contact = true "
                     + "(deslocamento real bem abaixo do esperado pela velocidade comandada)");
         }
-        // F8 — sensor de "som" (ver AlarmSensor): explosão é borda, mob
-        // hostil e música são nível, mesma dualidade da família de toque
-        // acima. Música: achado do usuário (24/09/2026) — som ambiente
-        // também conta, não só ameaça.
         boolean alarmExplosion = alarmSensor.consumeExplosion();
         boolean alarmHostileMob = alarmSensor.isHostileMobNearby(bee);
         boolean soundMusic = alarmSensor.isMusicNearby(bee);
         if (alarmExplosion) {
             plugin.getLogger().info("[AlarmSensor] alarm_explosion = true (explosão perto da abelha)");
         }
-        // F9/AD-20 — sensor do subcircuito escape (ver LoomingSensor): nível,
-        // resultado do recordTick já rodado nesta chamada de onTick, acima.
         boolean loomingThreat = loomingSensor.isLoomingThreat();
-        // F9 — bug real, servidor real (25/09/2026): World#getNearbyEntities
-        // (usado por fleeDirectionAwayFromNearestThreat) só pode ser chamado
-        // na thread principal — Paper derruba com AsyncCatcher se chamado de
-        // dentro do lambda do bridgeExecutor (thread "flywire-control-bridge"),
-        // travando a troca ANTES de atualizar latestVelocity/latestBristleMotor
-        // (grooming/etc. congelavam no último valor bem-sucedido). Corrigido
-        // computando aqui, sempre (mesmo padrão de alarmHostileMob/
-        // touchProximity acima), e só USANDO o resultado lá embaixo se
-        // escape estiver ativo — nunca chamar Bukkit API de dentro do lambda.
+        // Sensores que varrem blocos/entidades rodam aqui, na thread principal: chamados na thread
+        // da ponte, o Paper derruba a troca (AsyncCatcher).
         Vector nearestThreatFleeDirection = loomingSensor.fleeDirectionAwayFromNearestThreat(bee);
-        // F10 — sensor do subcircuito taste (ver TasteSensor): nível,
-        // mesmo cuidado de thread do looming acima (varre blocos e usa
-        // getNearbyEntities internamente) — sempre computado na thread
-        // principal. A localização (não só sim/não) é reaproveitada mais
-        // abaixo pra decidir a velocidade de busca de comida.
-        // F21 (06/10/2026) — pedido do usuário: busca ativa por comida
-        // quando com fome. hungerFactor() ainda reflete a energia ANTES do
-        // tick() desta volta (chamado mais abaixo) — mesma defasagem de 1
-        // tick já aceita em tasteTargetHeldByPlayer/escapeLatchTicksLeft.
         double foodSearchRadius = TasteSensor.FOOD_SEARCH_RADIUS_BLOCKS
                 + energyTracker.hungerFactor() * TasteSensor.HUNGRY_SEARCH_RADIUS_EXTRA_BLOCKS;
-        // F30 — saciada (cheia até cair a SEEK_FOOD_BELOW), ela não "vê"
-        // comida: sem estímulo do taste, sem alvo, sem "comendo". O appetite
-        // decai sozinho e o phototaxis volta a guiar o voo.
         seekingFood = energyTracker.isSeekingFood() || satietyGateSuppressedForExperiment;
         TasteSensor.FoodTarget nearestFoodTarget = seekingFood
                 ? tasteSensor.findNearestFood(bee, foodSearchRadius)
                 : null;
         boolean foodContact = nearestFoodTarget != null;
-        foodVisible = foodContact; // F25 — ver applyForagingSearchModifiers
-        foodTargetLocation = nearestFoodTarget != null ? nearestFoodTarget.location() : null; // F28
-        // F12 — sensor do subcircuito thermo (ver ThermalSensor): varre blocos,
-        // só na thread principal; cacheado a cada 5 ticks lá dentro.
+        foodVisible = foodContact;
+        foodTargetLocation = nearestFoodTarget != null ? nearestFoodTarget.location() : null;
         ThermalSensor.Reading thermal = thermalSensor.read(bee);
         heatNear = thermal.heat();
         coldNear = thermal.cold();
         coldSeverity = thermal.coldSeverity();
-        // F10 — campo (não local), pra StatusLabel poder ler no início do
-        // PRÓXIMO tick (o balão atualiza antes deste trecho rodar de novo
-        // nesta mesma troca) — mesma defasagem de 1 tick já aceita em
-        // escapeLatchTicksLeft, imperceptível a 20Hz.
         tasteTargetHeldByPlayer = nearestFoodTarget != null && nearestFoodTarget.heldByPlayer();
-        // F11 — fome/energia (proxy de engenharia, ver EnergyTracker): usa
-        // o MESMO alvo/distância de chegada do taste pra decidir "comendo"
-        // agora, não um sensor novo. lastAppliedVelocity já reflete o
-        // deslocamento REAL aplicado neste tick (mesma medida que
-        // TouchSensor já usa).
         tasteArrived = nearestFoodTarget != null
                 && nearestFoodTarget.location().distance(bee.getLocation()) < MotorMapping.TASTE_ARRIVAL_THRESHOLD_BLOCKS;
         energyTracker.tick(lastAppliedVelocity.length(), tasteArrived);
         long tMs = System.currentTimeMillis();
-        // F6/AD-16: heading é a direção COMANDADA da troca anterior, não a
-        // orientação real da abelha — só cai pra getDirection() se ainda não
-        // tem estado (início do controle ou depois de resetHeading()).
         Vector currentHeading = heading != null ? heading : bee.getLocation().getDirection();
 
-        // F9 — trava temporal da fuga (ver docstring de ESCAPE_LATCH_TICKS):
-        // usa latestEscapeMotor (estado real do último frame recebido, já
-        // na thread principal — mesmo padrão de groomingActive no topo de
-        // onTick), não o que vier na resposta desta troca (ainda em
-        // andamento). Recarrega a contagem E a direção capturada sempre que
-        // o circuito real está acima do limiar; só deixa a contagem cair
-        // quando o circuito real já desativou.
         if (MotorMapping.isEscapeActive(latestEscapeMotor)) {
-            // F9 (13/10/2026, achado no `loominglesion`): sem ameaça no raio
-            // AGORA (saiu dos 12 blocos, ou o mob do experimento sumiu) mas o
-            // circuito ainda ativo, a fuga em curso mantém a última direção
-            // "pra longe" — antes caía em `currentHeading` (a direção do voo
-            // ANTERIOR à fuga) e ela dava meia-volta rumo à ameaça. Heading
-            // só vale se a fuga está começando sem ameaça localizável.
             boolean fleeingAlready = escapeLatchTicksLeft > 0;
             escapeLatchTicksLeft = ESCAPE_LATCH_TICKS;
             if (nearestThreatFleeDirection != null) {
@@ -1061,55 +564,28 @@ public final class ControlLoop {
             escapeLatchTicksLeft--;
         }
         boolean escapeLatched = escapeLatchTicksLeft > 0;
-        // F13 — o que tira a abelha da sonolência (pedido do usuário, 26/09/2026):
-        // som alto (alarme/música REAL que estimula o johnston E o canal
-        // `startle` confirmando — o circuito, não só o sensor), medo em curso
-        // (escape) ou dano. O sensor sozinho não basta: `startle` sem estímulo
-        // oscila (~-0,3 a 0,35 nos logs) — o "E" evita despertar por ruído basal.
         boolean loudSound = (alarmExplosion || alarmHostileMob || soundMusic)
                 && latestJohnstonMotor.has("startle")
                 && latestJohnstonMotor.get("startle").getAsDouble() > WAKE_STARTLE_THRESHOLD;
         sleepState.tick(bee.getWorld(), loudSound || escapeLatched || damage);
-        // F12 — fuga de perigo térmico: circuito thermo acima do limiar E há
-        // fonte perigosa por perto E medo não está no controle.
         heatAvoidDirection = (!escapeLatched && thermal.hazardAwayDirection() != null
                 && MotorMapping.isThermalActive(latestThermoMotor))
                 ? thermal.hazardAwayDirection() : null;
 
-        // Só marca muteDirty=false DEPOIS do envio ter sucesso (dentro do try
-        // abaixo) — se a troca falhar, a mudança de mute não pode se perder
-        // silenciosamente, tem que tentar de novo na próxima troca bem-sucedida.
         boolean sendMuteThisTime = muteDirty;
         List<String> muteToSend = sendMuteThisTime ? List.copyOf(mutedGroups) : null;
         boolean sendStimulateThisTime = stimulateDirty;
         BridgeClient.StimulateSpec stimulateToSend = sendStimulateThisTime ? directedStimulus : null;
 
-        // F7/AD-17 — experimento de lesão do bristle: mascara o que é
-        // ENVIADO, não o que é detectado (mesma lógica de setLesioned/light,
-        // ver docstring de setTouchLesioned). consumeContact() já rodou
-        // acima — mascarar depois não perde nem acumula o estado real.
         boolean touchLesionedNow = touchLesioned;
-        // F14 — lesão do escape mascara `damage` também pro bristle (ver
-        // docstring de setEscapeLesioned): sem isso, um hit mascarado do
-        // escape ainda dispararia grooming e confundiria a métrica.
         boolean damageToSend = (touchLesionedNow || escapeLesioned) ? false : damage;
         boolean touchContactToSend = touchLesionedNow ? false : touchContact;
         boolean touchProximityToSend = touchLesionedNow ? false : touchProximity;
         boolean loomingThreatToSend = escapeLesioned ? false : loomingThreat;
-        // F7/AD-17 — experimento de lesão do hygro: mascara o que é ENVIADO,
-        // não o que é detectado (mesma lógica das linhas acima).
         boolean rainingToSend = hygroLesioned ? false : raining;
-        // F8 — ainda sem experimento de lesão pro johnston (mesma sequência
-        // do hygro: sensor → protocolo → simulador antes de qualquer
-        // experimento) — envia sempre o valor real, sem máscara ainda.
-        // F14 — lesão do taste/thermo: mesma filosofia, mascara o que é ENVIADO.
         boolean foodContactToSend = tasteLesioned ? false : foodContact;
         boolean thermoHeatToSend = thermoLesioned ? false : thermal.heat();
         boolean thermoColdToSend = thermoLesioned ? false : thermal.cold();
-        // F14 — lesão do johnston: mesma filosofia, mascara o que é ENVIADO.
-        // `loudSound` (acima) usa os valores REAIS pra decidir SE algo
-        // aconteceu (não é confundido por essa máscara) — quem muda é o que
-        // chega no circuito, refletido de volta em latestJohnstonMotor.
         boolean alarmExplosionToSend = johnstonLesioned ? false : alarmExplosion;
         boolean alarmHostileMobToSend = johnstonLesioned ? false : alarmHostileMob;
         boolean soundMusicToSend = johnstonLesioned ? false : soundMusic;
@@ -1132,105 +608,47 @@ public final class ControlLoop {
                 }
                 Vector newHeading = MotorMapping.rotatedHeading(response, currentHeading);
 
-                // F7/AD-17 — confundidor real (22/09/2026, ver docstring de
-                // setBristleSuppressedForExperiment): durante o experimento
-                // de lesão do hygro, ignora a saída do bristle na decisão de
-                // velocidade (cópia sem "bristle_motor") — o circuito
-                // continua rodando e disparando de verdade, só o EFEITO no
-                // movimento é suprimido, pra não deixar grooming (acionado
-                // por estar perto da árvore que dá abrigo) mascarar a busca
-                // de abrigo do hygro.
-                // F7/AD-17 — episódio de grooming sorteado como "desvio" (ver
-                // groomingEpisodeIsDodge): mesma técnica, ignora bristle_motor
-                // pro resto do episódio inteiro (não só durante o empurrão),
-                // pra deixar phototaxis/hygro retomarem o controle normal.
                 JsonObject responseForMotor = response;
                 if (bristleSuppressedForExperiment || groomingEpisodeIsDodge) {
                     responseForMotor = response.deepCopy();
                     responseForMotor.remove("bristle_motor");
                 }
 
-                // F7/AD-17 — bugs 2 e 3 reais (ver docstring do campo
-                // ticksSinceGroundOrWaterContact e de MotorMapping.toVelocity):
-                // não passar onGround/isInWater crus pro MotorMapping —
-                // janela curta de tolerância absorve flicker de 1 tick sem
-                // travar "pousada" pra sempre se ela ficar no ar de novo.
                 boolean touchingGroundOrWater = bee.isOnGround() || bee.isInWater();
                 boolean groomingActiveNow =
                         MotorMapping.isGroomingActive(responseForMotor.getAsJsonObject("bristle_motor"));
                 boolean shelterActiveNow =
                         MotorMapping.isSeekingShelterActive(responseForMotor.getAsJsonObject("hygro_motor"));
                 if (!(groomingActiveNow || shelterActiveNow)) {
-                    ticksSinceGroundOrWaterContact = LANDED_GRACE_TICKS; // próximo episódio começa "no ar"
+                    ticksSinceGroundOrWaterContact = LANDED_GRACE_TICKS;
                     shelterFoundThisEpisode = false;
                     hasTouchedThisEpisode = false;
                 } else if (touchingGroundOrWater) {
                     ticksSinceGroundOrWaterContact = 0;
                     hasTouchedThisEpisode = true;
-                    // F7/AD-17 — decisão do usuário: só conta abrigo com
-                    // teto de verdade acima (ver ShelterSensor). Só checa
-                    // geometria quando já tocou algo (barato: não varre
-                    // blocos toda hora, só quando pode importar) e ainda
-                    // não achou — depois de achar, trava e não recomputa.
                     if (shelterActiveNow && !shelterFoundThisEpisode
                             && ShelterSensor.hasShelterAbove(bee.getLocation())) {
                         shelterFoundThisEpisode = true;
-                        // F7/AD-17 — diagnóstico (22/09/2026, mantido após a
-                        // troca pro heightmap MOTION_BLOCKING_NO_LEAVES —
-                        // ver ShelterSensor): loga a posição e a altura do
-                        // teto mais próximo detectado, pra facilitar
-                        // conferir no mundo se bateu com um lugar real.
                         Location loc = bee.getLocation();
                         plugin.getLogger().info(String.format(Locale.ROOT,
                                 "[ControlLoop] abrigo encontrado em (%.1f, %.1f, %.1f)",
                                 loc.getX(), loc.getY(), loc.getZ()));
                     }
                 } else {
-                    // F7/AD-17 — bugs 6 e 7 (ver docstring de
-                    // SHELTER_ABANDON_TICKS): cresce sem teto enquanto não
-                    // toca nada, pra alimentar as DUAS janelas separadas
-                    // abaixo (curta pra decisão de voo, longa pra desistir
-                    // de abrigo já achado) — antes tinha um teto em
-                    // LANDED_GRACE_TICKS que impedia alcançar o limiar maior.
                     ticksSinceGroundOrWaterContact++;
                     if (ticksSinceGroundOrWaterContact >= SHELTER_ABANDON_TICKS && shelterFoundThisEpisode) {
                         shelterFoundThisEpisode = false;
                     }
                 }
                 boolean landed = ticksSinceGroundOrWaterContact < LANDED_GRACE_TICKS;
-                // F7/AD-17 — bug 7: `sheltered` NÃO depende de `landed` aqui
-                // (janela curta demais, flicker normal derrubava abrigo
-                // genuíno) — confia na trava, que só se desfaz sozinha após
-                // SHELTER_ABANDON_TICKS de ausência sustentada (bem mais
-                // tolerante). MotorMapping.toVelocity para só com
-                // `sheltered` (voltou a checar só isso, sem exigir `landed`
-                // no mesmo instante).
                 boolean sheltered = shelterFoundThisEpisode;
 
-                // F7/AD-17 — busca guiada (23/09/2026, pedido do usuário):
-                // só sonda quando ainda procurando (senão gasta lookup à
-                // toa) — ver docstring de MotorMapping.toVelocity.
                 Vector shelterDirectionHint = (shelterActiveNow && !sheltered)
                         ? ShelterSensor.findNearbyShelterDirection(bee.getLocation(), SHELTER_LOOK_AHEAD_BLOCKS)
                         : null;
 
-                // F9 — usa a trava temporal já computada na thread principal
-                // (escapeLatched/escapeLatchDirection, ver onTick) — nunca
-                // chamar Bukkit API aqui dentro (thread errada, bug real
-                // corrigido 25/09/2026) nem reagir só ao estado bruto desta
-                // troca (sinal cai rápido demais pra dar pra ver a fuga,
-                // pedido do usuário).
                 Vector escapeDirectionHint = escapeLatched ? escapeLatchDirection : null;
 
-                // F10 — pedido do usuário: vetor CRU (não normalizado) da
-                // abelha até a fonte de comida, recalculado a cada troca
-                // com a posição ATUAL dela (bee.getLocation() aqui dentro é
-                // seguro, mesmo padrão já usado por bee.isOnGround() logo
-                // abaixo — só getNearbyEntities/varredura de bloco exigem
-                // thread principal, não getLocation() de uma entidade já
-                // conhecida). nearestFoodTarget já foi computado na thread
-                // principal (ver onTick) — usa só a localização congelada
-                // dali, nunca chama TasteSensor de novo aqui.
                 Vector tasteDisplacementHint = nearestFoodTarget != null
                         ? nearestFoodTarget.location().toVector().subtract(bee.getLocation().toVector())
                         : null;
@@ -1284,30 +702,6 @@ public final class ControlLoop {
         });
     }
 
-    /**
-     * F11 (26/09/2026, pedido do usuário) — reação à fome: com energia baixa
-     * ({@link EnergyTracker#hungerFactor}) a abelha voa mais DEVAGAR
-     * (horizontal reduzido até {@link EnergyTracker#MIN_SPEED_FRACTION}) e
-     * mais BAIXO (teto de altura acima do chão desce de
-     * {@code STARVING_CEILING + FED_CEILING_EXTRA} até
-     * {@link EnergyTracker#STARVING_CEILING_BLOCKS}). Aplicado só no fim,
-     * sobre a velocidade já decidida pelos circuitos — não muda o que o
-     * circuito calcula (RN-08), é fadiga física de embodiment, mesmo
-     * status do sistema de recuperação. Fuga e empurrões mecânicos ficam de
-     * fora (ver chamada). Roda na thread principal (rayTraceBlocks). Sem
-     * chão a até {@link #GROUND_RAYTRACE_DISTANCE_BLOCKS} abaixo (achado
-     * real do F25 — 16 blocos originais não alcançavam o chão em testes a
-     * grande altura), só a redução de velocidade horizontal vale.
-     */
-    /**
-     * F24 (06/10/2026) — fração combinada de velocidade horizontal (fome ×
-     * frio × sono) aplicada agora pelo trio de moduladores de fadiga do
-     * embodiment ({@link #applyHungerModifiers}/{@link #applyColdModifiers}/
-     * {@code sleepState.isDrowsy()}) — usada pelo sistema anti-travamento pra
-     * não confundir "voando devagar de propósito por fadiga" com "travada
-     * contra obstáculo" (ver chamada). Não recomputa um estado novo, só
-     * replica as mesmas três fórmulas já em uso, numa leitura isolada.
-     */
     private double fatigueSpeedFraction() {
         double hunger = energyTracker.hungerFactor();
         double hungerFraction = hunger > 0.0
@@ -1321,11 +715,6 @@ public final class ControlLoop {
         return hungerFraction * coldFraction * drowsyFraction;
     }
 
-    /**
-     * F28 — com comida à vista, o teto de fome/frio nunca fica abaixo do
-     * alvo + {@link #FOOD_TARGET_CLEARANCE_BLOCKS}: ela tem que conseguir
-     * chegar onde está indo. Sem comida, sem efeito.
-     */
     private double foodTargetMinWorldY() {
         Location target = foodTargetLocation;
         return target == null ? Double.NEGATIVE_INFINITY : target.getY() + FOOD_TARGET_CLEARANCE_BLOCKS;
@@ -1337,66 +726,31 @@ public final class ControlLoop {
             return velocity;
         }
         double speedFraction = 1.0 - hunger * (1.0 - EnergyTracker.MIN_SPEED_FRACTION);
-        // F26 — durante a folga pós-recuperação, sem teto (ver OBSTACLE_GRACE_TICKS).
         double ceiling = obstacleGrace
                 ? Double.MAX_VALUE
                 : EnergyTracker.STARVING_CEILING_BLOCKS + (1.0 - hunger) * EnergyTracker.FED_CEILING_EXTRA_BLOCKS;
         return limitSpeedAndHeight(bee, velocity, speedFraction, ceiling, foodTargetMinWorldY());
     }
 
-    /**
-     * F21 (06/10/2026, pedido do usuário) — reação ao frio: moscas são
-     * ectotérmicas, metabolismo desacelera com a temperatura ambiente.
-     * Mesmo mecanismo de {@link #applyHungerModifiers} (reduz horizontal,
-     * limita altura via {@link #limitSpeedAndHeight}), empilhado por cima —
-     * faminta E com frio fica mais lenta que só um dos dois. Ver
-     * {@link ThermalSensor.Reading#coldSeverity} pra como a severidade é
-     * calculada a partir da temperatura de bioma do jogo.
-     */
     private Vector applyColdModifiers(Bee bee, Vector velocity, boolean obstacleGrace) {
         double cold = coldSeverity;
         if (cold <= 0.0) {
             return velocity;
         }
         double speedFraction = 1.0 - cold * (1.0 - ThermalSensor.COLD_LETHARGIC_SPEED_FRACTION);
-        // F26/F27 — folga pós-recuperação também vale pro frio (ver OBSTACLE_GRACE_TICKS).
         double ceiling = obstacleGrace
                 ? Double.MAX_VALUE
                 : ThermalSensor.COLD_LETHARGIC_CEILING_BLOCKS + (1.0 - cold) * ThermalSensor.COLD_WARM_CEILING_EXTRA_BLOCKS;
         return limitSpeedAndHeight(bee, velocity, speedFraction, ceiling, foodTargetMinWorldY());
     }
 
-    /**
-     * F25 (06/10/2026, pedido do usuário) — "ela estava numa altura muito
-     * alta e como ela não encontrou nenhum alimento, o certo é ela usar
-     * essa memória e descer ou andar para outros locais para buscar
-     * alimento". Proxy de engenharia (decisão do usuário via
-     * {@code AskUserQuestion}, 06/10/2026) — deliberadamente NÃO usa
-     * `path_integration`/`DNa02` (ver achado real em
-     * `path_integration_motor.py`: o papel de DNa02 na literatura é
-     * "voltar pra um lugar já conhecido", não "explorar à procura de algo
-     * novo" — usar o sinal pra decidir busca seria esticar a literatura
-     * sem validação, RN-09).
-     *
-     * <p>Não muda a direção horizontal (continua a do circuito ativo,
-     * phototaxis por padrão) — só força descida mais agressiva que a
-     * fadiga de fome sozinha já causa ({@link #applyHungerModifiers}, cujo
-     * teto só fica baixo perto da inanição total). Flores/plantações ficam
-     * perto do chão; flutuar alto nunca vai achar comida. Só dispara com
-     * fome ATIVA ({@code hungerFactor() > 0}) E nenhuma comida à vista
-     * ({@link #foodVisible}, mesmo com o raio ampliado do F21) — faminta
-     * mas com comida por perto não precisa descer à força, phototaxis
-     * já guia até perto o bastante do taste assumir.
-     */
     private Vector applyForagingSearchModifiers(Bee bee, Vector velocity, boolean obstacleGrace) {
-        // F30 — saciada (mesmo já com fome entre 40% e 20%) não está procurando comida.
         if (energyTracker.hungerFactor() <= 0.0 || foodVisible || obstacleGrace || !seekingFood) {
             return velocity;
         }
         return limitSpeedAndHeight(bee, velocity, 1.0, EnergyTracker.STARVING_CEILING_BLOCKS);
     }
 
-    /** Texto do painel pro estado de sono (F13) — proxy de engenharia, sem canal do simulador. */
     private String sleepLabel() {
         if (sleepState.isDrowsy()) {
             return "sonolenta";
@@ -1407,38 +761,13 @@ public final class ControlLoop {
         return sleepState.isNight() ? "-" : "dia";
     }
 
-    /**
-     * F25 (07/10/2026) — achado real do usuário, confirmado no log E
-     * visualmente ("ela está parada na altura que foi colocada"): 16
-     * blocos bastava pra fome (F11)/sono (F13), que nunca testaram acima
-     * disso, mas a busca ativa por comida (F25) é PRA JUSTAMENTE o caso
-     * de altura extrema (ela testou a 150, chão real ~30-40 blocos
-     * abaixo) — a varredura voltava `null` (nada achado em 16 blocos) e
-     * o ajuste de altura era pulado por completo, silenciosamente.
-     * Aumentado pra cobrir qualquer altura real do mundo (limite de
-     * construção do Overworld é Y -64 a 320, no máximo ~384 de vão).
-     */
+    // F25, F11, F13
     private static final double GROUND_RAYTRACE_DISTANCE_BLOCKS = 384.0;
 
-    /**
-     * Limitador de fadiga de embodiment compartilhado por fome (F11), sono
-     * (F13) e busca ativa por comida (F25): reduz a velocidade horizontal a
-     * {@code speedFraction} e limita a altura acima do chão a {@code ceiling}
-     * blocos (desce quando passa do teto, não sobe além dele). Roda na
-     * thread principal (rayTraceBlocks). Sem chão a até
-     * {@link #GROUND_RAYTRACE_DISTANCE_BLOCKS} abaixo, só a redução de
-     * velocidade horizontal vale (acontece só em borda de mundo/vazio).
-     */
     private Vector limitSpeedAndHeight(Bee bee, Vector velocity, double speedFraction, double ceiling) {
         return limitSpeedAndHeight(bee, velocity, speedFraction, ceiling, Double.NEGATIVE_INFINITY);
     }
 
-    /**
-     * F28 — {@code minWorldY}: altura ABSOLUTA abaixo da qual o teto nunca
-     * fica (ver {@link #foodTargetMinWorldY}). O teto é relativo ao chão logo
-     * abaixo da abelha; sem isto, um alvo num degrau mais alto fica fora
-     * de alcance.
-     */
     private Vector limitSpeedAndHeight(
             Bee bee, Vector velocity, double speedFraction, double ceiling, double minWorldY) {
         Vector adjusted = velocity.clone();
@@ -1461,14 +790,6 @@ public final class ControlLoop {
         return adjusted;
     }
 
-    /**
-     * F29 (07/10/2026) — diagnóstico, sem efeito em comportamento. O caso
-     * faminta + frio travava perto da comida e o log não dizia O QUE
-     * separava ela do alvo. Registra: posição; bloco logo abaixo; bloco à
-     * frente na direção do movimento aplicado (altura dos pés e +1); e,
-     * com comida à vista, o alvo, o bloco no ponto-alvo (tem que ser AR
-     * pra ela conseguir chegar) e o bloco de comida embaixo dele.
-     */
     private String geometryDescription(Bee bee, TasteSensor.FoodTarget food) {
         Location loc = bee.getLocation();
         StringBuilder sb = new StringBuilder(String.format(Locale.ROOT,
@@ -1492,14 +813,6 @@ public final class ControlLoop {
         return sb.toString();
     }
 
-    /**
-     * F7 — polimento da recuperação mecânica: direção horizontal (unitária,
-     * Y=0) oposta a {@code direction}, usada pra empurrar a abelha pra longe
-     * do obstáculo que ela estava tentando atravessar quando travou. Vetor
-     * nulo se {@code direction} não tem componente horizontal (ex.: olhando
-     * reto pra cima/baixo) — nesse caso o empurrão fica só vertical, como
-     * antes deste polimento.
-     */
     private static Vector horizontalOpposite(Vector direction) {
         Vector horizontal = new Vector(direction.getX(), 0, direction.getZ());
         if (horizontal.lengthSquared() < 1.0E-6) {
@@ -1508,13 +821,6 @@ public final class ControlLoop {
         return horizontal.normalize().multiply(-1);
     }
 
-    /**
-     * F9 — direção horizontal (unitária, Y=0) aleatória, usada pela
-     * recuperação mecânica a partir da 2ª falha consecutiva no mesmo
-     * travamento (ver docstring de {@code STUCK_RECOVERY_RNG}) — explora em
-     * vez de repetir uma heurística que já provou estar errada pra este
-     * obstáculo específico.
-     */
     private static Vector randomHorizontalDirection() {
         double angle = STUCK_RECOVERY_RNG.nextDouble() * 2 * Math.PI;
         return new Vector(Math.cos(angle), 0, Math.sin(angle));
@@ -1525,7 +831,6 @@ public final class ControlLoop {
             try {
                 bridge.close();
             } catch (IOException ignored) {
-                // já estamos tratando uma falha de conexão, ignora erro no close
             }
             bridge = null;
         }

@@ -1,8 +1,7 @@
 # Convenções — FlyWire on Minecraft
 
-> Espelhado em `.claude/CLAUDE.md` para carregar automaticamente no Claude Code.
-> Mudou algo aqui? Atualize os dois arquivos juntos (ou torne um deles um
-> link/import do outro, se preferir manter uma fonte só).
+> Fonte única das convenções. Quem usa assistente de IA pode espelhar este
+> arquivo localmente (`.claude/CLAUDE.md`, ignorado pelo git).
 
 Leia antes de escrever qualquer código neste repositório.
 
@@ -39,6 +38,11 @@ Minecraft. Subcircuito ocelar: 625 neurônios, 2.981 conexões.
 - Sem classe onde função pura resolve. O engine é estado; o resto não deveria ser.
 - Nome de variável em inglês; comentário e documentação em português.
 - Toda constante científica (limiar, dt, refratário) vive em `config.py`, nunca inline.
+- **Comentário só para o porquê que o código não diz.** Nome bom no lugar de
+  comentário que repete o código. Histórico, datas, medições e discussão vão
+  para `docs/` (roadmap, RN, ADR), não para o código. Constante científica leva
+  uma linha apontando a fonte (`# RN-09, AD-13`); função pública leva docstring
+  curta. Teste mede o comportamento; o comentário não substitui teste.
 
 ## Armadilhas conhecidas
 

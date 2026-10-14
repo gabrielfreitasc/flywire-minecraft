@@ -1,7 +1,4 @@
-"""
-Testes de engine.py — silenciamento e estimulação dirigida de neurônios
-(F5). Ver docstring de engine.py e docs/03-roadmap-fases.md.
-"""
+"""Testes de engine.py — silenciamento e estimulação dirigida de neurônios (F5)."""
 from __future__ import annotations
 
 import numpy as np
@@ -19,7 +16,7 @@ def test_set_silenced_blocks_spikes(monkeypatch):
     engine = Engine(cc, seed=0)
 
     target = int(cc.sensory[0])
-    engine.stimulate(np.array([target]), amplitude=5.0)  # dispararia sozinho sem silenciar
+    engine.stimulate(np.array([target]), amplitude=5.0)
     engine.set_silenced(np.array([target]))
 
     for _ in range(20):
@@ -37,7 +34,7 @@ def test_set_silenced_replaces_not_accumulates(monkeypatch):
     a, b = int(cc.sensory[0]), int(cc.sensory[1])
     engine.stimulate(np.array([a, b]), amplitude=5.0)
     engine.set_silenced(np.array([a]))
-    engine.set_silenced(np.array([b]))  # substitui — a não deveria mais estar silenciado
+    engine.set_silenced(np.array([b]))
 
     a_spiked = False
     for _ in range(10):

@@ -1,25 +1,6 @@
-"""
-Analisa o CSV do experimento de dose-resposta de luz (gravado pelo plugin
-Java, LightDoseResponseExperiment.java) — F6, ver docs/03-roadmap-fases.md.
-
-Pergunta em aberto que motivou este experimento: o experimento dia/noite deu
-efeito real (com `goals off`), mas na direção invertida — luz 0,25 (noite)
-produziu MAIS distância que luz 1,0 (dia). Luz 0 (F4, lesão) deu a MENOR
-distância das três condições já medidas, só que em experimentos diferentes,
-não comparáveis diretamente. Este experimento mede 4 níveis (0 / 0,25 / 0,5 /
-1,0) sorteados trial a trial NA MESMA rodada, mesma origem — testa se a
-resposta à luz é não-monotônica (satura ou inverte em algum ponto) ou se os
-resultados anteriores eram artefato de comparar rodadas diferentes.
-
-Kruskal-Wallis testa se existe QUALQUER diferença entre os 4 níveis (omnibus,
-não-paramétrico — mesma família do Mann-Whitney já usado no resto do
-projeto). Comparações par a par contra luz=1,0 (a condição já validada como
-baseline em F4/F6) ajudam a localizar ONDE a diferença está, se existir.
+"""Analisa o CSV da dose-resposta de luz (LightDoseResponseExperiment, F6).
 
 Uso:  python tools/doseresponse_analysis.py [caminho/do/doseresponse_experiment.csv]
-Sem argumento, procura em
-mc-server/plugins/FlywireBee/doseresponse_experiment.csv (caminho padrão onde
-o plugin grava, ver plugin/README.md).
 """
 from __future__ import annotations
 

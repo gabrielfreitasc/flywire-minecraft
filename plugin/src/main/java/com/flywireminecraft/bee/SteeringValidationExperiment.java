@@ -17,43 +17,11 @@ import java.util.Locale;
 import java.util.Random;
 import java.util.logging.Level;
 
-/**
- * Valida o sentido do canal {@code yaw_steering} (RN-08/AD-16, F6) — a
- * pergunta em aberto que ele deixou: o sinal do canal corresponde a virar pra
- * um lado específico do mundo, ou não significa nada direcional?
- *
- * <p>3 condições sorteadas trial a trial, mesma origem (embutida no comando,
- * mesma correção de deriva de `daynight`/`doseresponse`):
- * <ul>
- *   <li>{@code left} — {@code stimulate steering_left <amplitude>}: força a
- *       taxa do neurônio esquerdo do par bilateral pra cima, deveria puxar
- *       `yaw_steering` fortemente positivo;</li>
- *   <li>{@code right} — {@code stimulate steering_right <amplitude>}: mesma
- *       coisa pro neurônio direito, `yaw_steering` fortemente negativo;</li>
- *   <li>{@code baseline} — sem estimulação, `yaw_steering` no valor orgânico
- *       do circuito.</li>
- * </ul>
- *
- * <p>Métrica: não é distância (como lesão/dia-noite/dose-resposta) — é
- * **ângulo de giro líquido acumulado**. Amostra a posição a cada
- * {@code SAMPLE_EVERY_TICKS}, calcula o rumo (bearing, atan2 no plano
- * horizontal XZ) do deslocamento entre amostras consecutivas, acumula a
- * diferença ANGULAR SINALIZADA entre rumos consecutivos (`angleDiff`, corrige
- * wraparound em ±π). Positivo/negativo aqui são só "sentido de rotação no
- * plano XZ do Minecraft" — a correspondência com {@code yaw_steering} é
- * exatamente o que este experimento mede, não uma suposição prévia.
- *
- * <p>Se `left` e `right` derem giro líquido significativamente diferente, em
- * sentidos opostos, e diferentes de `baseline`: `yaw_steering` controla
- * direção de verdade, e o sinal de qual condição gira pra qual lado real do
- * mundo sai direto do CSV (positivo = horário ou anti-horário, ver
- * `sim/tools/steering_validation_analysis.py`).
- */
+/** Valida o sentido do canal yaw_steering (RN-08/AD-16): o sinal corresponde a um lado do mundo? */
 public final class SteeringValidationExperiment {
-
     private static final Random RNG = new Random();
     private static final int TICKS_PER_SECOND = 20;
-    private static final int SAMPLE_EVERY_TICKS = 10; // 0,5s — deslocamento suficiente pro rumo não ser ruído
+    private static final int SAMPLE_EVERY_TICKS = 10;
     private static final String[] CONDITIONS = {"left", "right", "baseline"};
 
     private final Plugin plugin;
@@ -106,8 +74,6 @@ public final class SteeringValidationExperiment {
         }
         bee.teleport(origin);
         bee.setVelocity(new Vector(0, 0, 0));
-        // reseta o giro acumulado do trial anterior — sem isso, o giro de um
-        // trial vazaria pro início do próximo (ver ControlLoop::resetHeading).
         controlLoop.resetHeading();
 
         plugin.getLogger().info(String.format(Locale.ROOT,
@@ -139,7 +105,7 @@ public final class SteeringValidationExperiment {
                 if (tick > 0 && tick % SAMPLE_EVERY_TICKS == 0) {
                     double dx = current.getX() - lastSample.getX();
                     double dz = current.getZ() - lastSample.getZ();
-                    if (Math.hypot(dx, dz) > 0.01) { // ignora amostra com deslocamento desprezível (ruído de rumo)
+                    if (Math.hypot(dx, dz) > 0.01) {
                         double bearing = Math.atan2(dz, dx);
                         if (lastBearing != null) {
                             netTurnRad += angleDiff(lastBearing, bearing);
@@ -160,7 +126,6 @@ public final class SteeringValidationExperiment {
         }.runTaskTimer(plugin, 0L, 1L);
     }
 
-    /** Diferença angular sinalizada de `from` pra `to`, normalizada em (-pi, pi]. */
     private static double angleDiff(double from, double to) {
         double diff = to - from;
         while (diff > Math.PI) {
@@ -183,8 +148,6 @@ public final class SteeringValidationExperiment {
         try (PrintWriter out = new PrintWriter(new FileWriter(file))) {
             out.println("trial,condition,net_turn_rad,path_length,avg_speed");
             for (TrialResult r : results) {
-                // Locale.ROOT — vírgula decimal do pt_BR corrompe CSV, já visto no
-                // experimento de lesão (CONVENCOES.md).
                 out.printf(Locale.ROOT, "%d,%s,%.5f,%.4f,%.4f%n",
                         r.trial(), r.condition(), r.netTurnRad(), r.pathLength(), r.avgSpeed());
             }

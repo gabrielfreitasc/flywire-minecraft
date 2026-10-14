@@ -1,24 +1,4 @@
-"""
-Versão do critério de saída da F1 (RN-09) para o subcircuito `hygro` (F7/AD-17,
-candidato a sensor de chuva): estimular a semente higrossensorial tem efeito
-estatisticamente mensurável sobre a atividade dos descendentes, comparado a
-não estimular.
-
-Pré-requisito resolvido antes de rodar isto: RN-01a/AD-18 (override dos 358/373
-neurônios "serotonin" que eram artefato de classificador — ORNs e neurônios
-locais do lobo antenal — ver docs/04-regras-de-negocio.md). Sem isso, ~6,3%
-das conexões do meio do circuito ficavam mudas por incerteza de sinal, não por
-falta de estímulo real.
-
-Mesmo desenho de `bristle_calibration_check.py`: comparação pareada (mesma
-semente de ruído em baseline e estimulado, N sementes), separando por
-topologia de sinal prevista (`topology.group_outputs_by_predicted_sign`) —
-aqui 28 descendentes com caminho excitatório e 13 com caminho inibitório
-(menos assimétrico que o ocelar 29/63, mas ainda arriscado agregar sem
-separar, mesma lição de RN-09). Usa os valores ATUAIS de `config.py`
-(bias/noise/gain calibrados pro ocelar, 625 neurônios) — este script existe
-justamente pra checar se isso já basta pros 5.638 neurônios do hygro ou se
-precisa de uma varredura própria.
+"""RN-09 no circuito hygro (F7, chuva): estimular a semente muda os descendentes? Mede também a escala do canal.
 
 Uso:  python tools/hygro_calibration_check.py   (a partir de sim/, venv ativo)
 """
@@ -39,8 +19,7 @@ OUT_DIR = C.PROCESSED / "hygro"
 
 
 def paired_trial(cc: graph.Connectome, seed: int, output_nids: np.ndarray) -> tuple[int, int]:
-    """Roda baseline e estimulado com o mesmo seed. Retorna (base, stim) —
-    contagem de disparos de `output_nids` em STEPS passos."""
+    """Roda baseline e estimulado com o mesmo seed."""
     eng_base = Engine(cc, seed=seed)
     base = 0
     for _ in range(STEPS):
