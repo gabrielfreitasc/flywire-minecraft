@@ -415,6 +415,7 @@ na fonte antes de citar em publicação.
 
 ## Licença e citação
 
-Os dados do FlyWire são distribuídos sob CC-BY 4.0. Ao publicar qualquer resultado
+O código deste repositório é distribuído sob a licença MIT (ver [`LICENSE`](LICENSE)).
+A licença MIT não cobre os dados: os dados do FlyWire são distribuídos sob CC-BY 4.0. Ao publicar qualquer resultado
 derivado deste projeto, cite ao menos Dorkenwald et al. 2024, Schlegel et al. 2024 e
 Shiu et al. 2024, além das fontes específicas do circuito usado.
