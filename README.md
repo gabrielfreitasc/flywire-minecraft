@@ -346,8 +346,8 @@ na fonte antes de citar em publicação.
 
 ### Neurônios descendentes e controle motor
 
-- Namiki, S., Dickinson, M. H., Wong, A. M., Korff, W. & Card, G. M. (2018). The functional organization of descending sensory-motor pathways in *Drosophila*. *eLife*. Anatomia e função dos descendentes (RN-08, AD-14).
-- Cande, J. et al. (2018). Optogenetic dissection of descending behavioral control in *Drosophila*. *eLife*. DOI 10.7554/eLife.34275. Comportamento por tipo de descendente (RN-08, AD-14).
+- Namiki, S., Dickinson, M. H., Wong, A. M., Korff, W. & Card, G. M. (2018). The functional organization of descending sensory-motor pathways in *Drosophila*. *eLife* 7, e34272. DOI 10.7554/eLife.34272. Nomenclatura dos neurônios descendentes (DNa01, DNp…).
+- Cande, J., Namiki, S., Qiu, J., Korff, W., Card, G. M., Shaevitz, J. W., Stern, D. L. & Berman, G. J. (2018). Optogenetic dissection of descending behavioral control in *Drosophila*. *eLife* 7, e34275. DOI 10.7554/eLife.34275. Categorias de comportamento por tipo de descendente, Figura 6 (RN-08, AD-14).
 - Suver et al. (2016). *Journal of Neuroscience*. DOI 10.1523/JNEUROSCI.2277-16.2016. DNp22 (DNOVS1) ocelar.
 - Sapkal, N. et al. (2024). *Nature*. DOI 10.1038/s41586-024-07854-7. DNg75 (cDN1), marcha.
 - Feng et al. (2024). *bioRxiv*. DOI 10.1101/2024.06.27.601106. DNa03/DNae003, direção de voo.
